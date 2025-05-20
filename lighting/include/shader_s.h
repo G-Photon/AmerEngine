@@ -1,6 +1,7 @@
 #ifndef SHADER_H
 #define SHADER_H
 #include "glm/ext/matrix_float4x4.hpp"
+#include "glm/ext/vector_float3.hpp"
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
@@ -93,6 +94,10 @@ public:
   void setVec3(const std::string &name, float a,float b,float c) const
   {
       glUniform3f(glGetUniformLocation(ID, name.c_str()), a, b, c);
+  }
+  void setVec3(const std::string &name, glm::vec3 a) const
+  {
+      glUniform3f(glGetUniformLocation(ID, name.c_str()), glm::value_ptr(a)[0], glm::value_ptr(a)[1], glm::value_ptr(a)[2]);
   }
 
 private:
