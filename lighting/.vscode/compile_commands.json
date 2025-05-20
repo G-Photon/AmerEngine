@@ -1,0 +1,6 @@
+[
+{
+  "directory": "D:\\Adata\\study\\opengl\\lighting",
+  "arguments": ["C:\\msys64\\mingw64\\bin\\x86_64-w64-mingw32-g++.exe", "-c", "-m64", "-g", "-O0", "-Iinclude", "-Ibuild\\.gens\\main\\mingw\\x86_64\\debug\\platform\\windows\\idl", "-DGLFW_INCLUDE_NONE", "-I", "C:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\g\\glfw\\3.4\\fa7844e46f9e4e9c8824d60bcd00e33c\\include", "-I", "C:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\g\\glad\\v0.1.36\\ae96d5f124aa42119fb1c91d1f03a38c\\include", "-o", "build\\.objs\\main\\mingw\\x86_64\\debug\\src\\main.cpp.obj", "src\\main.cpp"],
+  "file": "src\\main.cpp"
+}]
