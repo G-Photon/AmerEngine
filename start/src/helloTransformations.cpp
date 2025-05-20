@@ -5,11 +5,30 @@
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 #define STB_IMAGE_IMPLEMENTATION
+#include <camara.h>
+#include <shader_s.h>
 #include <stb_image.h>
 
-#include <shader_s.h>
 
 #include <iostream>
+#ifdef WINDOWS
+#include <direct.h>
+#define GetCurrentDir _getcwd
+#else
+#include <unistd.h>
+#define GetCurrentDir getcwd
+#endif
+
+#include <iostream>
+using namespace std;
+
+std::string get_current_dir()
+{
+    char buff[FILENAME_MAX]; // create string buffer to hold path
+    GetCurrentDir(buff, FILENAME_MAX);
+    string current_working_dir(buff);
+    return current_working_dir;
+}
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void processInput(GLFWwindow *window);
@@ -35,7 +54,7 @@ static float lastY = SCR_HEIGHT / 2.0f;
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 0.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
 glm::vec3 cameraUp = glm::vec3(0.0f, 1.0f, 0.0f);
-
+Camera myCamera(cameraPos, cameraUp, yaw, pitch);
 float fov = 45.0f; // field of view
 // camera movement speed
 float cameraSpeed = 2.5f; // adjust accordingly
@@ -48,7 +67,8 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-
+    string path = get_current_dir();
+    path += "/../../../../";
 #ifdef __APPLE__
     glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
 #endif
@@ -77,8 +97,8 @@ int main()
 
     // build and compile our zprogram
     // ------------------------------------
-    Shader ourShader("D:/Adata/study/opengl/hello/shader/4.2.shader.vs",
-                     "D:/Adata/study/opengl/hello/shader/4.2.shader.fs");
+    Shader ourShader((path+"shader/4.2.shader.vs").c_str(),
+                     (path+"shader/4.2.shader.fs").c_str()); // you can name your shader files however you like
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
@@ -136,7 +156,7 @@ int main()
     // The FileSystem::getPath(...) is part of the GitHub repository so we can
     // find files on any IDE/platform; replace it with your own image path.
     unsigned char *data =
-        stbi_load("D:/Adata/study/opengl/hello/resources/textures/container.jpg", &width, &height, &nrChannels, 0);
+        stbi_load((path+"resources/textures/container.jpg").c_str(), &width, &height, &nrChannels, 0);
     if (data)
     {
         glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0, GL_RGB, GL_UNSIGNED_BYTE, data);
@@ -159,7 +179,8 @@ int main()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     // load image, create texture and generate mipmaps
-    data = stbi_load("D:/Adata/study/opengl/hello/resources/textures/awesomeface.png", &width, &height, &nrChannels, 0);
+    data =
+        stbi_load((path+"resources/textures/awesomeface.png").c_str(), &width, &height, &nrChannels, 0);
 
     if (data)
     {
@@ -203,13 +224,10 @@ int main()
         processInput(window);
         // glm::mat4 model(1.0f);
         // model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-        float radius = 30.0f;
-        float camX = sin(glfwGetTime()) * radius;
-        float camZ = cos(glfwGetTime()) * radius;
         glm::mat4 view;
-        view = glm::lookAt(cameraPos, cameraPos + cameraFront, cameraUp);
+        view = myCamera.GetViewMatrix();
         glm::mat4 projection(1.0f);
-        projection = glm::perspective(glm::radians(fov), SCR_WIDTH * 1.2f / SCR_HEIGHT, 0.1f, 100.0f);
+        projection = glm::perspective(glm::radians(myCamera.Zoom), SCR_WIDTH * 1.2f / SCR_HEIGHT, 0.1f, 100.0f);
 
         // render
         // ------
@@ -268,16 +286,14 @@ void processInput(GLFWwindow *window)
 {
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
-
-    float cameraSpeed = static_cast<float>(2.5 * deltaTime);
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
-        cameraPos += cameraSpeed * cameraFront;
+        myCamera.ProcessKeyboard(FORWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_S) == GLFW_PRESS)
-        cameraPos -= cameraSpeed * cameraFront;
+        myCamera.ProcessKeyboard(BACKWARD, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_A) == GLFW_PRESS)
-        cameraPos -= glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        myCamera.ProcessKeyboard(LEFT, deltaTime);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
-        cameraPos += glm::normalize(glm::cross(cameraFront, cameraUp)) * cameraSpeed;
+        myCamera.ProcessKeyboard(RIGHT, deltaTime);
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
@@ -292,7 +308,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
 // ----------------------------------------------------------------------
 void mouse_callback(GLFWwindow *window, double xpos, double ypos)
 {
-    if (firstMouse)               // 这个bool变量初始时是设定为true的
+    if (firstMouse) // 这个bool变量初始时是设定为true的
     {
         lastX = xpos;
         lastY = ypos;
@@ -300,31 +316,13 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
     }
     float xoffset = xpos - lastX;
     float yoffset = lastY - ypos; // 注意这里是相反的，因为y坐标是从底部往顶部依次增大的
-    float sensitivity = 0.05f; // adjust this sensitivity as needed
-    xoffset *= sensitivity;
-    yoffset *= sensitivity;
-    yaw += xoffset;
-    pitch += yoffset;
     lastX = xpos;
     lastY = ypos;
-    if (pitch > 89.9f)
-        pitch = 89.9f;
-    if (pitch < -89.9f)
-        pitch = -89.9f;
-    glm::vec3 front;
-    front.x = cos(glm::radians(pitch)) * cos(glm::radians(yaw));
-    front.y = sin(glm::radians(pitch));
-    front.z = cos(glm::radians(pitch)) * sin(glm::radians(yaw));
-    cameraFront = glm::normalize(front);
+    myCamera.ProcessMouseMovement(xoffset, yoffset);
 }
 // glfw: whenever the mouse scroll wheel scrolls, this callback is called
 // ----------------------------------------------------------------------
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset)
 {
-    if (fov >= 1.0f && fov <= 45.0f)
-        fov -= yoffset;
-    if (fov <= 1.0f)
-        fov = 1.0f;
-    if (fov >= 45.0f)
-        fov = 45.0f;
+    myCamera.ProcessMouseScroll(yoffset);
 }
