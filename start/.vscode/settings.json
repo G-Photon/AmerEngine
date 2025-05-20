@@ -1,0 +1,8 @@
+{
+    "clangd.arguments": [
+        "--compile-commands-dir=.vscode",
+        "--fallback-style=Microsoft",
+        "--enable-config"
+    ],
+    "clangd.checkUpdates": true
+}
