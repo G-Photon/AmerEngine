@@ -2,12 +2,18 @@ set_toolchains("mingw")
 add_rules("mode.debug", "mode.release")
 add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
 add_requires("glfw", "glad")
-
+add_requires("glm", {configs = {shared = true}})
+add_requires("imgui", {configs = {glfw= true,opengl3 = true,sdl2 = true}})
 target("main")
     set_kind("binary")
     add_includedirs("include")
     add_files("src/main.cpp")
-    add_packages("glfw", "glad")
+    add_packages("glfw", "glad", "glm", "imgui")
+target("demo")
+    set_kind("binary")
+    add_includedirs("include")
+    add_files("src/demo.cpp")
+    add_packages("imgui", {public = true})
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --
