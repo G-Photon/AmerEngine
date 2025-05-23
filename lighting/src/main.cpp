@@ -22,9 +22,14 @@
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_opengl3_loader.h"
+
 #define GL_SILENCE_DEPRECATION
 
 #include <iostream>
+#include <string>
+#include <unordered_map>
+#include <vector>
+
 using namespace std;
 
 std::string get_current_dir()
@@ -41,52 +46,112 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 unsigned int loadTexture(char const *path);
 
-struct DirLight
+// 光源类型
+enum LightType
 {
-    glm::vec3 direction;
+    DIRECTIONAL,
+    POINT,
+    SPOT
+};
 
+struct Light
+{
+    LightType type;
+    bool enabled = true;
+
+    // 通用参数
     glm::vec3 ambient;
     glm::vec3 diffuse;
     glm::vec3 specular;
-};
 
-struct PointLight
-{
+    // 定向光
+    glm::vec3 direction;
+
+    // 点光源/聚光灯
     glm::vec3 position;
-
     float constant;
     float linear;
     float quadratic;
 
-    glm::vec3 ambient;
-    glm::vec3 diffuse;
-    glm::vec3 specular;
-};
-
-struct SpotLight
-{
-    glm::vec3 position;
-    glm::vec3 direction;
+    // 聚光灯专用
     float cutOff;
     float outerCutOff;
-
-    float constant;
-    float linear;
-    float quadratic;
-
-    glm::vec3 ambient;
-    glm::vec3 diffuse;
-    glm::vec3 specular;
 };
 
-void set_Uniform_DirLight(Shader &shader, DirLight &light);
-void set_Uniform_PointLight(Shader &shader, PointLight &light ,int index);
-void set_Uniform_SpotLight(Shader &shader, SpotLight &light);
-void createLight();
+// 材质类型
+enum MaterialType
+{
+    MATERIAL_COLOR,
+    MATERIAL_TEXTURE
+};
 
-PointLight pointLight[4];
-DirLight dirLight;
-SpotLight spotLight;
+// 材质结构体
+struct Material
+{
+    MaterialType type = MATERIAL_COLOR;
+
+    // 通用参数
+    float shininess = 32.0f;
+
+    // 颜色模式
+    glm::vec3 diffuseColor = glm::vec3(1.0f);
+    glm::vec3 specularColor = glm::vec3(0.5f);
+
+    // 贴图模式
+    unsigned int diffuseMap = 0;
+    unsigned int specularMap = 0;
+
+    // 默认贴图路径
+    static unsigned int defaultDiffuse;
+    static unsigned int defaultSpecular;
+};
+
+// 默认贴图
+unsigned int Material::defaultDiffuse = 0;
+unsigned int Material::defaultSpecular = 0;
+
+class MaterialManager
+{
+  public:
+    std::unordered_map<std::string, unsigned int> loadedTextures;
+
+    unsigned int LoadTexture(const char *path)
+    {
+        if (loadedTextures.find(path) != loadedTextures.end())
+        {
+            return loadedTextures[path];
+        }
+
+        unsigned int textureID = loadTexture(path);
+        if (textureID != 0)
+        {
+            loadedTextures[path] = textureID;
+        }
+        return textureID;
+    }
+};
+
+MaterialManager materialManager;
+
+struct GameObject
+{
+    glm::vec3 position;
+    glm::vec3 scale;
+    Material material;
+    bool showWireframe = false;
+};
+
+// 光源管理
+std::vector<Light> lights;
+int selectedLight = -1;
+
+// 物体管理
+std::vector<GameObject> gameObjects;
+int selectedObject = -1;
+
+// 摄像机控制
+bool cameraMouseControl = true;
+float cameraSpeed = 2.5f;
 
 // positions of the point lights
 glm::vec3 pointLightPositions[] = {glm::vec3(0.7f, 0.2f, 2.0f), glm::vec3(2.3f, -3.3f, -4.0f),
@@ -130,7 +195,7 @@ int main()
     glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
     glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 3);
     glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE); // 3.2+ only
-    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE); // 3.0+ only
+    glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);           // 3.0+ only
     string path = get_current_dir();
     path += "/../../../../";
 #ifdef __APPLE__
@@ -149,7 +214,7 @@ int main()
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
     glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
-    //glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+    // glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
     glfwSetCursorPosCallback(window, mouse_callback);
     glfwSetScrollCallback(window, scroll_callback);
 
@@ -187,8 +252,9 @@ int main()
 
     // build and compile our zprogram
     // ------------------------------------
-    //Shader ourShader((path + "shader/shader.vs").c_str(),(path + "shader/shader.fs").c_str()); // you can name your shader files however you like
-    Shader ourShader((path + "shader/shader.vs").c_str(), (path + "shader/manyshader.fs").c_str());
+    // Shader ourShader((path + "shader/shader.vs").c_str(),(path + "shader/shader.fs").c_str()); // you can name your
+    // shader files however you like
+    Shader ourShader((path + "shader/shader.vs").c_str(), (path + "shader/myshader.fs").c_str());
     Shader lightShader((path + "shader/lightshader.vs").c_str(), (path + "shader/lightshader.fs").c_str());
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -248,10 +314,6 @@ int main()
 
     // load and create a texture
     // -------------------------
-    unsigned int diffuseMap,SpecularMap,EmissionMap;
-    diffuseMap = loadTexture((path + "resources/textures/container2.png").c_str());
-    SpecularMap = loadTexture((path + "resources/textures/container2_specular.png").c_str());
-    EmissionMap = loadTexture((path + "resources/textures/matrix.jpg").c_str());
     // -------------------------------------------------------------------------------------------
     // tell opengl for each sampler to which texture unit it belongs to (only has
     // to be done once)
@@ -259,7 +321,7 @@ int main()
                      // uniforms!
     ourShader.setInt("material.diffuse", 0);
     ourShader.setInt("material.specular", 1);
-    ourShader.setInt("material.emission", 2);
+
     // // either set it manually like so:
     // glUniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0);
     // // or set it via the texture class
@@ -272,7 +334,9 @@ int main()
                                  glm::vec3(1.3f, -2.0f, -2.5f),  glm::vec3(1.5f, 2.0f, -2.5f),
                                  glm::vec3(1.5f, 0.2f, -1.5f),   glm::vec3(-1.3f, 1.0f, -1.5f)};
 
-    createLight();
+    Material::defaultDiffuse = materialManager.LoadTexture((path + "/resources/textures/container2.png").c_str());
+    Material::defaultSpecular =
+        materialManager.LoadTexture((path + "/resources/textures/container2_specular.png").c_str());
 
     // pass transformation matrix to shader (4 different ways)
     // -------------------------------------------------
@@ -307,118 +371,282 @@ int main()
         processInput(window);
         // glm::mat4 model(1.0f);
         // model = glm::rotate(model, (float)glfwGetTime() * glm::radians(50.0f), glm::vec3(0.5f, 1.0f, 0.0f));
-        static float xAngle = 0.0f;
-        static float yAngle = 0.0f;
-        static float zAngle = 0.0f;
-        static float scale = 1.0f;
-        {
-            ImGui::Begin("Rotate Cube", 0, ImGuiWindowFlags_AlwaysAutoResize);
-            ImGui::ColorEdit3("clear Color", (float *)&clear_color);
-            ImGui::SliderFloat("X-Axis Angle", &xAngle, 0.0f, 360.0f);
-            ImGui::SliderFloat("Y-Axis Angle", &yAngle, 0.0f, 360.0f);
-            ImGui::SliderFloat("Z-Axis Angle", &zAngle, 0.0f, 360.0f);
-            ImGui::SliderFloat("Model Scale", &scale, 0.1f, 5.0f);
-            ImGui::End();
-        }
+
         glm::mat4 view;
         view = myCamera.GetViewMatrix();
         glm::mat4 projection(1.0f);
         projection = glm::perspective(glm::radians(myCamera.Zoom), SCR_WIDTH * 1.2f / SCR_HEIGHT, 0.1f, 100.0f);
 
-        static glm::vec3 lightColor = glm::vec3(1.0f, 1.0f, 1.0f);    // 光源颜色变量
+        // 光源管理窗口
+        ImGui::Begin("Light Manager");
+
+        // 添加光源按钮
+        if (ImGui::Button("Add Directional Light"))
         {
-            // 在 ImGui 的 NewFrame() 后添加
-            ImGui::Begin("Light Settings");
-            // 控制光源颜色
-            ImGui::ColorEdit3("Light Color", (float *)&lightColor);
+            lights.push_back({.type = DIRECTIONAL,
+                              .ambient = glm::vec3(0.1f),
+                              .diffuse = glm::vec3(0.5f),
+                              .specular = glm::vec3(1.0f),
+                              .direction = myCamera.Front});
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add Point Light"))
+        {
+            lights.push_back({.type = POINT,
+                              .ambient = glm::vec3(0.1f),
+                              .diffuse = glm::vec3(0.8f),
+                              .specular = glm::vec3(1.0f),
+                              .position = myCamera.Position,
+                              .constant = 1.0f,
+                              .linear = 0.09f,
+                              .quadratic = 0.032f});
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Add Spot Light"))
+        {
+            lights.push_back({.type = SPOT,
+
+                              .ambient = glm::vec3(0.1f),
+                              .diffuse = glm::vec3(0.8f),
+                              .specular = glm::vec3(1.0f),
+                              .direction = myCamera.Front,
+                              .position = myCamera.Position,
+                              .constant = 1.0f,
+                              .linear = 0.09f,
+                              .quadratic = 0.032f,
+                              .cutOff = glm::cos(glm::radians(12.5f)),
+                              .outerCutOff = glm::cos(glm::radians(15.0f))});
+        }
+
+        // 光源列表
+        ImGui::BeginChild("Light List", ImVec2(200, 200), true);
+        for (int i = 0; i < lights.size(); ++i)
+        {
+            char label[32];
+            sprintf(label, "Light %d", i);
+            if (ImGui::Selectable(label, selectedLight == i))
+            {
+                selectedLight = i;
+            }
+        }
+        ImGui::EndChild();
+
+        // 删除选中光源
+        if (selectedLight >= 0 && selectedLight < lights.size())
+        {
+            if (ImGui::Button("Delete Selected Light"))
+            {
+                lights.erase(lights.begin() + selectedLight);
+                selectedLight = -1;
+            }
+
+            // 光源参数编辑
+            Light &light = lights[selectedLight];
+            ImGui::ColorEdit3("Ambient", glm::value_ptr(light.ambient));
+            ImGui::ColorEdit3("Diffuse", glm::value_ptr(light.diffuse));
+            ImGui::ColorEdit3("Specular", glm::value_ptr(light.specular));
+
+            switch (light.type)
+            {
+            case DIRECTIONAL:
+                ImGui::DragFloat3("Direction", glm::value_ptr(light.direction), 0.1f, -1.0f, 1.0f);
+                break;
+            case POINT:
+                ImGui::DragFloat3("Position", glm::value_ptr(light.position), 0.1f);
+                ImGui::DragFloat("Constant", &light.constant, 0.01f);
+                ImGui::DragFloat("Linear", &light.linear, 0.001f);
+                ImGui::DragFloat("Quadratic", &light.quadratic, 0.0001f);
+                break;
+            case SPOT:
+                float angle = glm::degrees(acos(light.cutOff));
+                float outerAngle = glm::degrees(acos(light.outerCutOff));
+                ImGui::DragFloat3("Position", glm::value_ptr(light.position), 0.1f);
+                ImGui::DragFloat3("Direction", glm::value_ptr(light.direction), 0.1f, -1.0f, 1.0f);
+                ImGui::DragFloat("Cutoff", &angle, 1.0f, 0.0f, 90.0f);
+                ImGui::DragFloat("Outer Cutoff", &outerAngle, 1.0f, 0.0f, 90.0f);
+                light.cutOff = glm::cos(glm::radians(angle));
+                light.outerCutOff = glm::cos(glm::radians(outerAngle));
+                break;
+            }
+        }
+        ImGui::End();
+
+        {
+            // 物体管理窗口
+            ImGui::Begin("Object Manager");
+            if (ImGui::Button("Add Cube"))
+            {
+                gameObjects.push_back(
+                    {.position = myCamera.Position + myCamera.Front * 2.0f,
+                     .scale = glm::vec3(1),
+                     .material = {.shininess = 32.0f, .diffuseColor = glm::vec3(1), .specularColor = glm::vec3(0.5f)}});
+            }
+
+            ImGui::BeginChild("Object List", ImVec2(200, 200), true);
+            for (int i = 0; i < gameObjects.size(); ++i)
+            {
+                char label[32];
+                sprintf(label, "Object %d", i);
+                if (ImGui::Selectable(label, selectedObject == i))
+                {
+                    selectedObject = i;
+                }
+            }
+            ImGui::EndChild();
+
+            if (selectedObject >= 0 && selectedObject < gameObjects.size())
+            {
+                // 删除选中物体
+                if (ImGui::Button("Delete Selected Object"))
+                {
+                    gameObjects.erase(gameObjects.begin() + selectedObject);
+                    selectedObject = -1;
+                }
+                GameObject &obj = gameObjects[selectedObject];
+                Material &mat = obj.material;
+
+                // 材质类型选择
+                ImGui::SeparatorText("Material Settings");
+                ImGui::Combo("Material Type", (int *)&mat.type, "Color\0Texture\0");
+
+                if (mat.type == MATERIAL_COLOR)
+                {
+                    ImGui::ColorEdit3("Diffuse Color", glm::value_ptr(mat.diffuseColor));
+                    ImGui::ColorEdit3("Specular Color", glm::value_ptr(mat.specularColor));
+                }
+                else
+                {
+                    // 漫反射贴图选择
+                    static char diffusePath[128] = "";
+                    ImGui::InputText("Diffuse Map", diffusePath, IM_ARRAYSIZE(diffusePath));
+                    if (ImGui::Button("Load Diffuse"))
+                    {
+                        mat.diffuseMap = materialManager.LoadTexture(diffusePath);
+                    }
+
+                    // 镜面贴图选择
+                    static char specularPath[128] = "";
+                    ImGui::InputText("Specular Map", specularPath, IM_ARRAYSIZE(specularPath));
+                    if (ImGui::Button("Load Specular"))
+                    {
+                        mat.specularMap = materialManager.LoadTexture(specularPath);
+                    }
+                }
+                ImGui::DragFloat3("Position", glm::value_ptr(obj.position), 0.1f);
+                ImGui::DragFloat3("Scale", glm::value_ptr(obj.scale), 0.1f, 0.1f, 10.0f);
+                ImGui::Checkbox("Show Wireframe", &obj.showWireframe);
+                ImGui::DragFloat("Shininess", &mat.shininess, 1.0f, 1.0f, 256.0f);
+            }
             ImGui::End();
+
+            // 摄像机控制窗口
+            ImGui::Begin("Camera Settings");
+            ImGui::Checkbox("Mouse Control", &cameraMouseControl);
+            ImGui::DragFloat("Move Speed", &cameraSpeed, 0.1f, 1.0f, 10.0f);
+            ImGui::Text("Position: (%.1f, %.1f, %.1f)", myCamera.Position.x, myCamera.Position.y, myCamera.Position.z);
+            ImGui::Text("Front: (%.2f, %.2f, %.2f)", myCamera.Front.x, myCamera.Front.y, myCamera.Front.z);
+            ImGui::Text("Pitch/Yaw: %.1f/%.1f", myCamera.Pitch, myCamera.Yaw);
+            ImGui::End();
+            // render container
+            lightShader.use();
+            for (int i = 0; i < lights.size(); i++)
+            {
+                if (!lights[i].enabled || lights[i].type == DIRECTIONAL)
+                    continue;
+                glm::mat4 model(1.0f);
+                model = glm::translate(model, lights[i].position);
+                model = glm::scale(model, glm::vec3(0.2f));
+                lightShader.setMat4("model", model);
+                lightShader.setMat4("view", view);
+                lightShader.setMat4("projection", projection);
+                glBindVertexArray(lightVAO);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+            }
+
+            ourShader.use();
+
+            // 在着色器中设置动态光源数量
+            ourShader.setInt("numLights", (int)lights.size());
+
+            // 传递所有光源数据
+            for (int i = 0; i < lights.size(); ++i)
+            {
+                const Light &light = lights[i];
+                std::string prefix = "lights[" + std::to_string(i) + "]";
+
+                ourShader.setInt(prefix + ".type", light.type);
+                ourShader.setVec3(prefix + ".ambient", light.ambient);
+                ourShader.setVec3(prefix + ".diffuse", light.diffuse);
+                ourShader.setVec3(prefix + ".specular", light.specular);
+
+                switch (light.type)
+                {
+                case DIRECTIONAL:
+                    ourShader.setVec3(prefix + ".direction", light.direction);
+                    break;
+                case POINT:
+                    ourShader.setVec3(prefix + ".position", light.position);
+                    ourShader.setFloat(prefix + ".constant", light.constant);
+                    ourShader.setFloat(prefix + ".linear", light.linear);
+                    ourShader.setFloat(prefix + ".quadratic", light.quadratic);
+                    break;
+                case SPOT:
+                    ourShader.setVec3(prefix + ".position", light.position);
+                    ourShader.setFloat(prefix + ".constant", light.constant);
+                    ourShader.setFloat(prefix + ".linear", light.linear);
+                    ourShader.setFloat(prefix + ".quadratic", light.quadratic);
+                    ourShader.setVec3(prefix + ".direction", light.direction);
+                    ourShader.setFloat(prefix + ".cutOff", light.cutOff);
+                    ourShader.setFloat(prefix + ".outerCutOff", light.outerCutOff);
+                    break;
+                }
+            }
+
+            // material properties
+            ourShader.setVec3("viewPos", myCamera.Position);
+            ourShader.setFloat("material.shininess", 64.0f);
+            glBindVertexArray(VAO);
+            for (const auto &obj : gameObjects)
+            {
+                const Material &mat = obj.material;
+                ourShader.setInt("material.useDiffuseTexture", mat.type == MATERIAL_TEXTURE ? 1 : 0);
+                ourShader.setInt("material.useSpecularTexture", mat.type == MATERIAL_TEXTURE ? 1 : 0);
+
+                if (mat.type == MATERIAL_TEXTURE)
+                {
+                    // 绑定贴图
+                    glActiveTexture(GL_TEXTURE0);
+                    glBindTexture(GL_TEXTURE_2D, mat.diffuseMap ? mat.diffuseMap : Material::defaultDiffuse);
+                    glActiveTexture(GL_TEXTURE1);
+                    glBindTexture(GL_TEXTURE_2D, mat.specularMap ? mat.specularMap : Material::defaultSpecular);
+                }
+                else
+                {
+                    // 设置颜色值
+                    ourShader.setVec3("material.diffuseColor", mat.diffuseColor);
+                    ourShader.setVec3("material.specularColor", mat.specularColor);
+                }
+
+                ourShader.setFloat("material.shininess", mat.shininess);
+                glm::mat4 model(1.0f);
+                model = glm::translate(model, obj.position);
+                model = glm::scale(model, obj.scale);
+                ourShader.setMat4("model", model);
+                ourShader.setMat4("view", view);
+                ourShader.setMat4("projection", projection);
+                glBindVertexArray(VAO);
+                glDrawArrays(GL_TRIANGLES, 0, 36);
+            }
+
+            // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
+            // etc.)
+            // -------------------------------------------------------------------------------
+            // Rendering
+            ImGui::Render();
+            ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+
+            glfwSwapBuffers(window);
         }
-        // glActiveTexture(GL_TEXTURE1);
-        // glBindTexture(GL_TEXTURE_2D, texture2);
-        // glm::mat4 trans(1.0f);
-        // trans = glm::translate(trans, glm::vec3(0.5f, -0.5f, 0.0f));
-        // trans = glm::rotate(trans, (float)glfwGetTime(), glm::vec3(0.0f, 1.0f, 0.0f));
-
-        // unsigned int transformLoc = glGetUniformLocation(ourShader.ID, "transform");
-        // glUniformMatrix4fv(transformLoc, 1, GL_FALSE, glm::value_ptr(trans));
-        // render container
-        lightShader.use();
-        for (int i = 0; i < 4; i++)
-        {
-            glm::mat4 model(1.0f);
-            model = glm::translate(model, pointLightPositions[i]);
-            model = glm::scale(model, glm::vec3(0.2f));
-            lightShader.setMat4("model", model);
-            lightShader.setMat4("view", view);
-            lightShader.setMat4("projection", projection);
-            lightShader.setVec3("lightColor", lightColor.x, lightColor.y, lightColor.z);
-            glBindVertexArray(lightVAO);
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-
-        ourShader.use();
-        // bind textures on corresponding texture units
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, diffuseMap);
-        glActiveTexture(GL_TEXTURE1);
-        glBindTexture(GL_TEXTURE_2D, SpecularMap);
-        glActiveTexture(GL_TEXTURE2);
-        glBindTexture(GL_TEXTURE_2D, EmissionMap);
-
-        
-        spotLight.diffuse = lightColor * glm::vec3(0.5f);   // 降低影响
-        spotLight.ambient = spotLight.diffuse * glm::vec3(0.2f); // 很低的影响
-        spotLight.position = myCamera.Position;
-        spotLight.direction = myCamera.Front;
-
-        // // light properties
-        // ourShader.setVec3("light.position", lightPosition);
-        
-        // ourShader.setVec3("light.ambient", ambientColor);
-        // ourShader.setVec3("light.diffuse", diffuseColor);
-        // ourShader.setVec3("light.specular", 1.0f, 1.0f, 1.0f);
-        // ourShader.setFloat("light.constant", 1.0f);
-        // ourShader.setFloat("light.linear", 0.09f);
-        // ourShader.setFloat("light.quadratic", 0.032f);
-        // ourShader.setVec3("light.position", myCamera.Position);
-        // ourShader.setVec3("light.direction", myCamera.Front);
-        // ourShader.setFloat("light.cutOff", glm::cos(glm::radians(12.5f)));
-        // ourShader.setFloat("light.outerCutOff", glm::cos(glm::radians(15.0f)));
-        // ourShader.setVec3("light.direction", -0.2f, -1.0f, -0.3f);
-        set_Uniform_DirLight(ourShader, dirLight);
-        for (int i = 0; i < 4; i++)
-        {
-            set_Uniform_PointLight(ourShader, pointLight[i],i);
-        }
-        set_Uniform_SpotLight(ourShader, spotLight);
-
-        // material properties
-        ourShader.setVec3("viewPos", myCamera.Position);
-        ourShader.setFloat("material.shininess", 64.0f);
-        glBindVertexArray(VAO);
-        for (unsigned int i = 0; i < 10; i++)
-        {
-            glm::mat4 model(1.0f);
-            model = glm::translate(model, cubePositions[i]);
-            model = glm::scale(model, glm::vec3(scale));
-            model = glm::rotate(model, glm::radians(xAngle), glm::vec3(1.0f, 0.0f, 0.0f));
-            model = glm::rotate(model, glm::radians(yAngle), glm::vec3(0.0f, 1.0f, 0.0f));
-            model = glm::rotate(model, glm::radians(zAngle), glm::vec3(0.0f, 0.0f, 1.0f));
-            ourShader.setMat4("model", model);
-            ourShader.setMat4("view", view);
-            ourShader.setMat4("projection", projection);
-
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-        }
-
-        // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
-        // etc.)
-        // -------------------------------------------------------------------------------
-        // Rendering
-        ImGui::Render();
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-
-        glfwSwapBuffers(window);
     }
 #ifdef __EMSCRIPTEN__
     EMSCRIPTEN_MAINLOOP_END;
@@ -472,7 +700,7 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
     ImGuiIO &io = ImGui::GetIO();
 
     // 如果 ImGui 正在使用鼠标，或左键未按下时，不处理视角移动
-    if (io.WantCaptureMouse || glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS)
+    if (io.WantCaptureMouse || glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_LEFT) != GLFW_PRESS || !cameraMouseControl)
     {
         firstMouse = true; // 重置初始位置标记
         return;
@@ -483,8 +711,14 @@ void mouse_callback(GLFWwindow *window, double xpos, double ypos)
         lastY = ypos;
         firstMouse = false;
     }
-    float xoffset = xpos - lastX;
+
+    float xoffset = (xpos - lastX);
     float yoffset = lastY - ypos; // 注意这里是相反的，因为y坐标是从底部往顶部依次增大的
+    if (cameraMouseControl)
+    {
+        xoffset *= cameraSpeed;
+        yoffset *= cameraSpeed;
+    }
     lastX = xpos;
     lastY = ypos;
     myCamera.ProcessMouseMovement(xoffset, yoffset);
@@ -531,68 +765,4 @@ unsigned int loadTexture(char const *path)
     }
 
     return textureID;
-}
-
-void set_Uniform_DirLight(Shader &shader, DirLight &light)
-{
-    shader.setVec3("dirLight.direction", light.direction);
-    shader.setVec3("dirLight.ambient", light.ambient);
-    shader.setVec3("dirLight.diffuse", light.diffuse);
-    shader.setVec3("dirLight.specular", light.specular);
-}
-
-void set_Uniform_PointLight(Shader &shader, PointLight &light, int index)
-{
-    std::string prefix = "pointLights[" + std::to_string(index) + "].";
-    shader.setVec3(prefix + "position", light.position);
-    shader.setFloat(prefix + "constant", light.constant);
-    shader.setFloat(prefix + "linear", light.linear);
-    shader.setFloat(prefix + "quadratic", light.quadratic);
-    shader.setVec3(prefix + "ambient", light.ambient);
-    shader.setVec3(prefix + "diffuse", light.diffuse);
-    shader.setVec3(prefix + "specular", light.specular);
-}
-
-void set_Uniform_SpotLight(Shader &shader, SpotLight &light)
-{
-    shader.setVec3("spotLight.position", light.position);
-    shader.setVec3("spotLight.direction", light.direction);
-    shader.setFloat("spotLight.cutOff", light.cutOff);
-    shader.setFloat("spotLight.outerCutOff", light.outerCutOff);
-    shader.setFloat("spotLight.constant", light.constant);
-    shader.setFloat("spotLight.linear", light.linear);
-    shader.setFloat("spotLight.quadratic", light.quadratic);
-    shader.setVec3("spotLight.ambient", light.ambient);
-    shader.setVec3("spotLight.diffuse", light.diffuse);
-    shader.setVec3("spotLight.specular", light.specular);
-}
-
-void createLight()
-{
-    for (int i = 0; i < 4; i++)
-    {
-        pointLight[i].position = pointLightPositions[i];
-        pointLight[i].ambient = glm::vec3(0.05f, 0.05f, 0.05f);
-        pointLight[i].diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
-        pointLight[i].specular = glm::vec3(1.0f, 1.0f, 1.0f);
-        pointLight[i].constant = 1.0f;
-        pointLight[i].linear = 0.09;
-        pointLight[i].quadratic = 0.032;
-    }
-
-    dirLight.direction = glm::vec3(-0.2f, -1.0f, -0.3f);
-    dirLight.ambient = glm::vec3(0.05f, 0.05f, 0.05f);
-    dirLight.diffuse = glm::vec3(0.4f, 0.4f, 0.4f);
-    dirLight.specular = glm::vec3(0.5f, 0.5f, 0.5f);
-
-    spotLight.position = myCamera.Position;
-    spotLight.direction = myCamera.Front;
-    spotLight.cutOff = glm::cos(glm::radians(12.5f));
-    spotLight.outerCutOff = glm::cos(glm::radians(15.0f));
-    spotLight.constant = 1.0f;
-    spotLight.linear = 0.09f;
-    spotLight.quadratic = 0.032f;
-    spotLight.ambient = glm::vec3(0.2f, 0.2f, 0.2f);
-    spotLight.diffuse = glm::vec3(0.5f, 0.5f, 0.5f);
-    spotLight.specular = glm::vec3(1.0f, 1.0f, 1.0f);
 }

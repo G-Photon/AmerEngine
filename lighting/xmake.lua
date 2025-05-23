@@ -9,11 +9,6 @@ target("main")
     add_includedirs("include")
     add_files("src/main.cpp")
     add_packages("glfw", "glad", "glm", "imgui")
-target("demo")
-    set_kind("binary")
-    add_includedirs("include")
-    add_files("src/demo.cpp")
-    add_packages("imgui", {public = true})
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
 --
