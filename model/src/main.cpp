@@ -345,7 +345,8 @@ int main()
     Material::defaultSpecular =
         materialManager.LoadTexture((path + "/resources/textures/container2_specular.png").c_str());
 
-    Model model = Model((path + "resources/model/nahida/nahida.pmx").c_str());
+    Model model = Model((path + "resources/model/xilian/xilian.pmx").c_str());
+    Model model1 = Model((path + "resources/model/yunli/yunli.pmx").c_str());
 
     // pass transformation matrix to shader (4 different ways)
     // -------------------------------------------------
@@ -661,7 +662,22 @@ int main()
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
             model.Draw(ourShader);
-        
+            // 绘制模型
+            ourShader.use();
+            glm::mat4 model1Mat(1.0f);
+            model1Mat = glm::translate(model1Mat, glm::vec3(0.0f, 0.0f, -8.0f));
+            ourShader.setMat4("model", model1Mat);
+            ourShader.setMat4("view", view);
+            ourShader.setMat4("projection", projection);
+            ourShader.setInt("material.useDiffuseTexture", 1);
+            ourShader.setInt("material.useSpecularTexture", 1);
+            ourShader.setInt("material.diffuse", 0);
+            ourShader.setInt("material.specular", 1);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, Material::defaultDiffuse);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
+            model1.Draw(ourShader);
 
             // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
             // etc.)
