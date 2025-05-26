@@ -265,6 +265,8 @@ int main()
     // shader files however you like
     Shader ourShader((path + "shader/shader.vs").c_str(), (path + "shader/myshader.fs").c_str());
     Shader lightShader((path + "shader/lightshader.vs").c_str(), (path + "shader/lightshader.fs").c_str());
+    Shader singleColorShader((path + "shader/single_color.vs").c_str(),
+                                 (path + "shader/single_color.fs").c_str());
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
@@ -350,8 +352,15 @@ int main()
     Model model = Model((path + "resources/model/xilian/xilian.pmx").c_str());
     Model model1 = Model((path + "resources/model/yunli/yunli.pmx").c_str());
 
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
     glEnable(GL_STENCIL_TEST);
-    // pass transformation matrix to shader (4 different ways)
+    glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+    glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
+
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_CULL_FACE);
     // -------------------------------------------------
     // Main loop
 #ifdef __EMSCRIPTEN__
@@ -652,6 +661,8 @@ int main()
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }
             // 绘制模型
+            glStencilFunc(GL_ALWAYS, 1, 0xFF);
+            glStencilMask(0xFF);
             ourShader.use();
             ourShader.setMat4("model", glm::mat4(1.0f));
             ourShader.setMat4("view", view);
@@ -664,7 +675,7 @@ int main()
             glBindTexture(GL_TEXTURE_2D, Material::defaultDiffuse);
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
-            //model.Draw(ourShader);
+            model.Draw(ourShader);
             // 绘制模型
             ourShader.use();
             glm::mat4 model1Mat(1.0f);
@@ -681,7 +692,20 @@ int main()
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
             model1.Draw(ourShader);
-
+            // 绘制模型
+            glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
+            glStencilMask(0x00);
+            glDisable(GL_DEPTH_TEST);
+            singleColorShader.use();
+            float scale = 1.0f;
+            model1Mat = glm::scale(model1Mat, glm::vec3(scale, scale, scale));
+            singleColorShader.setMat4("model", model1Mat);
+            singleColorShader.setMat4("view", view);
+            singleColorShader.setMat4("projection", projection);
+            model1.Draw(singleColorShader);
+            glStencilMask(0xFF);
+            glStencilFunc(GL_ALWAYS, 0, 0xFF);
+            glEnable(GL_DEPTH_TEST);
             // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
             // etc.)
             // -------------------------------------------------------------------------------

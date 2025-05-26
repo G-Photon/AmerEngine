@@ -8,8 +8,8 @@ out vec4 FragColor;
 struct Material {
     sampler2D diffuse;
     sampler2D specular;
-    vec3 diffuseColor;
-    vec3 specularColor;
+    vec4 diffuseColor;
+    vec4 specularColor;
     float shininess;
     int useDiffuseTexture;
     int useSpecularTexture;
@@ -41,16 +41,16 @@ uniform vec3 viewPos;
 uniform Material material;
 
 
-vec3 CalculateLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir) {
+vec4 CalculateLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     vec3 lightDir;
     float attenuation = 1.0;
 
-    vec3 diffuseColor = material.useDiffuseTexture == 1 ? 
-        texture(material.diffuse, TexCoords).rgb : 
+    vec4 diffuseColor = material.useDiffuseTexture == 1 ? 
+        texture(material.diffuse, TexCoords).rgba : 
         material.diffuseColor;
-    
-    vec3 specularColor = material.useSpecularTexture == 1 ? 
-        texture(material.specular, TexCoords).rgb : 
+
+    vec4 specularColor = material.useSpecularTexture == 1 ? 
+        texture(material.specular, TexCoords).rgba : 
         material.specularColor;
 
     if (light.type == 0) { // 定向光
@@ -73,16 +73,16 @@ vec3 CalculateLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     // 光照计算...
     // 漫反射
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = light.diffuse * diff * diffuseColor;
+    vec4 diffuse = vec4(light.diffuse, 1.0) * diff * diffuseColor;
 
     // 镜面反射
     vec3 reflectDir = reflect(-lightDir, normal);
     float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
-    vec3 specular = light.specular * spec * specularColor;
+    vec4 specular = vec4(light.specular, 1.0) * spec * specularColor;
     // 环境光
-    vec3 ambient = light.ambient * diffuseColor;
+    vec4 ambient = vec4(light.ambient, 1.0) * diffuseColor;
     // 合并结果
-    vec3 finalColor = ambient + diffuse + specular;
+    vec4 finalColor = ambient + diffuse + specular;
     // 衰减
     if (light.type == 1 || light.type == 2) {
         finalColor *= attenuation * intensity;
@@ -92,12 +92,12 @@ vec3 CalculateLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir) {
 }
 
 void main() {
-    vec3 result = vec3(0.0);
+    vec4 result = vec4(0.0);
     vec3 norm = normalize(Normal);
     vec3 viewDir = normalize(viewPos - FragPos);
 
     for(int i = 0; i < numLights; i++) {
         result += CalculateLight(lights[i], norm, FragPos, viewDir);
     }
-    FragColor = vec4(result, 1.0);
+    FragColor = result;
 }
