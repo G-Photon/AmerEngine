@@ -171,6 +171,9 @@ class Model
         // 4. height maps
         std::vector<Texture> heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, "texture_height");
         textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
+        // 5. reflect maps
+        std::vector<Texture> reflectMaps = loadMaterialTextures(material, aiTextureType_REFLECTION, "texture_reflect");
+        textures.insert(textures.end(), reflectMaps.begin(), reflectMaps.end());
 
         // return a mesh object created from the extracted mesh data
         return Mesh(vertices, indices, textures);

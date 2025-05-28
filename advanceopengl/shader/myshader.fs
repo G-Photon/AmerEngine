@@ -4,6 +4,7 @@ in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoords;
 out vec4 FragColor;
+uniform samplerCube skybox;
 
 struct Material {
     sampler2D diffuse;
@@ -81,6 +82,9 @@ vec4 CalculateLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     vec4 specular = vec4(light.specular, 1.0) * spec * specularColor;
     // 环境光
     vec4 ambient = vec4(light.ambient, 1.0) * diffuseColor;
+    // 反射光
+    vec4 reflectColor = vec4(texture(skybox, reflect(-viewDir, normal)).rgb, 1.0);
+    ambient += reflectColor * 0.1; // 可选的环境光反射
     // 合并结果
     vec4 finalColor = ambient + diffuse + specular;
     // 衰减

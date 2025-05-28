@@ -1,3 +1,4 @@
+#include "glm/fwd.hpp"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -274,6 +275,7 @@ int main()
     Shader singleColorShader((path + "shader/single_color.vs").c_str(), (path + "shader/single_color.fs").c_str());
     Shader framebufferShader((path + "shader/framebuffer.vs").c_str(), (path + "shader/framebuffer.fs").c_str());
     Shader cubemapShader((path + "shader/cubeshader.vs").c_str(), (path + "shader/cubeshader.fs").c_str());
+    Shader reflectShader((path + "shader/reflect.vs").c_str(), (path + "shader/reflect.fs").c_str());
     
 
     // set up vertex data (and buffer(s)) and configure vertex attributes
@@ -364,7 +366,7 @@ int main()
     glBindBuffer(GL_ARRAY_BUFFER, cubemapVBO);
     glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), skyboxVertices, GL_STATIC_DRAW);
     // position attribute
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
     unsigned int lightVAO;
@@ -373,7 +375,7 @@ int main()
     // 只需要绑定VBO不用再次设置VBO的数据，因为箱子的VBO数据中已经包含了正确的立方体顶点数据
     glBindBuffer(GL_ARRAY_BUFFER, VBO);
     // 设置灯立方体的顶点属性（对我们的灯来说仅仅只有位置数据）
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)0);
     glEnableVertexAttribArray(0);
 
     
@@ -407,15 +409,20 @@ int main()
                      // uniforms!
     ourShader.setInt("material.diffuse", 0);
     ourShader.setInt("material.specular", 1);
+    ourShader
+        .setInt("skybox",2);
 
-    cubemapShader.use();
+            cubemapShader.use();
     cubemapShader.setInt("skybox", 0);
-    
+    reflectShader.use();
+    reflectShader.setInt("skybox", 0);
+
 
     // // either set it manually like so:
     // glUniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0);
     // // or set it via the texture class
     // ourShader.setInt("texture2", 1);
+    // 
     //stbi_set_flip_vertically_on_load(true);
     glEnable(GL_DEPTH_TEST);
     
@@ -441,7 +448,7 @@ int main()
 
     Model model = Model((path + "resources/model/xilian/xilian.pmx").c_str());
     Model model1 = Model((path + "resources/model/yunli/yunli.pmx").c_str());
-
+    Model model2 = Model((path + "resources/model/nanosuit_reflection/nanosuit.obj").c_str());
 
     // -------------------------------------------------
     // Main loop
@@ -473,9 +480,9 @@ int main()
         glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
 
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glEnable(GL_CULL_FACE);
+        // glEnable(GL_BLEND);
+        // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        // glEnable(GL_CULL_FACE);
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w,
                      clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -663,22 +670,9 @@ int main()
             ImGui::Text("Pitch/Yaw: %.1f/%.1f", myCamera.Pitch, myCamera.Yaw);
             ImGui::End();
 
-            // 绘制天空盒
-            glDepthFunc(GL_LEQUAL); // change depth function so depth test passes when
-                                    // values are equal to depth buffer's content
-            cubemapShader.use();
-            glBindVertexArray(cubemapVAO);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
-            glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); // remove translation part of view matrix
-            cubemapShader.setMat4("view", skyboxView);
-            cubemapShader.setMat4("projection", projection);
-            // draw skybox as last
-            // this prevents depth conflicts with other objects
-            glDrawArrays(GL_TRIANGLES, 0, 36);
-            glBindVertexArray(0);
-            glDepthFunc(GL_LESS);
-
+            // 绘制模型
+            glStencilFunc(GL_ALWAYS, 1, 0xFF);
+            glStencilMask(0xFF);
             // render container
             lightShader.use();
             for (int i = 0; i < lights.size(); i++)
@@ -755,8 +749,8 @@ int main()
                 else
                 {
                     // 设置颜色值
-                    ourShader.setVec3("material.diffuseColor", mat.diffuseColor);
-                    ourShader.setVec3("material.specularColor", mat.specularColor);
+                    ourShader.setVec4("material.diffuseColor", glm::vec4(mat.diffuseColor,1.0f));
+                    ourShader.setVec4("material.specularColor", glm::vec4(mat.specularColor,1.0f));
                 }
 
                 ourShader.setFloat("material.shininess", mat.shininess);
@@ -769,9 +763,7 @@ int main()
                 glBindVertexArray(VAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }
-            // 绘制模型
-            glStencilFunc(GL_ALWAYS, 1, 0xFF);
-            glStencilMask(0xFF);
+            
             ourShader.use();
             ourShader.setMat4("model", glm::mat4(1.0f));
             ourShader.setMat4("view", view);
@@ -785,6 +777,7 @@ int main()
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
             model.Draw(ourShader);
+            
             // 绘制模型
             ourShader.use();
             glm::mat4 model1Mat(1.0f);
@@ -801,10 +794,42 @@ int main()
             glActiveTexture(GL_TEXTURE1);
             glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
             model1.Draw(ourShader);
+
+            // 绘制模型
+            ourShader.use();
+            glm::mat4 model2Mat(1.0f);
+            model2Mat = glm::translate(model2Mat, glm::vec3(0.0f, 0.0f, -16.0f));
+            ourShader.setMat4("model", model2Mat);
+            ourShader.setMat4("view", view);
+            ourShader.setMat4("projection", projection);
+            ourShader.setInt("material.useDiffuseTexture", 1);
+            ourShader.setInt("material.useSpecularTexture", 1);
+            ourShader.setInt("material.diffuse", 0);
+            ourShader.setInt("material.specular", 1);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D, Material::defaultDiffuse);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
+            glActiveTexture(GL_TEXTURE2);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+            model2.Draw(ourShader);
+
+            // 绘制模型
+            reflectShader.use();
+            glm::mat4 reflectmodel1Mat(1.0f);
+            reflectmodel1Mat = glm::translate(reflectmodel1Mat, glm::vec3(0.0f, 0.0f, 8.0f));
+            reflectShader.setMat4("model", reflectmodel1Mat);
+            reflectShader.setMat4("view", view);
+            reflectShader.setMat4("projection", projection);
+            reflectShader.setVec3("cameraPos", myCamera.Position);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+            model1.Draw(reflectShader);
+
             // 绘制模型
             glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
             glStencilMask(0x00);
-            glDisable(GL_DEPTH_TEST);
+            //glDisable(GL_DEPTH_TEST);
             singleColorShader.use();
             float scale = 1.0f;
             model1Mat = glm::scale(model1Mat, glm::vec3(scale, scale, scale));
@@ -812,6 +837,23 @@ int main()
             singleColorShader.setMat4("view", view);
             singleColorShader.setMat4("projection", projection);
             model1.Draw(singleColorShader);
+            glEnable(GL_DEPTH_TEST);
+            // 绘制天空盒
+            glDepthFunc(GL_LEQUAL); // change depth function so depth test passes when
+                                    // values are equal to depth buffer's content
+            cubemapShader.use();
+            glBindVertexArray(cubemapVAO);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
+            glm::mat4 skyboxView = glm::mat4(glm::mat3(view)); // remove translation part of view matrix
+            cubemapShader.setMat4("view", skyboxView);
+            cubemapShader.setMat4("projection", projection);
+            // draw skybox as last
+            // this prevents depth conflicts with other objects
+            glDrawArrays(GL_TRIANGLES, 0, 36);
+            glBindVertexArray(0);
+            glDepthFunc(GL_LESS);
+
             glStencilMask(0xFF);
             glStencilFunc(GL_ALWAYS, 0, 0xFF);
             glEnable(GL_DEPTH_TEST);
