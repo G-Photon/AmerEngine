@@ -1,6 +1,7 @@
 #ifndef MESH_H
 #define MESH_H
 
+#include <cstdio>
 #include <glad/glad.h> // holds all OpenGL type declarations
 
 #include <glm/glm.hpp>
@@ -67,7 +68,6 @@ class Mesh
         unsigned int specularNr = 1;
         unsigned int normalNr = 1;
         unsigned int heightNr = 1;
-        unsigned int reflectNr = 1;
         for (unsigned int i = 0; i < textures.size(); i++)
         {
             glActiveTexture(GL_TEXTURE0 + i); // active proper texture unit before binding
@@ -82,8 +82,6 @@ class Mesh
                 number = std::to_string(normalNr++); // transfer unsigned int to string
             else if (name == "texture_height")
                 number = std::to_string(heightNr++); // transfer unsigned int to string
-            else if (name == "texture_reflect")
-                number = std::to_string(reflectNr++); // transfer unsigned int to string
 
             // now set the sampler to the correct texture unit
             glUniform1i(glGetUniformLocation(shader.ID, (name + number).c_str()), i);

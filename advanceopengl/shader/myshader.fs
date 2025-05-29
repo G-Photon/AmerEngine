@@ -5,15 +5,17 @@ in vec3 Normal;
 in vec2 TexCoords;
 out vec4 FragColor;
 uniform samplerCube skybox;
-
+uniform sampler2D texture_height1;
 struct Material {
     sampler2D diffuse;
     sampler2D specular;
+    //sampler2D reflect;
     vec4 diffuseColor;
     vec4 specularColor;
     float shininess;
     int useDiffuseTexture;
     int useSpecularTexture;
+    int useReflectTexture;
 };
 
 struct Light {
@@ -82,9 +84,10 @@ vec4 CalculateLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     vec4 specular = vec4(light.specular, 1.0) * spec * specularColor;
     // 环境光
     vec4 ambient = vec4(light.ambient, 1.0) * diffuseColor;
-    // 反射光
-    vec4 reflectColor = vec4(texture(skybox, reflect(-viewDir, normal)).rgb, 1.0);
-    ambient += reflectColor * 0.1; // 可选的环境光反射
+    // 如果使用反射贴图
+    if (material.useReflectTexture == 1) {
+        ambient += vec4(vec3(texture(skybox, reflect(normalize(-viewDir), normal))) * texture(texture_height1, TexCoords).rgb, 1.0);
+    }
     // 合并结果
     vec4 finalColor = ambient + diffuse + specular;
     // 衰减

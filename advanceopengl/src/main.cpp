@@ -409,10 +409,11 @@ int main()
                      // uniforms!
     ourShader.setInt("material.diffuse", 0);
     ourShader.setInt("material.specular", 1);
-    ourShader
-        .setInt("skybox",2);
+    //ourShader.setInt("material.reflect", 2);
+    ourShader.setInt("texture_height1", 2);
+    ourShader.setInt("skybox", 4);
 
-            cubemapShader.use();
+    cubemapShader.use();
     cubemapShader.setInt("skybox", 0);
     reflectShader.use();
     reflectShader.setInt("skybox", 0);
@@ -425,7 +426,7 @@ int main()
     // 
     //stbi_set_flip_vertically_on_load(true);
     glEnable(GL_DEPTH_TEST);
-    
+    glEnable(GL_PROGRAM_POINT_SIZE);
 
     glm::vec3 cubePositions[] = {glm::vec3(0.0f, 0.0f, 0.0f),    glm::vec3(2.0f, 5.0f, -15.0f),
                                  glm::vec3(-1.5f, -2.2f, -2.5f), glm::vec3(-3.8f, -2.0f, -12.3f),
@@ -770,12 +771,7 @@ int main()
             ourShader.setMat4("projection", projection);
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
-            ourShader.setInt("material.diffuse", 0);
-            ourShader.setInt("material.specular", 1);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, Material::defaultDiffuse);
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
+            ourShader.setInt("material.useReflectTexture", 0);
             model.Draw(ourShader);
             
             // 绘制模型
@@ -787,12 +783,7 @@ int main()
             ourShader.setMat4("projection", projection);
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
-            ourShader.setInt("material.diffuse", 0);
-            ourShader.setInt("material.specular", 1);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, Material::defaultDiffuse);
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
+            ourShader.setInt("material.useReflectTexture", 0);
             model1.Draw(ourShader);
 
             // 绘制模型
@@ -804,13 +795,8 @@ int main()
             ourShader.setMat4("projection", projection);
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
-            ourShader.setInt("material.diffuse", 0);
-            ourShader.setInt("material.specular", 1);
-            glActiveTexture(GL_TEXTURE0);
-            glBindTexture(GL_TEXTURE_2D, Material::defaultDiffuse);
-            glActiveTexture(GL_TEXTURE1);
-            glBindTexture(GL_TEXTURE_2D, Material::defaultSpecular);
-            glActiveTexture(GL_TEXTURE2);
+            ourShader.setInt("material.useReflectTexture", 1);
+            glActiveTexture(GL_TEXTURE4);
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
             model2.Draw(ourShader);
 
