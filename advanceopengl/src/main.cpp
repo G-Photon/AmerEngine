@@ -451,6 +451,24 @@ int main()
     Model model1 = Model((path + "resources/model/yunli/yunli.pmx").c_str());
     Model model2 = Model((path + "resources/model/nanosuit_reflection/nanosuit.obj").c_str());
 
+    unsigned int uniformBlockIndexRed = glGetUniformBlockIndex(ourShader.ID, "Matrices");
+    unsigned int uniformBlockIndexGreen = glGetUniformBlockIndex(lightShader.ID, "Matrices");
+    unsigned int uniformBlockIndexBlue = glGetUniformBlockIndex(singleColorShader.ID, "Matrices");
+    unsigned int uniformBlockIndexYellow = glGetUniformBlockIndex(reflectShader.ID, "Matrices");
+
+    glUniformBlockBinding(ourShader.ID, uniformBlockIndexRed, 0);
+    glUniformBlockBinding(lightShader.ID, uniformBlockIndexGreen, 0);
+    glUniformBlockBinding(singleColorShader.ID, uniformBlockIndexBlue, 0);
+    glUniformBlockBinding(reflectShader.ID, uniformBlockIndexYellow, 0);
+    // Create a uniform buffer object to store the projection and view matrices
+    unsigned int uboMatrices;
+    glGenBuffers(1, &uboMatrices);
+    glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
+    glBufferData(GL_UNIFORM_BUFFER, 2 * sizeof(glm::mat4), NULL, GL_STATIC_DRAW);
+    glBindBuffer(GL_UNIFORM_BUFFER, 0);
+
+    glBindBufferRange(GL_UNIFORM_BUFFER, 0, uboMatrices, 0, 2 * sizeof(glm::mat4));
+
     // -------------------------------------------------
     // Main loop
 #ifdef __EMSCRIPTEN__
@@ -498,6 +516,10 @@ int main()
         view = myCamera.GetViewMatrix();
         glm::mat4 projection(1.0f);
         projection = glm::perspective(glm::radians(myCamera.Zoom), SCR_WIDTH * 1.2f / SCR_HEIGHT, 0.1f, 100.0f);
+        glBindBuffer(GL_UNIFORM_BUFFER, uboMatrices);
+        glBufferSubData(GL_UNIFORM_BUFFER, 0, sizeof(glm::mat4), glm::value_ptr(projection));
+        glBufferSubData(GL_UNIFORM_BUFFER, sizeof(glm::mat4), sizeof(glm::mat4), glm::value_ptr(view));
+        glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
         // 光源管理窗口
         ImGui::Begin("Light Manager");
@@ -684,8 +706,6 @@ int main()
                 model = glm::translate(model, lights[i].position);
                 model = glm::scale(model, glm::vec3(0.2f));
                 lightShader.setMat4("model", model);
-                lightShader.setMat4("view", view);
-                lightShader.setMat4("projection", projection);
                 glBindVertexArray(lightVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }
@@ -759,16 +779,12 @@ int main()
                 model = glm::translate(model, obj.position);
                 model = glm::scale(model, obj.scale);
                 ourShader.setMat4("model", model);
-                ourShader.setMat4("view", view);
-                ourShader.setMat4("projection", projection);
                 glBindVertexArray(VAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }
             
             ourShader.use();
             ourShader.setMat4("model", glm::mat4(1.0f));
-            ourShader.setMat4("view", view);
-            ourShader.setMat4("projection", projection);
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
             ourShader.setInt("material.useReflectTexture", 0);
@@ -779,8 +795,6 @@ int main()
             glm::mat4 model1Mat(1.0f);
             model1Mat = glm::translate(model1Mat, glm::vec3(0.0f, 0.0f, -8.0f));
             ourShader.setMat4("model", model1Mat);
-            ourShader.setMat4("view", view);
-            ourShader.setMat4("projection", projection);
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
             ourShader.setInt("material.useReflectTexture", 0);
@@ -791,8 +805,6 @@ int main()
             glm::mat4 model2Mat(1.0f);
             model2Mat = glm::translate(model2Mat, glm::vec3(0.0f, 0.0f, -16.0f));
             ourShader.setMat4("model", model2Mat);
-            ourShader.setMat4("view", view);
-            ourShader.setMat4("projection", projection);
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
             ourShader.setInt("material.useReflectTexture", 1);
@@ -805,8 +817,6 @@ int main()
             glm::mat4 reflectmodel1Mat(1.0f);
             reflectmodel1Mat = glm::translate(reflectmodel1Mat, glm::vec3(0.0f, 0.0f, 8.0f));
             reflectShader.setMat4("model", reflectmodel1Mat);
-            reflectShader.setMat4("view", view);
-            reflectShader.setMat4("projection", projection);
             reflectShader.setVec3("cameraPos", myCamera.Position);
             glActiveTexture(GL_TEXTURE0);
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
@@ -820,8 +830,6 @@ int main()
             float scale = 1.0f;
             model1Mat = glm::scale(model1Mat, glm::vec3(scale, scale, scale));
             singleColorShader.setMat4("model", model1Mat);
-            singleColorShader.setMat4("view", view);
-            singleColorShader.setMat4("projection", projection);
             model1.Draw(singleColorShader);
             glEnable(GL_DEPTH_TEST);
             // 绘制天空盒
