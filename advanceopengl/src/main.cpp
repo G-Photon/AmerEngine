@@ -270,7 +270,10 @@ int main()
     // ------------------------------------
     // Shader ourShader((path + "shader/shader.vs").c_str(),(path + "shader/shader.fs").c_str()); // you can name your
     // shader files however you like
-    Shader ourShader((path + "shader/shader.vs").c_str(), (path + "shader/myshader.fs").c_str());
+    Shader ourShader((path + "shader/shader.vs").c_str(), (path + "shader/myshader.fs").c_str(),
+                    (path + "shader/shader.gs").c_str());
+    Shader normalShader((path + "shader/shader.vs").c_str(), (path + "shader/single_color.fs").c_str(),
+                    (path + "shader/show_normal.gs").c_str());
     Shader lightShader((path + "shader/lightshader.vs").c_str(), (path + "shader/lightshader.fs").c_str());
     Shader singleColorShader((path + "shader/single_color.vs").c_str(), (path + "shader/single_color.fs").c_str());
     Shader framebufferShader((path + "shader/framebuffer.vs").c_str(), (path + "shader/framebuffer.fs").c_str());
@@ -281,30 +284,54 @@ int main()
     // set up vertex data (and buffer(s)) and configure vertex attributes
     // ------------------------------------------------------------------
     float vertices[] = {
-        // positions          // normals           // texture coords
-        -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 0.0f,
-        0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 1.0f, 1.0f,
-        -0.5f, 0.5f,  -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 1.0f, -0.5f, -0.5f, -0.5f, 0.0f,  0.0f,  -1.0f, 0.0f, 0.0f,
+        // 前面 (Z=-0.5, 法线 (0,0,-1))
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // 左下
+        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // 右上
+        0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 0.0f,  // 右下
+        -0.5f, -0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 0.0f, // 左下
+        -0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 0.0f, 1.0f,  // 左上
+        0.5f, 0.5f, -0.5f, 0.0f, 0.0f, -1.0f, 1.0f, 1.0f,   // 右上
 
-        -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 0.0f,
-        0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f, 0.5f,  0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  1.0f, 1.0f,
-        -0.5f, 0.5f,  0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 1.0f, -0.5f, -0.5f, 0.5f,  0.0f,  0.0f,  1.0f,  0.0f, 0.0f,
+        // 后面 (Z=0.5, 法线 (0,0,1))
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // 左下
+        0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 0.0f,  // 右下
+        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // 右上
+        -0.5f, -0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, // 左下
+        0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 1.0f, 1.0f,   // 右上
+        -0.5f, 0.5f, 0.5f, 0.0f, 0.0f, 1.0f, 0.0f, 1.0f,  // 左上
 
-        -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f, 0.0f, -0.5f, 0.5f,  -0.5f, -1.0f, 0.0f,  0.0f,  1.0f, 1.0f,
-        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f,  0.0f,  0.0f, 1.0f, -0.5f, -0.5f, -0.5f, -1.0f, 0.0f,  0.0f,  0.0f, 1.0f,
-        -0.5f, -0.5f, 0.5f,  -1.0f, 0.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  0.5f,  -1.0f, 0.0f,  0.0f,  1.0f, 0.0f,
+        // 左面 (X=-0.5, 法线 (-1,0,0))
+        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // 后下
+        -0.5f, -0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 0.0f,  // 前下
+        -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // 前上
+        -0.5f, -0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // 后下
+        -0.5f, 0.5f, 0.5f, -1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // 前上
+        -0.5f, 0.5f, -0.5f, -1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  // 后上
 
-        0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  -0.5f, 1.0f,  0.0f,  0.0f,  1.0f, 1.0f,
-        0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 1.0f,  0.0f,  0.0f,  0.0f, 1.0f,
-        0.5f,  -0.5f, 0.5f,  1.0f,  0.0f,  0.0f,  0.0f, 0.0f, 0.5f,  0.5f,  0.5f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f,
+        // 右面 (X=0.5, 法线 (1,0,0))
+        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // 后下
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // 前上
+        0.5f, -0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 0.0f,  // 前下
+        0.5f, -0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 0.0f, // 后下
+        0.5f, 0.5f, -0.5f, 1.0f, 0.0f, 0.0f, 1.0f, 1.0f,  // 后上
+        0.5f, 0.5f, 0.5f, 1.0f, 0.0f, 0.0f, 0.0f, 1.0f,   // 前上
 
-        -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f, 1.0f, 0.5f,  -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  1.0f, 1.0f,
-        0.5f,  -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  1.0f, 0.0f, 0.5f,  -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  1.0f, 0.0f,
-        -0.5f, -0.5f, 0.5f,  0.0f,  -1.0f, 0.0f,  0.0f, 0.0f, -0.5f, -0.5f, -0.5f, 0.0f,  -1.0f, 0.0f,  0.0f, 1.0f,
+        // 底面 (Y=-0.5, 法线 (0,-1,0))
+        -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // 左后
+        0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 1.0f,  // 右后
+        0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // 右前
+        -0.5f, -0.5f, -0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 1.0f, // 左后
+        0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 1.0f, 0.0f,   // 右前
+        -0.5f, -0.5f, 0.5f, 0.0f, -1.0f, 0.0f, 0.0f, 0.0f,  // 左前
 
-        -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.5f,  0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  1.0f, 1.0f,
-        0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f, 0.5f,  0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  1.0f, 0.0f,
-        -0.5f, 0.5f,  0.5f,  0.0f,  1.0f,  0.0f,  0.0f, 0.0f, -0.5f, 0.5f,  -0.5f, 0.0f,  1.0f,  0.0f,  0.0f, 1.0f};
+        // 顶面 (Y=0.5, 法线 (0,1,0))
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // 左后
+        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f,   // 右前
+        0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 1.0f,  // 右后
+        -0.5f, 0.5f, -0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 1.0f, // 左后
+        -0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f,  // 左前
+        0.5f, 0.5f, 0.5f, 0.0f, 1.0f, 0.0f, 1.0f, 0.0f    // 右前
+    };
     float skyboxVertices[] = {// positions
                               -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f,
                               1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f,
@@ -451,15 +478,17 @@ int main()
     Model model1 = Model((path + "resources/model/yunli/yunli.pmx").c_str());
     Model model2 = Model((path + "resources/model/nanosuit_reflection/nanosuit.obj").c_str());
 
-    unsigned int uniformBlockIndexRed = glGetUniformBlockIndex(ourShader.ID, "Matrices");
-    unsigned int uniformBlockIndexGreen = glGetUniformBlockIndex(lightShader.ID, "Matrices");
-    unsigned int uniformBlockIndexBlue = glGetUniformBlockIndex(singleColorShader.ID, "Matrices");
-    unsigned int uniformBlockIndexYellow = glGetUniformBlockIndex(reflectShader.ID, "Matrices");
+    unsigned int uniformBlockIndex1 = glGetUniformBlockIndex(ourShader.ID, "Matrices");
+    unsigned int uniformBlockIndex2 = glGetUniformBlockIndex(normalShader.ID, "Matrices");
+    unsigned int uniformBlockIndex3 = glGetUniformBlockIndex(lightShader.ID, "Matrices");
+    unsigned int uniformBlockIndex4 = glGetUniformBlockIndex(singleColorShader.ID, "Matrices");
+    unsigned int uniformBlockIndex5 = glGetUniformBlockIndex(reflectShader.ID, "Matrices");
 
-    glUniformBlockBinding(ourShader.ID, uniformBlockIndexRed, 0);
-    glUniformBlockBinding(lightShader.ID, uniformBlockIndexGreen, 0);
-    glUniformBlockBinding(singleColorShader.ID, uniformBlockIndexBlue, 0);
-    glUniformBlockBinding(reflectShader.ID, uniformBlockIndexYellow, 0);
+    glUniformBlockBinding(ourShader.ID, uniformBlockIndex1, 0);
+    glUniformBlockBinding(normalShader.ID, uniformBlockIndex2, 0);
+    glUniformBlockBinding(lightShader.ID, uniformBlockIndex3, 0);
+    glUniformBlockBinding(singleColorShader.ID, uniformBlockIndex4, 0);
+    glUniformBlockBinding(reflectShader.ID, uniformBlockIndex5, 0);
     // Create a uniform buffer object to store the projection and view matrices
     unsigned int uboMatrices;
     glGenBuffers(1, &uboMatrices);
@@ -501,7 +530,7 @@ int main()
 
         // glEnable(GL_BLEND);
         // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        // glEnable(GL_CULL_FACE);
+         glEnable(GL_CULL_FACE);
         glClearColor(clear_color.x * clear_color.w, clear_color.y * clear_color.w, clear_color.z * clear_color.w,
                      clear_color.w);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
@@ -714,6 +743,7 @@ int main()
 
             // 在着色器中设置动态光源数量
             ourShader.setInt("numLights", (int)lights.size());
+            ourShader.setFloat("time", static_cast<float>(glfwGetTime()));
 
             // 传递所有光源数据
             for (int i = 0; i < lights.size(); ++i)
@@ -758,7 +788,7 @@ int main()
                 const Material &mat = obj.material;
                 ourShader.setInt("material.useDiffuseTexture", mat.type == MATERIAL_TEXTURE ? 1 : 0);
                 ourShader.setInt("material.useSpecularTexture", mat.type == MATERIAL_TEXTURE ? 1 : 0);
-
+                ourShader.setInt("material.useReflectTexture", 0);
                 if (mat.type == MATERIAL_TEXTURE)
                 {
                     // 绑定贴图
@@ -799,6 +829,9 @@ int main()
             ourShader.setInt("material.useSpecularTexture", 1);
             ourShader.setInt("material.useReflectTexture", 0);
             model1.Draw(ourShader);
+            normalShader.use();
+            normalShader.setMat4("model", model1Mat);
+            model1.Draw(normalShader);
 
             // 绘制模型
             ourShader.use();
@@ -913,6 +946,15 @@ void processInput(GLFWwindow *window)
         myCamera.ProcessKeyboard(LEFT, deltaTime * MoveSpeed);
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         myCamera.ProcessKeyboard(RIGHT, deltaTime * MoveSpeed);
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
+        myCamera.ProcessKeyboard(UP, deltaTime * MoveSpeed);
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
+        myCamera.ProcessKeyboard(DOWN, deltaTime * MoveSpeed);
+    if (glfwGetKey(window, GLFW_KEY_F) == GLFW_PRESS)
+        cameraMouseControl = !cameraMouseControl; // 切换摄像机控制模式
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+        myCamera.Reset(); // 重置摄像机位置和方向
+
 }
 
 // glfw: whenever the window size changed (by OS or user resize) this callback function executes
