@@ -23,12 +23,12 @@ layout (std140) uniform Matrices
 
 void main()
 {
-    vs_out.FragPos = vec3(model * vec4(aPos, 1.0));
+    vs_out.FragPos = vec3(model * (vec4(aPos, 1.0)+ vec4(gl_InstanceID, 0.0, 0.0, 0.0)));
     vs_out.Normal = mat3(transpose(inverse(model))) * aNormal;  
     vs_out.texCoords = aTexCoords;
     vs_out.model = model;
     vs_out.view = view;
     vs_out.projection = projection;
 
-    gl_Position = vec4(aPos, 1.0);
+    gl_Position = vec4(aPos, 1.0) + vec4(gl_InstanceID, 0.0, 0.0,0.0);
 }

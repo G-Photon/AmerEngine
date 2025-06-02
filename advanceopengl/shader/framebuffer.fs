@@ -3,7 +3,7 @@ out vec4 FragColor;
 
 in vec2 TexCoords;
 
-uniform sampler2D screenTexture;
+uniform sampler2DMS screenTextureMS;
 
 const float offset = 1.0 / 300.0;  
 
@@ -29,7 +29,13 @@ void main()
     vec3 sampleTex[9];
     for(int i = 0; i < 9; i++)
     {
-        sampleTex[i] = vec3(texture(screenTexture, TexCoords.st + offsets[i]));
+        // 对每个采样点取所有MSAA样本的平均值
+        vec3 color = vec3(0.0);
+        for(int s = 0; s < 4; s++)
+        {
+            color += texelFetch(screenTextureMS, ivec2((TexCoords.st + offsets[i]) * textureSize(screenTextureMS)), s).rgb;
+        }
+        sampleTex[i] = color / float(4);
     }
     vec3 col = vec3(0.0);
     for(int i = 0; i < 9; i++)
