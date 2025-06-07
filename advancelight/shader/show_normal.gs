@@ -9,6 +9,7 @@ in VS_OUT {
     mat4 model;
     mat4 view;
     mat4 projection;
+    mat3 TBN;
 } gs_in[];
 
 

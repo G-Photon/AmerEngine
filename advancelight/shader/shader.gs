@@ -9,12 +9,13 @@ in VS_OUT {
     mat4 model;
     mat4 view;
     mat4 projection;
+    mat3 TBN;
 } gs_in[];
 
 out vec2 TexCoords;
 out vec3 FragPos;
 out vec3 Normal;
-
+out mat3 TBN;
 uniform float time;
 
 vec3 GetNormal()
@@ -40,6 +41,7 @@ void nochange(int index)
 {
     mat4 mvp = gs_in[index].projection * gs_in[index].view * gs_in[index].model;
     gl_Position = mvp * gl_in[index].gl_Position;
+    TBN = gs_in[index].TBN;
     Normal = gs_in[index].Normal;
     FragPos = gs_in[index].FragPos;
     TexCoords = gs_in[index].texCoords;

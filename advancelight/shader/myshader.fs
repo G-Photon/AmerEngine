@@ -3,12 +3,14 @@
 in vec3 FragPos;
 in vec3 Normal;
 in vec2 TexCoords;
+in mat3 TBN;
 out vec4 FragColor;
 uniform samplerCube skybox;
 uniform sampler2D texture_height1;
 struct Material {
     sampler2D diffuse;
     sampler2D specular;
+    sampler2D normal;
     //sampler2D reflect;
     vec4 diffuseColor;
     vec4 specularColor;
@@ -16,6 +18,7 @@ struct Material {
     int useDiffuseTexture;
     int useSpecularTexture;
     int useReflectTexture;
+    int useNormalTexture;
 };
 
 struct Light {
@@ -100,7 +103,14 @@ vec4 CalculateLight(Light light, vec3 normal, vec3 fragPos, vec3 viewDir) {
 
 void main() {
     vec4 result = vec4(0.0);
-    vec3 norm = normalize(Normal);
+    vec3 norm;
+    if (material.useNormalTexture == 1) {
+        // 使用法线贴图
+        norm = normalize(TBN * (texture(material.normal, TexCoords).rgb * 2.0 - 1.0));
+    } else {
+        // 使用顶点法线
+        norm = normalize(Normal);
+    }
     vec3 viewDir = normalize(viewPos - FragPos);
 
     for(int i = 0; i < numLights; i++) {

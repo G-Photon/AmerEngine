@@ -195,6 +195,7 @@ float pitch = 0.0f;     // pitch is initialized to 0.0 degrees, meaning looking 
 bool firstMouse = true; // if first mouse input, set lastX and lastY to center of screen
 static float lastX = SCR_WIDTH / 2.0f;
 static float lastY = SCR_HEIGHT / 2.0f;
+bool useNormalmap = 0;
 
 glm::vec3 cameraPos = glm::vec3(0.0f, 0.0f, 0.0f);
 glm::vec3 cameraFront = glm::vec3(0.0f, 0.0f, -1.0f);
@@ -438,8 +439,9 @@ int main()
                      // uniforms!
     ourShader.setInt("material.diffuse", 0);
     ourShader.setInt("material.specular", 1);
-    //ourShader.setInt("material.reflect", 2);
-    ourShader.setInt("texture_height1", 2);
+    ourShader.setInt("material.normal", 2);
+    ourShader.setInt("texture_height1", 3);
+
     ourShader.setInt("skybox", 4);
 
     cubemapShader.use();
@@ -500,7 +502,6 @@ int main()
     glBindBuffer(GL_UNIFORM_BUFFER, 0);
 
     glBindBufferRange(GL_UNIFORM_BUFFER, 0, uboMatrices, 0, 2 * sizeof(glm::mat4));
-
     // -------------------------------------------------
     // Main loop
 #ifdef __EMSCRIPTEN__
@@ -521,7 +522,7 @@ int main()
         float currentFrame = static_cast<float>(glfwGetTime());
         deltaTime = currentFrame - lastFrame;
         lastFrame = currentFrame;
-
+        
         // render
         // ------
         glBindFramebuffer(GL_FRAMEBUFFER, fbo);
@@ -714,10 +715,10 @@ int main()
                 ImGui::DragFloat("Shininess", &mat.shininess, 1.0f, 1.0f, 256.0f);
             }
             ImGui::End();
-
             // 摄像机控制窗口
             ImGui::Begin("Camera Settings");
             ImGui::Checkbox("Mouse Control", &cameraMouseControl);
+            ImGui::Checkbox("Use Normal Map", &useNormalmap);
             ImGui::DragFloat("Camera Speed", &cameraSpeed, 0.1f, 1.0f, 10.0f);
             ImGui::DragFloat("Move Speed", &MoveSpeed, 0.1f, 1.0f, 10.0f);
             ImGui::Text("Position: (%.1f, %.1f, %.1f)", myCamera.Position.x, myCamera.Position.y, myCamera.Position.z);
@@ -821,6 +822,7 @@ int main()
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
             ourShader.setInt("material.useReflectTexture", 0);
+            ourShader.setInt("material.useNormalTexture", 0);
             model.Draw(ourShader);
             
             // 绘制模型
@@ -831,6 +833,7 @@ int main()
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
             ourShader.setInt("material.useReflectTexture", 0);
+            ourShader.setInt("material.useNormalTexture", 0);
             model1.Draw(ourShader);
             // normalShader.use();
             // normalShader.setMat4("model", model1Mat);
@@ -844,6 +847,7 @@ int main()
             ourShader.setInt("material.useDiffuseTexture", 1);
             ourShader.setInt("material.useSpecularTexture", 1);
             ourShader.setInt("material.useReflectTexture", 1);
+            ourShader.setInt("material.useNormalTexture", useNormalmap);
             glActiveTexture(GL_TEXTURE4);
             glBindTexture(GL_TEXTURE_CUBE_MAP, cubemapTexture);
             model2.Draw(ourShader);
