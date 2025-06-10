@@ -415,7 +415,7 @@ int main()
     
     glGenTextures(1, &textureColorbuffer);
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer);
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB, SCR_WIDTH, SCR_HEIGHT, GL_TRUE);
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, SCR_WIDTH, SCR_HEIGHT, GL_TRUE);
     glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer, 0);
@@ -974,7 +974,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     // 更新帧缓冲对象的大小
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer);
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB, width, height, GL_TRUE);
+    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, width, height, GL_TRUE);
     glBindRenderbuffer(GL_RENDERBUFFER, rbo);
     glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
 }

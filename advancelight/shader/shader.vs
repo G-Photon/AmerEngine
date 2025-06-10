@@ -28,10 +28,10 @@ void main()
 {
     vs_out.FragPos = vec3(model * (vec4(aPos, 1.0)+ vec4(gl_InstanceID, 0.0, 0.0, 0.0)));
     vs_out.Normal = normalize(mat3(transpose(inverse(model))) * aNormal);
-    vec3 T = normalize(mat3(model) * aTangent);
+    vec3 T = normalize(mat3(transpose(inverse(model))) * aTangent);
     T = T - dot(T, vs_out.Normal) * vs_out.Normal; // orthogonalize tangent
     T = normalize(T);
-    vec3 B = normalize(mat3(model) * cross(aNormal, aTangent));
+    vec3 B = normalize(mat3(transpose(inverse(model))) * cross(aNormal,aTangent));
     vs_out.TBN = mat3(T, B, vs_out.Normal);
     vs_out.texCoords = aTexCoords;
     vs_out.model = model;

@@ -40,6 +40,7 @@ void main()
     vec3 col = vec3(0.0);
     for(int i = 0; i < 9; i++)
         col += sampleTex[i] * kernel[i];
+    col = col / (col + vec3(1.0));
     float gamma = 2.2;
     col = pow(col, vec3(1.0 / gamma)); // 伽马校正
     FragColor = vec4(col, 1.0);
