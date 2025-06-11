@@ -184,8 +184,10 @@ const unsigned int SCR_HEIGHT = 600;
 
 // fbo
 unsigned int fbo;
-unsigned int textureColorbuffer;
+unsigned int textureColorbuffer[2];
 unsigned int rbo;
+GLuint pingpongFBO[2];
+GLuint pingpongColorbuffers[2];
 int samples=4;
 
 // camera
@@ -280,6 +282,7 @@ int main()
     Shader lightShader((path + "shader/lightshader.vs").c_str(), (path + "shader/lightshader.fs").c_str());
     Shader singleColorShader((path + "shader/single_color.vs").c_str(), (path + "shader/single_color.fs").c_str());
     Shader framebufferShader((path + "shader/framebuffer.vs").c_str(), (path + "shader/framebuffer.fs").c_str());
+    Shader BlurShader((path + "shader/framebuffer.vs").c_str(), (path + "shader/Blurshader.fs").c_str());
     Shader cubemapShader((path + "shader/cubeshader.vs").c_str(), (path + "shader/cubeshader.fs").c_str());
     Shader reflectShader((path + "shader/reflect.vs").c_str(), (path + "shader/reflect.fs").c_str());
     
@@ -412,13 +415,16 @@ int main()
     glGenFramebuffers(1, &fbo);
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
     // create a color attachment texture
-    
-    glGenTextures(1, &textureColorbuffer);
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer);
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, SCR_WIDTH, SCR_HEIGHT, GL_TRUE);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer, 0);
+    for (int i = 0; i < 2; ++i)
+    {
+        glGenTextures(1, &textureColorbuffer[i]);
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer[i]);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, SCR_WIDTH, SCR_HEIGHT, GL_TRUE);
+        glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer[i],
+                               0);
+    }
     // create a renderbuffer object for depth and stencil attachment (we won't
     // be sampling these)
     
@@ -430,6 +436,23 @@ int main()
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         std::cout << "ERROR::FRAMEBUFFER:: Framebuffer is not complete!" << std::endl;
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // -------------------------------------------------------------------------------------------
+    glGenFramebuffers(2, pingpongFBO);
+    glGenTextures(2, pingpongColorbuffers);
+    for (GLuint i = 0; i < 2; i++)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, SCR_WIDTH, SCR_HEIGHT, GL_TRUE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+    }
+    GLboolean horizontal = true, first_iteration = true;
+    GLuint amount = 10;
     // load and create a texture
     // -------------------------
     // -------------------------------------------------------------------------------------------
@@ -449,7 +472,9 @@ int main()
     reflectShader.use();
     reflectShader.setInt("skybox", 0);
 
-
+    framebufferShader.use();
+    framebufferShader.setInt("screenTextureMS", 0);
+    framebufferShader.setInt("bloomBlurMS", 1);
     // // either set it manually like so:
     // glUniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0);
     // // or set it via the texture class
@@ -531,7 +556,8 @@ int main()
         glEnable(GL_STENCIL_TEST);
         glStencilFunc(GL_NOTEQUAL, 1, 0xFF);
         glStencilOp(GL_KEEP, GL_KEEP, GL_REPLACE);
-
+        GLuint attachments[2] = {GL_COLOR_ATTACHMENT0, GL_COLOR_ATTACHMENT1};
+        glDrawBuffers(2, attachments);
         // glEnable(GL_BLEND);
         // glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
          glEnable(GL_CULL_FACE);
@@ -739,6 +765,7 @@ int main()
                 model = glm::translate(model, lights[i].position);
                 model = glm::scale(model, glm::vec3(0.2f));
                 lightShader.setMat4("model", model);
+                lightShader.setVec3("lightColor", lights[i].diffuse);
                 glBindVertexArray(lightVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 36);
             }
@@ -892,6 +919,19 @@ int main()
             glStencilFunc(GL_ALWAYS, 0, 0xFF);
             glEnable(GL_DEPTH_TEST);
 
+            // pingpong Gaussian blur
+            BlurShader.use();
+            for (GLuint i = 0; i < amount; i++)
+            {
+                glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
+                glUniform1i(glGetUniformLocation(BlurShader.ID, "horizontal"), horizontal);
+                glBindTexture(GL_TEXTURE_2D, first_iteration ? textureColorbuffer[1] : pingpongColorbuffers[!horizontal]);
+                glBindVertexArray(quadVAO);
+                glDrawArrays(GL_TRIANGLES, 0, 6);
+                horizontal = !horizontal;
+                if (first_iteration)
+                    first_iteration = false;
+            }
             // glfw: swap buffers and poll IO events (keys pressed/released, mouse moved
             // etc.)
             // -------------------------------------------------------------------------------
@@ -903,8 +943,11 @@ int main()
             framebufferShader.use();
             glBindVertexArray(quadVAO);
 
-            
-            glBindTexture(GL_TEXTURE_2D, textureColorbuffer);
+            glActiveTexture(GL_TEXTURE0);
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer[0]);
+            glActiveTexture(GL_TEXTURE1);
+            glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, pingpongColorbuffers[!horizontal]);
+
             glDrawArrays(GL_TRIANGLES, 0, 6);
             ImGui::Render();
             ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -973,10 +1016,20 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     glViewport(0, 0, width, height);
     // 更新帧缓冲对象的大小
     glBindFramebuffer(GL_FRAMEBUFFER, fbo);
-    glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer);
-    glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, width, height, GL_TRUE);
+    for (int i = 0; i < 2; ++i)
+    {
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer[i]);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, width, height, GL_TRUE);
+    }
     glBindRenderbuffer(GL_RENDERBUFFER, rbo);
     glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
+
+    for (int i = 0; i < 2; ++i)
+    {
+        glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, pingpongColorbuffers[i]);
+        glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, width, height, GL_TRUE);
+    }
 }
 // glfw: whenever the mouse moves, this callback is called
 // ----------------------------------------------------------------------
