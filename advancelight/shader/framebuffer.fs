@@ -12,7 +12,7 @@ void main()
     vec3 bloomColor = vec3(0.0);
     for(int s = 0; s < 4; s++)
     {
-        //sceneColor += texelFetch(screenTextureMS, ivec2(TexCoords * textureSize(screenTextureMS)), s).rgb; // 采样多重采样纹理
+        sceneColor += texelFetch(screenTextureMS, ivec2(TexCoords * textureSize(screenTextureMS)), s).rgb; // 采样多重采样纹理
         bloomColor += texelFetch(bloomBlurMS, ivec2(TexCoords * textureSize(bloomBlurMS)), s).rgb; // 采样模糊纹理
     }
     vec3 col = sceneColor + bloomColor; // 合并场景颜色和模糊颜色

@@ -443,16 +443,14 @@ int main()
     for (GLuint i = 0; i < 2; i++)
     {
         glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
-        glBindTexture(GL_TEXTURE_2D, pingpongColorbuffers[i]);
+        glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, pingpongColorbuffers[i]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, SCR_WIDTH, SCR_HEIGHT, GL_TRUE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, pingpongColorbuffers[i], 0);
+        glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D_MULTISAMPLE, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, pingpongColorbuffers[i], 0);
     }
-    GLboolean horizontal = true, first_iteration = true;
-    GLuint amount = 10;
     // load and create a texture
     // -------------------------
     // -------------------------------------------------------------------------------------------
@@ -475,6 +473,9 @@ int main()
     framebufferShader.use();
     framebufferShader.setInt("screenTextureMS", 0);
     framebufferShader.setInt("bloomBlurMS", 1);
+
+    BlurShader.use();
+    BlurShader.setInt("imageMS", 0);
     // // either set it manually like so:
     // glUniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0);
     // // or set it via the texture class
@@ -519,6 +520,7 @@ int main()
     glUniformBlockBinding(lightShader.ID, uniformBlockIndex3, 0);
     glUniformBlockBinding(singleColorShader.ID, uniformBlockIndex4, 0);
     glUniformBlockBinding(reflectShader.ID, uniformBlockIndex5, 0);
+
     // Create a uniform buffer object to store the projection and view matrices
     unsigned int uboMatrices;
     glGenBuffers(1, &uboMatrices);
@@ -921,11 +923,16 @@ int main()
 
             // pingpong Gaussian blur
             BlurShader.use();
+            GLboolean horizontal = true, first_iteration = true;
+            GLuint amount = 4;
             for (GLuint i = 0; i < amount; i++)
             {
                 glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[horizontal]);
+                glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
+                glClear(GL_COLOR_BUFFER_BIT);
                 glUniform1i(glGetUniformLocation(BlurShader.ID, "horizontal"), horizontal);
-                glBindTexture(GL_TEXTURE_2D, first_iteration ? textureColorbuffer[1] : pingpongColorbuffers[!horizontal]);
+                glActiveTexture(GL_TEXTURE0);
+                glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, first_iteration ? textureColorbuffer[1] : pingpongColorbuffers[!horizontal]);
                 glBindVertexArray(quadVAO);
                 glDrawArrays(GL_TRIANGLES, 0, 6);
                 horizontal = !horizontal;
@@ -1020,6 +1027,8 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     {
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, textureColorbuffer[i]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, width, height, GL_TRUE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0 + i, GL_TEXTURE_2D_MULTISAMPLE,
+                               textureColorbuffer[i], 0);
     }
     glBindRenderbuffer(GL_RENDERBUFFER, rbo);
     glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
@@ -1029,6 +1038,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
         glBindFramebuffer(GL_FRAMEBUFFER, pingpongFBO[i]);
         glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, pingpongColorbuffers[i]);
         glTexImage2DMultisample(GL_TEXTURE_2D_MULTISAMPLE, samples, GL_RGB32F, width, height, GL_TRUE);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D_MULTISAMPLE, pingpongColorbuffers[i], 0);
     }
 }
 // glfw: whenever the mouse moves, this callback is called
