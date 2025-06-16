@@ -11,7 +11,6 @@
 #include <model.h>
 #include <shader_s.h>
 
-
 #include <iostream>
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -21,7 +20,6 @@
 #include <unistd.h>
 #define GetCurrentDir getcwd
 #endif
-
 
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
@@ -57,6 +55,10 @@ void movement();
 void RenderCube();
 void RenderQuad();
 void RenderSphere();
+void DSStencilPass(unsigned int PointLightIndex, Shader &shader, vector<glm::vec3> &lightpos,
+                   vector<glm::vec3> &lightColors);
+void DSPointLightPass(unsigned int PointLightIndex, Shader &shader, vector<glm::vec3> &lightpos,
+                   vector<glm::vec3> &lightColors);
 unsigned int loadTexture(char const *path);
 unsigned int loadCubemap(std::vector<std::string> faces);
 
@@ -186,7 +188,7 @@ unsigned int SCR_HEIGHT = 600;
 GLuint gBuffer;
 GLuint gPosition, gNormal, gAlbedoSpec;
 GLuint rbo;
-int samples=4;
+int samples = 4;
 
 // camera
 // 鼠标控制摄像机
@@ -274,15 +276,16 @@ int main()
     // Shader ourShader((path + "shader/shader.vs").c_str(),(path + "shader/shader.fs").c_str()); // you can name your
     // shader files however you like
     Shader shaderGeometryPass((path + "shader/g_buffer.vs").c_str(), (path + "shader/g_buffer.fs").c_str());
-    Shader shaderLightingPass((path + "shader/deferred_shading.vs").c_str(),
-                              (path + "shader/deferred_shading.fs").c_str());
+    Shader shaderLightPass((path + "shader/deferred_shading.vs").c_str(), (path + "shader/deferred_shading.fs").c_str());
+    Shader shaderLightPassnull((path + "shader/deferred_shading.vs").c_str(),
+                               (path + "shader/deferred_shading_null.fs").c_str());
     Shader shaderLightBox((path + "shader/deferred_light_box.vs").c_str(),
                           (path + "shader/deferred_light_box.fs").c_str());
     // Set samplers
-    shaderLightingPass.use();
-    glUniform1i(glGetUniformLocation(shaderLightingPass.ID, "gPosition"), 0);
-    glUniform1i(glGetUniformLocation(shaderLightingPass.ID, "gNormal"), 1);
-    glUniform1i(glGetUniformLocation(shaderLightingPass.ID, "gAlbedoSpec"), 2);
+    shaderLightPass.use();
+    glUniform1i(glGetUniformLocation(shaderLightPass.ID, "gPosition"), 0);
+    glUniform1i(glGetUniformLocation(shaderLightPass.ID, "gNormal"), 1);
+    glUniform1i(glGetUniformLocation(shaderLightPass.ID, "gAlbedoSpec"), 2);
 
     glGenFramebuffers(1, &gBuffer);
     glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
@@ -327,16 +330,15 @@ int main()
     // tell opengl for each sampler to which texture unit it belongs to (only has
     // to be done once)
 
-
     // // either set it manually like so:
     // glUniform1i(glGetUniformLocation(ourShader.ID, "texture1"), 0);
     // // or set it via the texture class
     // ourShader.setInt("texture2", 1);
-    // 
-    //stbi_set_flip_vertically_on_load(true);
+    //
+    // stbi_set_flip_vertically_on_load(true);
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
     glEnable(GL_BLEND);
+    glEnable(GL_CULL_FACE);
 
     Material::defaultDiffuse = materialManager.LoadTexture((path + "/resources/textures/container2.png").c_str());
     Material::defaultSpecular =
@@ -414,7 +416,7 @@ int main()
         glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
         glDepthMask(GL_TRUE);
         glDisable(GL_BLEND);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
         glm::mat4 projection =
             glm::perspective(glm::radians(myCamera.Zoom), (GLfloat)SCR_WIDTH / (GLfloat)SCR_HEIGHT, 0.1f, 100.0f);
         glm::mat4 view = myCamera.GetViewMatrix();
@@ -434,15 +436,17 @@ int main()
         }
         glDepthMask(GL_FALSE);
 
-        glDisable(GL_DEPTH_TEST);
-
+        // 光体积渲染
+        glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
+        glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // Write to default framebuffer
+        glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glEnable(GL_BLEND);
-        glEnable(GL_CULL_FACE);
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFunc(GL_ONE, GL_ONE);
+        glEnable(GL_STENCIL_TEST);
+        glClear(GL_STENCIL_BUFFER_BIT);
+
         glClear(GL_COLOR_BUFFER_BIT);
-        shaderLightingPass.use();
+
+        shaderLightPass.use();
         glActiveTexture(GL_TEXTURE0);
         glBindTexture(GL_TEXTURE_2D, gPosition);
         glActiveTexture(GL_TEXTURE1);
@@ -450,42 +454,21 @@ int main()
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, gAlbedoSpec);
 
-        glUniform3fv(glGetUniformLocation(shaderLightingPass.ID, "viewPos"), 1, &myCamera.Position[0]);
-        shaderLightingPass.setMat4("view", view);
-        shaderLightingPass.setMat4("projection", projection);
-        shaderLightingPass.setVec2("screenSize",SCR_WIDTH,SCR_HEIGHT);
 
         for (int i = 0; i < lightCount; i++)
         {
-            auto Position = lightPositions[i];
-            auto Color = lightColors[i];
-            auto Linear = 0.7f;
-            auto Quadratic = 1.8f;
-
-            // 计算光源半径
-            const float maxBrightness = std::fmaxf(std::fmaxf(lightColors[i].r, lightColors[i].g), lightColors[i].b);
-            auto Radius =
-                (-Linear + std::sqrt(Linear * Linear - 4 * Quadratic * (1.0 - (256.0f / 3.0f) * maxBrightness))) /
-                (2 * Quadratic);
-            glm::mat4 model(1.0f);
-            model = glm::translate(model, Position);
-            model = glm::scale(model, glm::vec3(Radius));
-            shaderLightingPass.setMat4("model", model);
-            shaderLightingPass.setVec3("pointlight.Position", Position);
-            shaderLightingPass.setVec3("pointlight.Color", Color);
-            shaderLightingPass.setFloat("pointlight.Linear", Linear);
-            shaderLightingPass.setFloat("pointlight.Quadratic", Quadratic);
-
-            RenderSphere();
+            DSStencilPass(i, shaderLightPassnull, lightPositions, lightColors);
+            DSPointLightPass(i, shaderLightPass, lightPositions, lightColors);
         }
-        //RenderQuad();
-
+        // RenderQuad();
+        
         glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer);
         glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0); // Write to default framebuffer
         glBlitFramebuffer(0, 0, SCR_WIDTH, SCR_HEIGHT, 0, 0, SCR_WIDTH, SCR_HEIGHT, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
         glBindFramebuffer(GL_FRAMEBUFFER, 0);
         glDisable(GL_BLEND);
         glEnable(GL_DEPTH_TEST);
+        glDisable(GL_STENCIL_TEST);
         glDepthMask(GL_TRUE);
         // 3. Render lights on top of scene, by blitting
         shaderLightBox.use();
@@ -497,8 +480,7 @@ int main()
             model = glm::mat4(1.0f);
             model = glm::translate(model, lightPositions[i]);
             model = glm::scale(model, glm::vec3(0.25f));
-            glUniformMatrix4fv(glGetUniformLocation(shaderLightBox.ID, "model"), 1, GL_FALSE,
-                               glm::value_ptr(model));
+            glUniformMatrix4fv(glGetUniformLocation(shaderLightBox.ID, "model"), 1, GL_FALSE, glm::value_ptr(model));
             glUniform3fv(glGetUniformLocation(shaderLightBox.ID, "lightColor"), 1, &lightColors[i][0]);
             RenderCube();
         }
@@ -575,7 +557,7 @@ void framebuffer_size_callback(GLFWwindow *window, int width, int height)
     // 更新帧缓冲对象的大小
     glBindFramebuffer(GL_FRAMEBUFFER, gBuffer);
     vector<GLuint> changeTex = {gPosition, gNormal, gAlbedoSpec};
-    for (int i=0;i<changeTex.size();i++)
+    for (int i = 0; i < changeTex.size(); i++)
     {
         glBindTexture(GL_TEXTURE_2D, changeTex[i]);
         glTexImage2D(GL_TEXTURE_2D, 0, (changeTex[i] == gAlbedoSpec) ? GL_RGBA : GL_RGB16F, width, height, 0,
@@ -777,10 +759,8 @@ void RenderQuad()
     {
         GLfloat quadVertices[] = {
             // Positions        // Texture Coords
-            -1.0f, 1.0f, 0.0f, 0.0f, 1.0f,
-            -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
-            1.0f, 1.0f, 0.0f, 1.0f, 1.0f,
-            1.0f, -1.0f, 0.0f, 1.0f, 0.0f,
+            -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f,  1.0f, 0.0f, 1.0f, 1.0f, 1.0f,  -1.0f, 0.0f, 1.0f, 0.0f,
         };
         glGenVertexArrays(1, &quadVAO);
         glGenBuffers(1, &quadVBO);
@@ -882,4 +862,92 @@ void RenderSphere()
 
     glBindVertexArray(sphereVAO);
     glDrawElements(GL_TRIANGLES, indexCount, GL_UNSIGNED_INT, 0);
+}
+
+void DSStencilPass(unsigned int PointLightIndex, Shader &shader, vector<glm::vec3> &lightpos,
+                 vector<glm::vec3> &lightColors)
+{
+    shader.use();
+    glUniform3fv(glGetUniformLocation(shader.ID, "viewPos"), 1, &myCamera.Position[0]);
+    glm::mat4 projection =
+        glm::perspective(glm::radians(myCamera.Zoom), (GLfloat)SCR_WIDTH / (GLfloat)SCR_HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = myCamera.GetViewMatrix();
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+    shader.setVec2("screenSize", SCR_WIDTH, SCR_HEIGHT);
+
+    auto Position = lightpos[PointLightIndex];
+    auto Color = lightColors[PointLightIndex];
+    auto Linear = 0.7f;
+    auto Quadratic = 1.8f;
+
+    // 计算光源半径
+    const float maxBrightness = std::fmaxf(std::fmaxf(lightColors[PointLightIndex].r, lightColors[PointLightIndex].g), lightColors[PointLightIndex].b);
+    auto Radius = (-Linear + std::sqrt(Linear * Linear - 4 * Quadratic * (1.0 - (256.0f / 3.0f) * maxBrightness))) /
+                  (2 * Quadratic);
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, Position);
+    model = glm::scale(model, glm::vec3(Radius));
+    shader.setMat4("model", model);
+    shader.setVec3("pointlight.Position", Position);
+    shader.setVec3("pointlight.Color", Color);
+    shader.setFloat("pointlight.Linear", Linear);
+    shader.setFloat("pointlight.Quadratic", Quadratic);
+
+    glEnable(GL_DEPTH_TEST);
+
+    glDisable(GL_CULL_FACE);
+
+    glClear(GL_STENCIL_BUFFER_BIT);
+
+    glStencilFunc(GL_ALWAYS, 0, 0);
+
+    glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
+    glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
+
+    RenderSphere();
+}
+void DSPointLightPass(unsigned int PointLightIndex, Shader &shader, vector<glm::vec3> &lightpos,
+                      vector<glm::vec3> &lightColors)
+{
+    shader.use();
+    glUniform3fv(glGetUniformLocation(shader.ID, "viewPos"), 1, &myCamera.Position[0]);
+    glm::mat4 projection =
+        glm::perspective(glm::radians(myCamera.Zoom), (GLfloat)SCR_WIDTH / (GLfloat)SCR_HEIGHT, 0.1f, 100.0f);
+    glm::mat4 view = myCamera.GetViewMatrix();
+    shader.setMat4("view", view);
+    shader.setMat4("projection", projection);
+    shader.setVec2("screenSize", SCR_WIDTH, SCR_HEIGHT);
+
+    auto Position = lightpos[PointLightIndex];
+    auto Color = lightColors[PointLightIndex];
+    auto Linear = 0.7f;
+    auto Quadratic = 1.8f;
+
+    // 计算光源半径
+    const float maxBrightness = std::fmaxf(std::fmaxf(lightColors[PointLightIndex].r, lightColors[PointLightIndex].g),
+                                           lightColors[PointLightIndex].b);
+    auto Radius = (-Linear + std::sqrt(Linear * Linear - 4 * Quadratic * (1.0 - (256.0f / 3.0f) * maxBrightness))) /
+                  (2 * Quadratic);
+    glm::mat4 model(1.0f);
+    model = glm::translate(model, Position);
+    model = glm::scale(model, glm::vec3(Radius));
+    shader.setMat4("model", model);
+    shader.setVec3("pointlight.Position", Position);
+    shader.setVec3("pointlight.Color", Color);
+    shader.setFloat("pointlight.Linear", Linear);
+    shader.setFloat("pointlight.Quadratic", Quadratic);
+
+    glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
+    glDisable(GL_DEPTH_TEST);
+    glEnable(GL_BLEND);
+    glBlendEquation(GL_FUNC_ADD);
+    glBlendFunc(GL_ONE, GL_ONE);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT);
+
+    RenderSphere();
+    glCullFace(GL_BACK);
+    glDisable(GL_BLEND);
 }
