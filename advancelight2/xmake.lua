@@ -7,11 +7,12 @@ add_requires("glfw")
 add_requires("assimp",{configs = {system = true}})
 add_requires("imgui",{configs = {glfw = true, opengl3 = true}})
 add_requires("glm")
+add_requires("freetype")
 target("main")
     set_kind("binary")
     add_includedirs("include")
     add_files("src/main.cpp")
-    add_packages("glfw", "glm", "imgui", "assimp", "glad")
+    add_packages("glfw", "glm", "imgui", "assimp", "glad", "freetype")
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

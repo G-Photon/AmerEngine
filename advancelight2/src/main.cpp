@@ -1,4 +1,5 @@
 #include "glm/fwd.hpp"
+#include <codecvt>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtc/type_ptr.hpp>
@@ -8,12 +9,10 @@
 
 #include <camera.h>
 
+#include <locale>
 #include <mesh.h>
 #include <model.h>
 #include <shader_s.h>
-
-#include <iostream>
-#include <random>
 
 #if defined(_WIN32) || defined(_WIN64)
 #include <direct.h>
@@ -23,6 +22,10 @@
 #define GetCurrentDir getcwd
 #endif
 
+#include <ft2build.h>
+#include FT_FREETYPE_H
+
+#define IMGUI_USE_WCHAR32
 #include "imgui.h"
 #include "imgui_impl_glfw.h"
 #include "imgui_impl_opengl3.h"
@@ -35,6 +38,7 @@
 #define GL_SILENCE_DEPRECATION
 
 #include <iostream>
+#include <random>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -169,8 +173,28 @@ int selectedLight = -1;
 std::vector<GameObject> gameObjects;
 int selectedObject = -1;
 
-// 摄像机控制
-bool cameraMouseControl = true;
+// 字体管理
+#define FONT_SIZE 60
+vector<string> font_paths;
+struct Character
+{
+    glm::ivec2 Size;
+    glm::ivec2 Bearing;
+    unsigned int Advance;
+    glm::vec4 Offset;
+};
+map<char32_t, Character> Characters;
+int m_elementCount;
+GLuint mtextureID, m_VAO = 0, m_VBO = 0, m_EBO = 0;
+GLfloat mtextureWidth = 1000.0f, mtextureHeight = 1000.0f;
+GLuint ChToTexture(u32string u32str);
+void RenderText(Shader &m_shader, glm::mat4 &model, glm::mat4 vp, float thickness, float softness,
+                float outline_thickness, float outline_softness, glm::vec2 text_shadow_offset);
+void TextLoadString(u32string u32str, glm::vec2 screenPos, glm::vec2 typography);
+GLuint ChToTexture(u32string u32str);
+
+    // 摄像机控制
+    bool cameraMouseControl = true;
 float cameraSpeed = 2.5f;
 float MoveSpeed = 10.0f;
 
@@ -288,6 +312,7 @@ int main()
     Shader shaderSSAO((path + "shader/ssao.vs").c_str(), (path + "shader/ssao.fs").c_str());
     Shader shaderSSAO_blur((path + "shader/ssao_blur.vs").c_str(), (path + "shader/ssao_blur.fs").c_str());
     Shader shaderSSAO_last((path + "shader/ssaolast.vs").c_str(), (path + "shader/ssaolast.fs").c_str());
+    Shader textShader((path + "shader/fontshader.vs").c_str(), (path + "shader/fontshader.fs").c_str());
     // Set samplers
     shaderLightPass.use();
     glUniform1i(glGetUniformLocation(shaderLightPass.ID, "gPositionDepth"), 0);
@@ -426,6 +451,16 @@ int main()
     glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     int positionSize = 9, lightCount = 100;
 
+    font_paths = {
+        path + "resources/fonts/base-split.woff",
+        path + "resources/fonts/HarmonyOS_Sans_SC_Medium.ttf",
+        path + "resources/fonts/NotoSansArabic-Medium.ttf",
+        path + "resources/fonts/NotoSansCanadianAboriginal-Medium.ttf",
+        path + "resources/fonts/NotoSansCuneiform-Regular.ttf",
+        path + "resources/fonts/NotoSansSymbols2-Regular.ttf",
+        path + "resources/fonts/NotoSans-ExtraBold.ttf",
+    };
+
     // -------------------------------------------------
     // Main loop
 #ifdef __EMSCRIPTEN__
@@ -481,7 +516,7 @@ int main()
             model = glm::scale(model, glm::vec3(0.25f));
             glUniformMatrix4fv(glGetUniformLocation(shaderGeometryPass.ID, "model"), 1, GL_FALSE,
                                glm::value_ptr(model));
-            model2.Draw(shaderGeometryPass);
+            model1.Draw(shaderGeometryPass);
         }
         glDepthMask(GL_FALSE);
 
@@ -574,6 +609,39 @@ int main()
             glUniform3fv(glGetUniformLocation(shaderLightBox.ID, "lightColor"), 1, &lightColors[i][0]);
             RenderCube();
         }
+        static char inputText[250] = "Ciallo~(∠・ω< )⌒★";
+        static glm::vec2 textPosition(10.0f, 50.0f);  // 文本位置
+        static glm::vec2 typography(0.0f, 0.0f);      // 行间距和字间距
+        static float textThickness = 0.5f;            // 文本厚度
+        static float textSoftness = 0.1f;             // 文本软化
+        static float outlineThickness = 0.0f;         // 轮廓厚度
+        static float outlineSoftness = 0.0f;          // 轮廓软化
+        static glm::vec3 textColor(1.0f, 1.0f, 1.0f); // 文本颜色
+        static glm::vec2 shadowOffset(0.0f, 0.0f);    // 阴影偏移
+
+        ImGui::Begin("Text Settings");
+        ImGui::InputText("Text", inputText, sizeof(inputText));
+        ImGui::DragFloat2("Position", &textPosition[0], 1.0f, 0.0f, 1000.0f);
+        ImGui::ColorEdit3("Color", &textColor[0]);
+        ImGui::DragFloat("Thickness", &textThickness, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat("Softness", &textSoftness, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat("Outline Thickness", &outlineThickness, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat("Outline Softness", &outlineSoftness, 0.01f, 0.0f, 1.0f);
+        ImGui::DragFloat2("Shadow Offset", &shadowOffset[0], 0.1f, -10.0f, 10.0f);
+        ImGui::End();
+
+        std::wstring_convert<std::codecvt_utf8<char32_t>, char32_t> conv;
+        std::u32string u32str = conv.from_bytes(inputText);
+        TextLoadString(u32str, textPosition, typography);
+        glm::mat4 projectiontext =
+            glm::ortho(0.0f, static_cast<float>(SCR_WIDTH),0.0f,static_cast < float > (SCR_HEIGHT));
+        glm::mat4 modeltext = glm::mat4(1.0f);
+        glm::mat4 vp = projectiontext;
+
+        // 渲染文本
+        textShader.use();
+        textShader.setVec3("textColor", textColor);
+        RenderText(textShader, modeltext, vp, textThickness, textSoftness, outlineThickness, outlineSoftness, shadowOffset);
 
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -1091,4 +1159,239 @@ void DSPointLightPass(int PointLightIndex, Shader &shader, vector<glm::vec3> &li
     RenderSphere();
     glCullFace(GL_BACK);
     glDisable(GL_BLEND);
+}
+
+GLuint ChToTexture(u32string u32str)
+{
+    bool texture_needs_update = false;
+    for (const auto &ch : u32str)
+    {
+        if (Characters.find(ch) == Characters.end())
+        {
+            texture_needs_update = true;
+            break;
+        }
+    }
+    if (!texture_needs_update)
+        return -1;
+
+    static bool first = true;
+    if (first)
+    {
+        glGenTextures(1, &mtextureID);
+        glBindTexture(GL_TEXTURE_2D, mtextureID);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, mtextureWidth, mtextureHeight, 0, GL_RED, GL_UNSIGNED_BYTE, NULL);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        first = false;
+    }
+
+    FT_Library ft;
+    if (FT_Init_FreeType(&ft))
+    {
+        std::cout << "ERROR::FREETYPE: Could not init FreeType Library" << std::endl;
+        return -1;
+    }
+
+    vector<FT_Face> faces;
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    for (const string &font_path : font_paths)
+    {
+        FT_Face face;
+        if (FT_New_Face(ft, font_path.c_str(), 0, &face))
+        {
+            cout << "ERROR::FREETYPE: Failed to load font" << font_path << std::endl;
+            return -1;
+        }
+        FT_Set_Pixel_Sizes(face, 0, FONT_SIZE);
+        faces.push_back(face);
+    }
+
+    glBindTexture(GL_TEXTURE_2D, mtextureID);
+
+    for (const auto &ch : u32str)
+    {
+        if (Characters.find(ch) != Characters.end())
+            continue;
+
+        static float texture_sub_x = 0.0f, texture_sub_y = 0.0f;
+        static unsigned int row_height = 0;
+
+        for (const auto &face : faces)
+        {
+            FT_UInt glyphIndex = FT_Get_Char_Index(face, ch);
+            if (glyphIndex == 0)
+                continue;
+            else
+            {
+                // FT_Set_Transform(face, &matrix, &pen);
+                FT_Load_Char(face, ch, FT_LOAD_RENDER);
+                FT_GlyphSlot slot = face->glyph;
+                // if (hasSDF)
+                // {
+                FT_Render_Glyph(slot, FT_RENDER_MODE_SDF);
+                // }
+
+                Character character;
+                if (ch == ' ')
+                {
+                    character.Advance = static_cast<unsigned int>((face->glyph->advance.x) >> 6);
+                    Characters.insert(std::pair<char32_t, Character>(ch, character));
+                }
+                else
+                {
+                    if (texture_sub_x + slot->bitmap.width + 1 >= mtextureWidth)
+                    {
+                        texture_sub_y += row_height;
+                        texture_sub_x = 0;
+                        row_height = 0;
+                        if (texture_sub_y >= (mtextureHeight - FONT_SIZE))
+                            cout << "text texture no enough" << endl;
+                    }
+
+                    character = {
+                        glm::ivec2(slot->bitmap.width, slot->bitmap.rows),
+                        glm::ivec2(slot->bitmap_left, slot->bitmap_top),
+                        static_cast<unsigned int>((slot->advance.x) >> 6),
+                        glm::vec4(texture_sub_x / 1000.0f, texture_sub_y / 1000.0f, slot->bitmap.width / 1000.0f,
+                                  slot->bitmap.rows / 1000.0f)}; // 26.6 or // 2^6=64 ((face)->glyph->advance.x)/64)
+                    Characters.insert(std::pair<FT_ULong, Character>(ch, character));
+
+                    glTexSubImage2D(GL_TEXTURE_2D, 0, texture_sub_x, texture_sub_y, slot->bitmap.width,
+                                    slot->bitmap.rows, GL_RED, GL_UNSIGNED_BYTE, slot->bitmap.buffer);
+                    texture_sub_x += slot->bitmap.width + 1;
+
+                    row_height = std::max(row_height, slot->bitmap.rows);
+                }
+                break;
+            }
+        }
+    }
+
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    for (auto &face : faces)
+    {
+        FT_Done_Face(face);
+    }
+    FT_Done_FreeType(ft);
+
+    return 0;
+}
+
+void TextLoadString(u32string u32str, glm::vec2 screenPos, glm::vec2 typography)
+{
+    vector<float> vao_str;
+    vector<GLuint> ibo_str;
+    ChToTexture(u32str);
+
+    unsigned int charsAdded = 0;
+    for (auto c : u32str)
+    {
+        static float x_pos = screenPos.x;
+        Character &ch = Characters[c];
+        if (c == '\n')
+        {
+            screenPos.y -= (FONT_SIZE + typography.x);
+            screenPos.x = x_pos;
+        }
+        else
+        {
+            if (c != ' ')
+            {
+                float xpos = (screenPos.x + ch.Bearing.x);
+                float ypos = (screenPos.y - (ch.Size.y - ch.Bearing.y));
+                float w = ch.Size.x;
+                float h = ch.Size.y;
+                
+                vector<float> vertices = {xpos,
+                                          ypos,
+                                          ch.Offset.x,
+                                          ch.Offset.y + ch.Offset.w,
+                                          0.0f,
+                                          1.0f,
+                                          xpos,
+                                          ypos + h,
+                                          ch.Offset.x,
+                                          ch.Offset.y,
+                                          0.0f,
+                                          0.0f,
+                                          xpos + w,
+                                          ypos,
+                                          ch.Offset.x + ch.Offset.z,
+                                          ch.Offset.y + ch.Offset.w,
+                                          1.0f,
+                                          1.0f,
+                                          xpos + w,
+                                          ypos + h,
+                                          ch.Offset.x + ch.Offset.z,
+                                          ch.Offset.y,
+                                          1.0f,
+                                          0.0f};
+                vao_str.insert(vao_str.end(), vertices.begin(), vertices.end());
+
+                unsigned int startIndex = charsAdded * 4;
+                ibo_str.push_back(startIndex + 2);
+                ibo_str.push_back(startIndex + 1);
+                ibo_str.push_back(startIndex);
+                ibo_str.push_back(startIndex + 3);
+                ibo_str.push_back(startIndex + 1);
+                ibo_str.push_back(startIndex + 2);
+                ++charsAdded;
+            }
+            screenPos.x += ((ch.Advance) + typography.y);
+        }
+    }
+    if (m_VAO == 0)
+    {
+        glGenVertexArrays(1, &m_VAO);
+        glGenBuffers(1, &m_VBO);
+        glGenBuffers(1, &m_EBO);
+    }
+    glBindVertexArray(m_VAO);
+    glBindBuffer(GL_ARRAY_BUFFER, m_VBO);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(float) * vao_str.size(), vao_str.data(), GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_EBO);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, ibo_str.size() * sizeof(GLuint), ibo_str.data(), GL_DYNAMIC_DRAW);
+    // 位置属性 (location = 0)
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)0);
+    glEnableVertexAttribArray(0);
+
+    // 纹理坐标属性 (location = 1)
+    glVertexAttribPointer(1, 4, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void *)(2 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+    m_elementCount = ibo_str.size(); // 索引数量
+    glBindVertexArray(0);
+}
+
+void RenderText(Shader& m_shader, glm::mat4 &model , glm::mat4 vp, float thickness, float softness, float outline_thickness, float outline_softness, glm::vec2 text_shadow_offset)
+{
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDisable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE);
+
+    m_shader.use();
+    // m_shader.SetUniform3f("texColor", AppControl::text_color);
+    static float movement = 0.1;
+    movement += 0.3 * deltaTime;
+    m_shader.setFloat("deltaTime", (movement));
+    m_shader.setMat4("mvp", vp * model);
+    m_shader.setFloat("thickness", thickness);
+    m_shader.setFloat("softness", softness);
+    m_shader.setFloat("outline_thickness", outline_thickness);
+    m_shader.setFloat("outline_softness", outline_softness);
+    m_shader.setVec2("shadow_offset", text_shadow_offset / 1000.0f);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, mtextureID);
+
+    glBindVertexArray(m_VAO);
+    glActiveTexture(GL_TEXTURE0);
+    glDrawElements(GL_TRIANGLES, m_elementCount, GL_UNSIGNED_INT, 0);
+
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glEnable(GL_DEPTH_TEST);
 }
