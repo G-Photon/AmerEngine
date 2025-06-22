@@ -1,9 +1,23 @@
 add_rules("mode.debug", "mode.release")
-add_includedirs("include")
-add_requires()
-target("game")
+set_languages("c++20")
+add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
+
+add_requires("glfw")
+add_requires("soil2")
+add_requires("glad")
+add_requires("assimp",{configs = {system = true}})
+add_requires("imgui",{configs = {glfw = true, opengl3 = true}})
+add_requires("glm")
+add_requires("freetype")
+target("main")
     set_kind("binary")
+    add_includedirs("include")
     add_files("src/*.cpp")
+    add_packages("glfw", "glad", "glm", "imgui", "assimp", "freetype", "soil2")
+    if is_plat("windows") then
+        add_defines("GLFW_INCLUDE_NONE")  -- 防止GLFW自带GL头污染
+        add_defines("SOIL2_DLL")          -- 明确使用SOIL2动态库
+    end
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io
