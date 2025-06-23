@@ -25,7 +25,7 @@ Shader ResourceManager::LoadShader(const GLchar *vShaderFile, const GLchar *fSha
     return Shaders[name];
 }
 
-Shader ResourceManager::GetShader(std::string name)
+Shader& ResourceManager::GetShader(std::string name)
 {
     return Shaders[name];
 }
@@ -36,7 +36,7 @@ Texture2D ResourceManager::LoadTexture(const GLchar *file, GLboolean alpha, std:
     return Textures[name];
 }
 
-Texture2D ResourceManager::GetTexture(std::string name)
+Texture2D& ResourceManager::GetTexture(std::string name)
 {
     return Textures[name];
 }

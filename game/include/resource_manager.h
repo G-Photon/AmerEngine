@@ -33,11 +33,11 @@ class ResourceManager
     static Shader LoadShader(const GLchar *vShaderFile, const GLchar *fShaderFile, const GLchar *gShaderFile,
                              std::string name);
     // Retrieves a stored sader
-    static Shader GetShader(std::string name);
+    static Shader& GetShader(std::string name);
     // Loads (and generates) a texture from file
     static Texture2D LoadTexture(const GLchar *file, GLboolean alpha, std::string name);
     // Retrieves a stored texture
-    static Texture2D GetTexture(std::string name);
+    static Texture2D& GetTexture(std::string name);
     // Properly de-allocates all loaded resources
     static void Clear();
 

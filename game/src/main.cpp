@@ -77,7 +77,7 @@ int main(int argc, char **argv)
     }
     glfwMakeContextCurrent(window);
     glfwSwapInterval(1); // Enable vsync
-    //glfwSetKeyCallback(window, key_callback);
+    glfwSetKeyCallback(window, key_callback);
     // 在 main() 开头添加
     glfwSetErrorCallback(
         [](int error, const char *desc) { std::cerr << "GLFW Error " << error << ": " << desc << std::endl; });
