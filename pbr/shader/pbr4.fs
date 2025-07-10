@@ -3,12 +3,18 @@ out vec4 FragColor;
 in vec2 TexCoords;
 in vec3 WorldPos;
 in vec3 Normal;
-
+in vec3 tangent;
+in vec3 bitangent;
 // material parameters
-uniform vec3 albedo;
-uniform float metallic;
-uniform float roughness;
-uniform float ao;
+// uniform vec3 albedo;
+// uniform float metallic;
+// uniform float roughness;
+// uniform float ao;
+uniform sampler2D texture_albedo1;
+uniform sampler2D texture_metallic1;
+uniform sampler2D texture_roughness1;
+uniform sampler2D texture_ao1;
+uniform sampler2D texture_normal1;
 
 // IBL
 uniform samplerCube irradianceMap;
@@ -73,7 +79,21 @@ void main()
     vec3 N = Normal;
     vec3 V = normalize(camPos - WorldPos);
     vec3 R = reflect(-V, N); 
-
+    vec3 albedo = texture(texture_albedo1, TexCoords).rgb;
+    float metallic = texture(texture_metallic1, TexCoords).r;
+    float roughness = texture(texture_roughness1, TexCoords).r;
+    float ao = texture(texture_ao1, TexCoords).r;
+    albedo = pow(albedo, vec3(2.2)); // gamma correction
+    // if normal map is used, use it to perturb the normal
+    // 切线空间变换法线
+    vec3 normalMap = texture(texture_normal1, TexCoords).rgb;
+    normalMap = normalize(normalMap * 2.0 - 1.0); // convert from [0,1] to [-1,1]
+    // transform normal from tangent space to world space
+    vec3 T = normalize(tangent);
+    vec3 B = normalize(bitangent);
+    mat3 TBN = mat3(T, B, N); // create the tangent space matrix
+    N = normalize(TBN * normalMap); // transform normal to world space
+    
     // calculate reflectance at normal incidence; if dia-electric (like plastic) use F0 
     // of 0.04 and if it's a metal, use the albedo color as F0 (metallic workflow)    
     vec3 F0 = vec3(0.04); 

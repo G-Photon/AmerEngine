@@ -21,9 +21,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
-
 using namespace std;
-
+#define M_PI 3.14159265358979323846
 unsigned int TextureFromFile(const char *path, const string &directory, bool gamma = false);
 
 class Model
@@ -55,8 +54,12 @@ class Model
     {
         // read file via ASSIMP
         Assimp::Importer importer;
+        // Removed invalid SetPropertyBool for AI_CONFIG_IMPORT_FMX_READ_MATERIALS
         const aiScene *scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_GenSmoothNormals |
                                                            aiProcess_FlipUVs | aiProcess_CalcTangentSpace);
+        aiMatrix4x4 flipMatrix;
+        aiMatrix4x4::RotationX(-M_PI / 2, flipMatrix);
+        scene->mRootNode->mTransformation = flipMatrix * scene->mRootNode->mTransformation;
         // check for errors
         if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) // if is Not Zero
         {
@@ -171,6 +174,19 @@ class Model
         // 4. height maps
         std::vector<Texture> heightMaps = loadMaterialTextures(material, aiTextureType_AMBIENT, "texture_height");
         textures.insert(textures.end(), heightMaps.begin(), heightMaps.end());
+        // 5. albedo maps
+        std::vector<Texture> albedoMaps = loadMaterialTextures(material, aiTextureType_BASE_COLOR, "texture_albedo");
+        textures.insert(textures.end(), albedoMaps.begin(), albedoMaps.end());
+        // 6. metallic maps
+        std::vector<Texture> metallicMaps = loadMaterialTextures(material, aiTextureType_METALNESS, "texture_metallic");
+        textures.insert(textures.end(), metallicMaps.begin(), metallicMaps.end());
+        // 7. roughness maps
+        std::vector<Texture> roughnessMaps =
+            loadMaterialTextures(material, aiTextureType_DIFFUSE_ROUGHNESS, "texture_roughness");
+        textures.insert(textures.end(), roughnessMaps.begin(), roughnessMaps.end());
+        // 8. ambient occlusion maps
+        std::vector<Texture> aoMaps = loadMaterialTextures(material, aiTextureType_AMBIENT_OCCLUSION, "texture_ao");
+        textures.insert(textures.end(), aoMaps.begin(), aoMaps.end());
 
         // return a mesh object created from the extracted mesh data
         return Mesh(vertices, indices, textures);

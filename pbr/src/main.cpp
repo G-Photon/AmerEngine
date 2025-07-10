@@ -1,3 +1,4 @@
+#include "mesh.h"
 #include <GLFW/glfw3.h>
 #include <glad/glad.h>
 #include <stb_image.h>
@@ -11,13 +12,13 @@
 #include <model.h>
 #include <shader.h>
 
-
 #include <iostream>
 #define PATH "../../../../"
 void framebuffer_size_callback(GLFWwindow *window, int width, int height);
 void mouse_callback(GLFWwindow *window, double xpos, double ypos);
 void scroll_callback(GLFWwindow *window, double xoffset, double yoffset);
 void processInput(GLFWwindow *window);
+unsigned int loadTexture(const char *path);
 void renderSphere();
 void renderCube();
 void renderQuad();
@@ -96,8 +97,18 @@ int main()
     pbrShader.setInt("irradianceMap", 0);
     pbrShader.setInt("prefilterMap", 1);
     pbrShader.setInt("brdfLUT", 2);
-    pbrShader.setVec3("albedo", 0.5f, 0.0f, 0.0f);
-    pbrShader.setFloat("ao", 1.0f);
+    pbrShader.setInt("texture_metallic1", 3);
+    pbrShader.setInt("texture_roughness1", 4);
+    pbrShader.setInt("texture_albedo1", 5);
+    pbrShader.setInt("texture_normal1", 6);
+
+    GLuint albedoMap = loadTexture(PATH "resources/models/Cerberus_by_Andrew_Maximov/Textures/Cerberus_A.tga");
+    GLuint metallicMap = loadTexture(PATH "resources/models/Cerberus_by_Andrew_Maximov/Textures/Cerberus_M.tga");
+    GLuint roughnessMap = loadTexture(PATH "resources/models/Cerberus_by_Andrew_Maximov/Textures/Cerberus_R.tga");
+    GLuint aoMap = loadTexture(PATH "resources/models/Cerberus_by_Andrew_Maximov/Textures/Raw/Cerberus_AO.tga");
+    GLuint normalMap = loadTexture(PATH "resources/models/Cerberus_by_Andrew_Maximov/Textures/Raw/Cerberus_N.tga");
+    // pbrShader.setVec3("albedo", 0.5f, 0.0f, 0.0f);
+    // pbrShader.setFloat("ao", 1.0f);
 
     backgroundShader.use();
     backgroundShader.setInt("environmentMap", 0);
@@ -337,6 +348,7 @@ int main()
     glfwGetFramebufferSize(window, &scrWidth, &scrHeight);
     glViewport(0, 0, scrWidth, scrHeight);
 
+    Model gun(PATH "resources/models/Cerberus_by_Andrew_Maximov/Cerberus_LP.FBX");
     // render loop
     // -----------
     while (!glfwWindowShouldClose(window))
@@ -371,44 +383,77 @@ int main()
         glActiveTexture(GL_TEXTURE2);
         glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
 
-        // render rows*column number of spheres with varying metallic/roughness values scaled by rows and columns
-        // respectively
-        glm::mat4 model = glm::mat4(1.0f);
-        for (int row = 0; row < nrRows; ++row)
-        {
-            pbrShader.setFloat("metallic", (float)row / (float)nrRows);
-            for (int col = 0; col < nrColumns; ++col)
-            {
-                // we clamp the roughness to 0.025 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a
-                // bit off on direct lighting.
-                pbrShader.setFloat("roughness", glm::clamp((float)col / (float)nrColumns, 0.05f, 1.0f));
+        // // render rows*column number of spheres with varying metallic/roughness values scaled by rows and columns
+        // // respectively
+        // glm::mat4 model = glm::mat4(1.0f);
+        // for (int row = 0; row < nrRows; ++row)
+        // {
+        //     pbrShader.setFloat("metallic", (float)row / (float)nrRows);
+        //     for (int col = 0; col < nrColumns; ++col)
+        //     {
+        //         // we clamp the roughness to 0.025 - 1.0 as perfectly smooth surfaces (roughness of 0.0) tend to look a
+        //         // bit off on direct lighting.
+        //         pbrShader.setFloat("roughness", glm::clamp((float)col / (float)nrColumns, 0.05f, 1.0f));
 
-                model = glm::mat4(1.0f);
-                model = glm::translate(model, glm::vec3((float)(col - (nrColumns / 2.0f)) * spacing,
-                                                        (float)(row - (nrRows / 2.0f)) * spacing, -2.0f));
-                pbrShader.setMat4("model", model);
-                pbrShader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model))));
-                renderSphere();
-            }
-        }
+        //         model = glm::mat4(1.0f);
+        //         model = glm::translate(model, glm::vec3((float)(col - (nrColumns / 2.0f)) * spacing,
+        //                                                 (float)(row - (nrRows / 2.0f)) * spacing, -2.0f));
+        //         pbrShader.setMat4("model", model);
+        //         pbrShader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model))));
+        //         renderSphere();
+        //     }
+        // }
 
-        // render light source (simply re-render sphere at light positions)
-        // this looks a bit off as we use the same shader, but it'll make their positions obvious and
-        // keeps the codeprint small.
+        // // render light source (simply re-render sphere at light positions)
+        // // this looks a bit off as we use the same shader, but it'll make their positions obvious and
+        // // keeps the codeprint small.
+        // for (unsigned int i = 0; i < sizeof(lightPositions) / sizeof(lightPositions[0]); ++i)
+        // {
+        //     glm::vec3 newPos = lightPositions[i] + glm::vec3(sin(glfwGetTime() * 5.0) * 5.0, 0.0, 0.0);
+        //     newPos = lightPositions[i];
+        //     pbrShader.setVec3("lightPositions[" + std::to_string(i) + "]", newPos);
+        //     pbrShader.setVec3("lightColors[" + std::to_string(i) + "]", lightColors[i]);
+
+        //     model = glm::mat4(1.0f);
+        //     model = glm::translate(model, newPos);
+        //     model = glm::scale(model, glm::vec3(0.5f));
+        //     pbrShader.setMat4("model", model);
+        //     pbrShader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model))));
+        //     renderSphere();
+        // }
         for (unsigned int i = 0; i < sizeof(lightPositions) / sizeof(lightPositions[0]); ++i)
         {
             glm::vec3 newPos = lightPositions[i] + glm::vec3(sin(glfwGetTime() * 5.0) * 5.0, 0.0, 0.0);
             newPos = lightPositions[i];
             pbrShader.setVec3("lightPositions[" + std::to_string(i) + "]", newPos);
             pbrShader.setVec3("lightColors[" + std::to_string(i) + "]", lightColors[i]);
-
-            model = glm::mat4(1.0f);
-            model = glm::translate(model, newPos);
-            model = glm::scale(model, glm::vec3(0.5f));
-            pbrShader.setMat4("model", model);
-            pbrShader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model))));
-            renderSphere();
         }
+
+        glm::mat4 model = glm::mat4(1.0f);
+        model = glm::translate(model, glm::vec3(0.0f, -1.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(1.0f, 0.0f, 0.0f));
+        model = glm::rotate(model, glm::radians(-90.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+        model = glm::scale(model, glm::vec3(0.01f));
+        pbrShader.setMat4("model", model);
+        pbrShader.setMat3("normalMatrix", glm::transpose(glm::inverse(glm::mat3(model))));
+
+        pbrShader.setInt("texture_albedo1", 5);
+        pbrShader.setInt("texture_metallic1", 3);
+        pbrShader.setInt("texture_roughness1", 4);
+        pbrShader.setInt("texture_ao1", 6);
+        pbrShader.setInt("texture_normal1", 7);
+        glActiveTexture(GL_TEXTURE5);
+        glBindTexture(GL_TEXTURE_2D, albedoMap);
+        glActiveTexture(GL_TEXTURE3);
+        glBindTexture(GL_TEXTURE_2D, metallicMap);
+        glActiveTexture(GL_TEXTURE4);
+        glBindTexture(GL_TEXTURE_2D, roughnessMap);
+        glActiveTexture(GL_TEXTURE6);
+        glBindTexture(GL_TEXTURE_2D, aoMap);
+        glActiveTexture(GL_TEXTURE7);
+        glBindTexture(GL_TEXTURE_2D, normalMap);
+        gun.Draw(pbrShader);
+
 
         // render skybox (render as last to prevent overdraw)
         backgroundShader.use();
@@ -690,4 +735,38 @@ void renderQuad()
     glBindVertexArray(quadVAO);
     glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
     glBindVertexArray(0);
+}
+unsigned int loadTexture(const char *path)
+{
+    unsigned int textureID;
+    glGenTextures(1, &textureID);
+    int width, height, nrComponents;
+    unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+    if (data)
+    {
+        GLenum format;
+        if (nrComponents == 1)
+            format = GL_RED;
+        else if (nrComponents == 3)
+            format = GL_RGB;
+        else if (nrComponents == 4)
+            format = GL_RGBA;
+
+        glBindTexture(GL_TEXTURE_2D, textureID);
+        glTexImage2D(GL_TEXTURE_2D, 0,  format, width, height, 0, format,
+                     GL_UNSIGNED_BYTE, data);
+        glGenerateMipmap(GL_TEXTURE_2D);
+
+        // set the texture wrapping/filtering options (on the currently bound texture object)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    }
+    else
+    {
+        std::cout << "Texture failed to load at path: " << path << std::endl;
+    }
+    stbi_image_free(data);
+    return textureID;
 }
