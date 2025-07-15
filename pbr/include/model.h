@@ -33,6 +33,7 @@ class Model
                                      // loaded more than once.
     vector<Mesh> meshes;
     string directory;
+    
     bool gammaCorrection;
 
     // constructor, expects a filepath to a 3D model.
