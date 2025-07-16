@@ -4,6 +4,8 @@
 #include "core/Renderer.hpp"
 #include <GLFW/glfw3.h>
 #include <imgui.h>
+#include <imgui_impl_glfw.h>
+#include <imgui_impl_opengl3.h>
 #include <memory>
 
 
@@ -25,7 +27,9 @@ class EditorUI
     void ShowInspector();
     void ShowRendererSettings();
     void ShowMaterialEditor();
-
+    void ShowPrimitiveSelectionDialog();
+    void ShowLightSelectionDialog();
+    void ShowModelCreationDialog();
   private:
     void ShowMaterialEditor(Material &material);
     void TextureSelector(const char *label, std::shared_ptr<Texture> &texture);

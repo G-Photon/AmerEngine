@@ -64,7 +64,7 @@ void Mesh::Draw(Shader &shader)
     model = glm::scale(model, scale);
 
     shader.SetMat4("model", model);
-
+    
     // 绘制网格
     glBindVertexArray(VAO);
     glDrawElements(GL_TRIANGLES, static_cast<unsigned int>(indices.size()), GL_UNSIGNED_INT, 0);

@@ -10,6 +10,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
+#include <unordered_map>
 
 
 class Renderer
@@ -36,9 +37,10 @@ class Renderer
     // 着色器管理
     void LoadShader(const std::string &name, const std::string &vertexPath, const std::string &fragmentPath);
     std::shared_ptr<Shader> GetShader(const std::string &name) const;
+    void UseShader(const std::shared_ptr<Shader> &shader);
+
     void UseShader(const std::string &name);
     void SetGlobalUniforms(const Camera &camera);
-    void SetGlobalLight(const std::shared_ptr<Light> &light);
     void SetEnvironmentMap(const std::shared_ptr<Texture> &texture);
     void SetSkybox(const std::shared_ptr<Texture> &texture);
 
@@ -155,7 +157,7 @@ class Renderer
 
     int width, height;
 
-    RenderMode currentMode = DEFERRED;
+    RenderMode currentMode = FORWARD;
 
     // 帧缓冲
     std::unique_ptr<Framebuffer> gBuffer;
@@ -174,6 +176,8 @@ class Renderer
     std::unique_ptr<Shader> bloomShader;
     std::unique_ptr<Shader> ssaoShader;
 
+    std::unordered_map<std::string, std::shared_ptr<Shader>> shaders;
+
     // 场景数据
     std::vector<std::shared_ptr<Model>> models;
     std::vector<std::shared_ptr<Light>> lights;
@@ -187,12 +191,12 @@ class Renderer
     std::shared_ptr<Camera> mainCamera;
 
     // 特效状态
-    bool gammaCorrection = true;
-    bool msaaEnabled = true;
-    bool hdrEnabled = true;
-    bool bloomEnabled = true;
-    bool ssaoEnabled = true;
-    bool shadowEnabled = true;
-    bool pbrEnabled = true;
-    bool iblEnabled = true;
+    bool gammaCorrection = false;
+    bool msaaEnabled = false;
+    bool hdrEnabled = false;
+    bool bloomEnabled = false;
+    bool ssaoEnabled = false;
+    bool shadowEnabled = false;
+    bool pbrEnabled = false;
+    bool iblEnabled = false;
 };

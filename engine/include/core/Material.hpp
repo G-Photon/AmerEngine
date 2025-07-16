@@ -15,7 +15,7 @@ enum MaterialType
 class Material
 {
   public:
-    Material(MaterialType type = PBR);
+    Material(MaterialType type = BLINN_PHONG);
 
     void Bind(Shader &shader);
 
@@ -36,6 +36,11 @@ class Material
     std::shared_ptr<Texture> diffuseMap;
     std::shared_ptr<Texture> specularMap;
     std::shared_ptr<Texture> normalMap;
+
+    bool useAmbientMap = false;
+    bool useDiffuseMap = false;
+    bool useSpecularMap = false;
+    bool useNormalMap = false;
 
     std::shared_ptr<Texture> albedoMap;
     std::shared_ptr<Texture> metallicMap;

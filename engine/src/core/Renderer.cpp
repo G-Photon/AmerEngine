@@ -1,5 +1,6 @@
 #include "core/Renderer.hpp"
 #include "core/Geometry.hpp"
+#include "core/Light.hpp"
 #include "utils/FileSystem.hpp"
 #include <iostream>
 
@@ -87,11 +88,10 @@ void Renderer::Initialize()
     deferredGeometryShader =
         std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/geometry_pass.vert"),
                                  FileSystem::GetPath("resources/shaders/deferred/geometry_pass.frag"));
-
+    
     deferredLightingShader =
         std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/lighting_pass.vert"),
                                  FileSystem::GetPath("resources/shaders/deferred/lighting_pass.frag"));
-
     // 初始化帧缓冲
     SetupGBuffer();
     SetupShadowBuffer();
@@ -108,7 +108,10 @@ void Renderer::Initialize()
     normalTexture->CreateNormalMap();
 
     // 设置天空盒
-    SetupSkybox();
+    // SetupSkybox();
+
+    // 设置相机
+    mainCamera = std::make_shared<Camera>();
 }
 
 void Renderer::SetupGBuffer()
@@ -196,6 +199,9 @@ void Renderer::RenderForward()
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    
     forwardShader->Use();
     // 设置相机、光照等uniform
     glm::mat4 view = mainCamera->GetViewMatrix();
@@ -211,6 +217,15 @@ void Renderer::RenderForward()
     forwardShader->SetBool("hdrEnabled", hdrEnabled);
     forwardShader->SetBool("bloomEnabled", bloomEnabled);
     forwardShader->SetBool("ssaoEnabled", ssaoEnabled);
+
+    // 设置光源
+    forwardShader->SetInt("numLights[0]", DirectionalLight::count); // 方向光数量
+    forwardShader->SetInt("numLights[1]", PointLight::count); // 点光
+    forwardShader->SetInt("numLights[2]", SpotLight::count); // 聚光灯数量
+    for (size_t i = 0; i < lights.size(); ++i)
+    {
+        lights[i]->SetupShader(*forwardShader, lights[i]->getNum());
+    }
     // 渲染所有模型和几何体
     for (auto &model : models)
     {
@@ -347,6 +362,54 @@ void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, c
 
     primitives.push_back(primitive);
 }
+
+void Renderer::LoadShader(const std::string &name, const std::string &vertexPath, const std::string &fragmentPath)
+{
+    auto shader = std::make_shared<Shader>(vertexPath, fragmentPath);
+    shaders[name] = shader;
+}
+
+std::shared_ptr<Shader> Renderer::GetShader(const std::string &name) const
+{
+    auto it = shaders.find(name);
+    if (it != shaders.end())
+    {
+        return it->second;
+    }
+    return nullptr;
+}
+
+void Renderer::UseShader(const std::string &name)
+{
+    auto shader = GetShader(name);
+    if (shader)
+    {
+        shader->Use();
+    }
+    else
+    {
+        std::cerr << "Shader not found: " << name << std::endl;
+    }
+}
+
+void Renderer::UseShader(const std::shared_ptr<Shader> &shader)
+{
+    if (shader)
+    {
+        shader->Use();
+    }
+    else
+    {
+        std::cerr << "Shader is null!" << std::endl;
+    }
+}
+void Renderer::SetGlobalUniforms(const Camera &camera)
+{
+    forwardShader->SetMat4("view", camera.GetViewMatrix());
+    forwardShader->SetMat4("projection", camera.GetProjectionMatrix(static_cast<float>(width) / height));
+    forwardShader->SetVec3("viewPos", camera.Position);
+}
+
 
 void Renderer::RenderPostProcessing()
 {

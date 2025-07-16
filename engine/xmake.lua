@@ -11,7 +11,7 @@ target("engine")
     add_includedirs("resources")
     add_packages("imgui", "glm","assimp","glfw","glad","libsdl3")
     after_build(function (target)
-        os.cp("resources", target:targetdir() .. "/resources")
+        os.cp("resources", target:targetdir() .. "/")
     end)
 
 --

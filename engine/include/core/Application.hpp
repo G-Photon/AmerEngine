@@ -27,6 +27,10 @@ class Application
     int width = 1280;
     int height = 720;
 
+    float lastX = width / 2.0f;
+    float lastY = height / 2.0f;
+    bool firstMouse = true;
+
     std::unique_ptr<Renderer> renderer;
     std::unique_ptr<EditorUI> editorUI;
 

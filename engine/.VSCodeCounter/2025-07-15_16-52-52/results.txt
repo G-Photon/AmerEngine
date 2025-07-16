@@ -1,0 +1,78 @@
+Date : 2025-07-15 16:52:52
+Directory : d:\Adata\study\opengl\engine
+Total : 37 files,  8976 codes, 1570 comments, 1504 blanks, all 12050 lines
+
+Languages
++----------+------------+------------+------------+------------+------------+
+| language | files      | code       | comment    | blank      | total      |
++----------+------------+------------+------------+------------+------------+
+| C++      |         30 |      8,582 |      1,452 |      1,388 |     11,422 |
+| GLSL     |          6 |        380 |         49 |        113 |        542 |
+| XMake    |          1 |         14 |         69 |          3 |         86 |
++----------+------------+------------+------------+------------+------------+
+
+Directories
++----------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                       | files      | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                          |         37 |      8,976 |      1,570 |      1,504 |     12,050 |
+| . (Files)                                                                  |          1 |         14 |         69 |          3 |         86 |
+| include                                                                    |         15 |      6,527 |      1,319 |      1,007 |      8,853 |
+| include (Files)                                                            |          1 |      5,833 |      1,294 |        861 |      7,988 |
+| include\core                                                               |         11 |        618 |         25 |        129 |        772 |
+| include\ui                                                                 |          1 |         39 |          0 |          8 |         47 |
+| include\utils                                                              |          2 |         37 |          0 |          9 |         46 |
+| resources                                                                  |          6 |        380 |         49 |        113 |        542 |
+| resources\shaders                                                          |          6 |        380 |         49 |        113 |        542 |
+| resources\shaders\deferred                                                 |          4 |        203 |         24 |         58 |        285 |
+| resources\shaders\forward                                                  |          2 |        177 |         25 |         55 |        257 |
+| src                                                                        |         15 |      2,055 |        133 |        381 |      2,569 |
+| src (Files)                                                                |          1 |          7 |          0 |          1 |          8 |
+| src\core                                                                   |         11 |      1,614 |        109 |        317 |      2,040 |
+| src\ui                                                                     |          1 |        374 |         21 |         52 |        447 |
+| src\utils                                                                  |          2 |         60 |          3 |         11 |         74 |
++----------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++----------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| filename                                                                   | language | code       | comment    | blank      | total      |
++----------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| d:\Adata\study\opengl\engine\include\core\Application.hpp                  | C++      |         29 |          0 |         10 |         39 |
+| d:\Adata\study\opengl\engine\include\core\Camera.hpp                       | C++      |         57 |          4 |         14 |         75 |
+| d:\Adata\study\opengl\engine\include\core\Framebuffer.hpp                  | C++      |         48 |          0 |          7 |         55 |
+| d:\Adata\study\opengl\engine\include\core\Geometry.hpp                     | C++      |         38 |          0 |          3 |         41 |
+| d:\Adata\study\opengl\engine\include\core\Light.hpp                        | C++      |         80 |          0 |         15 |         95 |
+| d:\Adata\study\opengl\engine\include\core\Material.hpp                     | C++      |         39 |          3 |         10 |         52 |
+| d:\Adata\study\opengl\engine\include\core\Mesh.hpp                         | C++      |         57 |          0 |         13 |         70 |
+| d:\Adata\study\opengl\engine\include\core\Model.hpp                        | C++      |         52 |          0 |         11 |         63 |
+| d:\Adata\study\opengl\engine\include\core\Renderer.hpp                     | C++      |        155 |         16 |         31 |        202 |
+| d:\Adata\study\opengl\engine\include\core\Shader.hpp                       | C++      |         29 |          1 |          8 |         38 |
+| d:\Adata\study\opengl\engine\include\core\Texture.hpp                      | C++      |         34 |          1 |          7 |         42 |
+| d:\Adata\study\opengl\engine\include\stb_image.h                           | C++      |      5,833 |      1,294 |        861 |      7,988 |
+| d:\Adata\study\opengl\engine\include\ui\EditorUI.hpp                       | C++      |         39 |          0 |          8 |         47 |
+| d:\Adata\study\opengl\engine\include\utils\FileSystem.hpp                  | C++      |         10 |          0 |          2 |         12 |
+| d:\Adata\study\opengl\engine\include\utils\Logger.hpp                      | C++      |         27 |          0 |          7 |         34 |
+| d:\Adata\study\opengl\engine\resources\shaders\deferred\geometry_pass.frag | GLSL     |         49 |          6 |         11 |         66 |
+| d:\Adata\study\opengl\engine\resources\shaders\deferred\geometry_pass.vert | GLSL     |         23 |          0 |          6 |         29 |
+| d:\Adata\study\opengl\engine\resources\shaders\deferred\lighting_pass.frag | GLSL     |        123 |         18 |         38 |        179 |
+| d:\Adata\study\opengl\engine\resources\shaders\deferred\lighting_pass.vert | GLSL     |          8 |          0 |          3 |         11 |
+| d:\Adata\study\opengl\engine\resources\shaders\forward\blinn_phong.frag    | GLSL     |        154 |         25 |         49 |        228 |
+| d:\Adata\study\opengl\engine\resources\shaders\forward\blinn_phong.vert    | GLSL     |         23 |          0 |          6 |         29 |
+| d:\Adata\study\opengl\engine\src\core\Application.cpp                      | C++      |        134 |         10 |         21 |        165 |
+| d:\Adata\study\opengl\engine\src\core\Camera.cpp                           | C++      |         74 |          1 |         13 |         88 |
+| d:\Adata\study\opengl\engine\src\core\Framebuffer.cpp                      | C++      |        115 |          2 |         24 |        141 |
+| d:\Adata\study\opengl\engine\src\core\Geometry.cpp                         | C++      |        263 |         31 |         73 |        367 |
+| d:\Adata\study\opengl\engine\src\core\Light.cpp                            | C++      |        101 |          3 |         12 |        116 |
+| d:\Adata\study\opengl\engine\src\core\Material.cpp                         | C++      |         87 |          0 |         13 |        100 |
+| d:\Adata\study\opengl\engine\src\core\Mesh.cpp                             | C++      |         49 |          7 |         16 |         72 |
+| d:\Adata\study\opengl\engine\src\core\Model.cpp                            | C++      |        166 |         13 |         33 |        212 |
+| d:\Adata\study\opengl\engine\src\core\Renderer.cpp                         | C++      |        427 |         39 |         72 |        538 |
+| d:\Adata\study\opengl\engine\src\core\Shader.cpp                           | C++      |        118 |          3 |         26 |        147 |
+| d:\Adata\study\opengl\engine\src\core\Texture.cpp                          | C++      |         80 |          0 |         14 |         94 |
+| d:\Adata\study\opengl\engine\src\main.cpp                                  | C++      |          7 |          0 |          1 |          8 |
+| d:\Adata\study\opengl\engine\src\ui\EditorUI.cpp                           | C++      |        374 |         21 |         52 |        447 |
+| d:\Adata\study\opengl\engine\src\utils\FileSystem.cpp                      | C++      |         23 |          2 |          5 |         30 |
+| d:\Adata\study\opengl\engine\src\utils\Logger.cpp                          | C++      |         37 |          1 |          6 |         44 |
+| d:\Adata\study\opengl\engine\xmake.lua                                     | XMake    |         14 |         69 |          3 |         86 |
+| Total                                                                      |          |      8,976 |      1,570 |      1,504 |     12,050 |
++----------------------------------------------------------------------------+----------+------------+------------+------------+------------+

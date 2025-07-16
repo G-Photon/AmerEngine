@@ -1,6 +1,4 @@
 #include "ui/EditorUI.hpp"
-#include "imgui_impl_glfw.h"
-#include "imgui_impl_opengl3.h"
 
 EditorUI::EditorUI(GLFWwindow *window, Renderer *renderer) : window(window), renderer(renderer)
 {
@@ -19,7 +17,8 @@ void EditorUI::Initialize()
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_None;
-
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -45,7 +44,6 @@ void EditorUI::Render()
         ShowRendererSettings();
     if (showMaterialEditor)
         ShowMaterialEditor();
-
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 }
@@ -78,6 +76,87 @@ void EditorUI::ShowMainMenuBar()
         }
 
         ImGui::EndMainMenuBar();
+    }
+}
+
+void EditorUI::ShowModelCreationDialog()
+{
+    //ImGui::OpenPopup("Create Model");
+    if (ImGui::BeginPopup("Create Model"))
+    {
+        ImGui::Text("Model Path:");
+        static char modelPath[128] = "";
+        ImGui::InputText("##ModelPath", modelPath, IM_ARRAYSIZE(modelPath));
+
+        if (ImGui::Button("Create"))
+        {
+            // 创建模型逻辑
+            renderer->LoadModel(modelPath);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void EditorUI::ShowPrimitiveSelectionDialog()
+{
+    //ImGui::OpenPopup("Create Primitive");
+    if (ImGui::BeginPopup("Create Primitive"))
+    {
+        ImGui::Text("Primitive Type:");
+        static int primitiveType = 0;
+        ImGui::RadioButton("Sphere", &primitiveType, 0);
+        ImGui::RadioButton("Cube", &primitiveType, 1);
+        ImGui::RadioButton("Cylinder", &primitiveType, 2);
+        ImGui::RadioButton("Cone", &primitiveType, 3);
+        ImGui::RadioButton("Prism", &primitiveType, 4);
+        ImGui::RadioButton("Pyramid", &primitiveType, 5);
+        ImGui::RadioButton("Torus", &primitiveType, 6);
+        ImGui::RadioButton("Ellipsoid", &primitiveType, 7);
+
+        if (ImGui::Button("Create"))
+        {
+            // 创建几何体逻辑
+            renderer->CreatePrimitive(static_cast<Geometry::Type>(primitiveType),
+                                      glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                      Material());
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+void EditorUI::ShowLightSelectionDialog()
+{
+    //ImGui::OpenPopup("Create Light");
+    if (ImGui::BeginPopup("Create Light"))
+    {
+        ImGui::Text("Light Type:");
+        static int lightType = 0;
+        ImGui::RadioButton("Point Light", &lightType, 0);
+        ImGui::RadioButton("Directional Light", &lightType, 1);
+        ImGui::RadioButton("Spot Light", &lightType, 2);
+
+        if (ImGui::Button("Create"))
+        {
+            // 创建光源逻辑
+            std::shared_ptr<Light> light;
+            if (lightType == 0)
+            {
+                light = std::make_shared<PointLight>();
+            }
+            else if (lightType == 1)
+            {
+                light = std::make_shared<DirectionalLight>();
+            }
+            else if (lightType == 2)
+            {
+                light = std::make_shared<SpotLight>();
+            }
+            renderer->AddLight(light);
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
     }
 }
 
@@ -126,6 +205,43 @@ void EditorUI::ShowSceneHierarchy()
         }
         ImGui::TreePop();
     }
+    static bool showModelDialog = false;
+    static bool showPrimitiveDialog = false;
+    static bool showLightDialog = false;
+    if (ImGui::Button("Create Model"))
+    {
+        showModelDialog = true;
+    }
+    if (ImGui::Button("Create Primitive"))
+    {
+        showPrimitiveDialog = true;
+    }
+    if (ImGui::Button("Create Light"))
+    {
+        showLightDialog = true;
+    }
+
+    // 在同一个函数内处理弹出窗口
+    if (showModelDialog)
+    {
+        ImGui::OpenPopup("Create Model");
+        showModelDialog = false;
+    }
+    if (showPrimitiveDialog)
+    {
+        ImGui::OpenPopup("Create Primitive");
+        showPrimitiveDialog = false;
+    }
+    if (showLightDialog)
+    {
+        ImGui::OpenPopup("Create Light");
+        showLightDialog = false;
+    }
+
+    // 显示对话框（这些会自己处理BeginPopup/EndPopup）
+    ShowModelCreationDialog();
+    ShowPrimitiveSelectionDialog();
+    ShowLightSelectionDialog();
 
     ImGui::End();
 }
@@ -133,7 +249,6 @@ void EditorUI::ShowSceneHierarchy()
 void EditorUI::ShowInspector()
 {
     ImGui::Begin("Inspector");
-
     if (selectedObjectIndex >= 0)
     {
         int modelCount = renderer->GetModelCount();
@@ -194,9 +309,11 @@ void EditorUI::ShowInspector()
 
 void EditorUI::ShowMaterialEditor(Material &material)
 {
-    if (ImGui::Combo("Material Type", (int *)&material.type, "Blinn-Phong\0PBR\0"))
+    int materialType = static_cast<int>(material.type);
+    if (ImGui::Combo("Material Type", &materialType, "Blinn-Phong\0PBR\0"))
     {
         // 类型改变时的处理
+        material.type = static_cast<MaterialType>(materialType);
     }
 
     if (material.type == BLINN_PHONG)

@@ -57,10 +57,40 @@ void Application::Initialize()
     // 设置回调
     glfwSetWindowUserPointer(window, this);
     glfwSetFramebufferSizeCallback(window, [](GLFWwindow *window, int width, int height) {
+        if (width == 0 || height == 0)
+            return; // 最小化窗口时可能触发
         auto app = static_cast<Application *>(glfwGetWindowUserPointer(window));
         app->renderer->Resize(width, height);
         glViewport(0, 0, width, height);
     });
+    glfwSetCursorPosCallback(window, [](GLFWwindow *window, double xpos, double ypos) {
+        ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
+        auto app = static_cast<Application *>(glfwGetWindowUserPointer(window));
+        ImGuiIO &io = ImGui::GetIO();
+        if (io.WantCaptureMouse || glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS)
+        {
+            // 如果不是鼠标右键按下，或者不需要鼠标控制相机，则不处理鼠标移动
+            app->firstMouse = true; // 重置鼠标位置
+            return;
+        }
+        if (app->firstMouse)
+        {
+            app->lastX = static_cast<float>(xpos);
+            app->lastY = static_cast<float>(ypos);
+            app->firstMouse = false;
+        }
+        float xoffset = static_cast<float>(xpos - app->lastX);
+        float yoffset = static_cast<float>(app->lastY - ypos); // 反转y轴
+        app->lastX = static_cast<float>(xpos);
+        app->lastY = static_cast<float>(ypos);
+        app->renderer->GetCamera()->ProcessMouseMovement(xoffset, yoffset);
+    });
+    glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
+        ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
+        auto app = static_cast<Application *>(glfwGetWindowUserPointer(window));
+        app->renderer->GetCamera()->ProcessMouseScroll(static_cast<float>(yoffset));
+    });
+
 }
 
 void Application::Run()
@@ -72,7 +102,7 @@ void Application::Run()
         double currentTime = glfwGetTime();
         float deltaTime = static_cast<float>(currentTime - lastTime);
         lastTime = currentTime;
-
+        
         ProcessInput(deltaTime);
         Update(deltaTime);
         Render();

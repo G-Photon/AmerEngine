@@ -15,7 +15,7 @@ void Camera::Update(float deltaTime)
 }
 void Camera::ProcessInput(GLFWwindow *window, float deltaTime)
 {
-    float velocity = MovementSpeed * deltaTime;
+    float velocity = this->MovementSpeed * deltaTime;
 
     if (glfwGetKey(window, GLFW_KEY_W) == GLFW_PRESS)
         Position += Front * velocity;
@@ -29,6 +29,8 @@ void Camera::ProcessInput(GLFWwindow *window, float deltaTime)
         Position += WorldUp * velocity;
     if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
         Position -= WorldUp * velocity;
+
+    UpdateCameraVectors();
 }
 
 void Camera::ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch)
@@ -78,5 +80,9 @@ glm::mat4 Camera::GetViewMatrix() const
 
 glm::mat4 Camera::GetProjectionMatrix(float aspectRatio) const
 {
+    if (aspectRatio <= 0.0f)
+    {
+        aspectRatio = 1.0f; // 防止除以零
+    }
     return glm::perspective(glm::radians(Zoom), aspectRatio, 0.1f, 100.0f);
 }

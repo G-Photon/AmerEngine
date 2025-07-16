@@ -61,9 +61,9 @@ class Camera
     float Pitch;
 
     // 相机选项
-    float MovementSpeed;
-    float MouseSensitivity;
-    float Zoom;
+    float MovementSpeed = 5.0f;
+    float MouseSensitivity = 0.1f;
+    float Zoom = 45.0f;
 
   private:
     void UpdateCameraVectors();
