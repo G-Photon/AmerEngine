@@ -23,7 +23,8 @@ Renderer::~Renderer()
     }
     for (auto &primitive : primitives)
     {
-        primitive.material.reset();
+        primitive.mesh->SetMaterial(nullptr);
+        primitive.mesh.reset();
     }
     gBuffer.reset();
     shadowBuffer.reset();
@@ -327,7 +328,6 @@ void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, c
     primitive.position = position;
     primitive.scale = scale;
     primitive.rotation = rotation;
-    primitive.material = std::make_shared<Material>(material);
 
     switch (type)
     {
@@ -359,6 +359,9 @@ void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, c
         std::cerr << "Unsupported geometry type!" << std::endl;
         return;
     }
+
+    primitive.mesh->SetTransform(position, rotation, scale);
+    primitive.mesh->SetMaterial(std::make_shared<Material>(material));
 
     primitives.push_back(primitive);
 }

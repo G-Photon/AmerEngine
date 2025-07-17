@@ -1,17 +1,16 @@
 #pragma once
 
+#include "Camera.hpp"
 #include "Framebuffer.hpp"
 #include "Geometry.hpp"
 #include "Light.hpp"
 #include "Material.hpp"
 #include "Model.hpp"
 #include "Shader.hpp"
-#include "Camera.hpp"
 #include <glm/glm.hpp>
 #include <memory>
-#include <vector>
 #include <unordered_map>
-
+#include <vector>
 
 class Renderer
 {
@@ -140,6 +139,30 @@ class Renderer
     std::shared_ptr<Camera> GetCamera() const
     {
         return mainCamera;
+    }
+
+    void DeleteObject(int index)
+    {
+        if (index < 0 || index >= models.size() + primitives.size())
+            return;
+
+        if (index < models.size())
+        {
+            models.erase(models.begin() + index);
+        }
+        else if (index < models.size() + primitives.size())
+        {
+            // 删除几何体
+            index -= models.size();
+            primitives.erase(primitives.begin() + index);
+        }
+        else if (index < models.size() + primitives.size() + lights.size())
+        {
+            // 删除光源
+            index -= (models.size() + primitives.size());
+            lights.erase(lights.begin() + index);
+        }
+        return ;
     }
 
   private:

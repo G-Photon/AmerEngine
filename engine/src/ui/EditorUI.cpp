@@ -1,5 +1,5 @@
 #include "ui/EditorUI.hpp"
-
+#include "utils/FileDialog.hpp"
 EditorUI::EditorUI(GLFWwindow *window, Renderer *renderer) : window(window), renderer(renderer)
 {
 }
@@ -293,14 +293,26 @@ void EditorUI::ShowInspector()
             ImGui::DragFloat3("Rotation", (float*) glm::value_ptr(primitive.rotation), 1.0f);
             ImGui::DragFloat3("Scale", (float*) glm::value_ptr(primitive.scale), 0.1f);
 
+            primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
             // 材质编辑器
-            ShowMaterialEditor(*primitive.material);
+            ShowMaterialEditor(*primitive.mesh->GetMaterial());
         }
         else
         {
             // 显示光源属性
             auto light = renderer->GetLights()[selectedObjectIndex - modelCount - primitiveCount];
             light->OnInspectorGUI();
+        }
+
+        // delete
+        if (ImGui::Button("Delete"))
+        {
+            if (selectedObjectIndex >= 0)
+            {
+                // 删除选中的对象
+                renderer->DeleteObject(selectedObjectIndex);
+                selectedObjectIndex = -1;
+            }
         }
     }
 
@@ -324,10 +336,10 @@ void EditorUI::ShowMaterialEditor(Material &material)
         ImGui::DragFloat("Shininess", &material.shininess, 1.0f, 1.0f, 256.0f);
 
         // 贴图选择器
-        TextureSelector("Ambient Map", material.ambientMap);
-        TextureSelector("Diffuse Map", material.diffuseMap);
-        TextureSelector("Specular Map", material.specularMap);
-        TextureSelector("Normal Map", material.normalMap);
+        material.useAmbientMap = TextureSelector("Ambient Map", material.ambientMap, "ambient");
+        material.useDiffuseMap = TextureSelector("Diffuse Map", material.diffuseMap, "diffuse");
+        material.useSpecularMap = TextureSelector("Specular Map", material.specularMap, "specular");
+        material.useNormalMap = TextureSelector("Normal Map", material.normalMap, "normal");
     }
     else
     {
@@ -337,11 +349,11 @@ void EditorUI::ShowMaterialEditor(Material &material)
         ImGui::DragFloat("AO", &material.ao, 0.01f, 0.0f, 1.0f);
 
         // 贴图选择器
-        TextureSelector("Albedo Map", material.albedoMap);
-        TextureSelector("Metallic Map", material.metallicMap);
-        TextureSelector("Roughness Map", material.roughnessMap);
-        TextureSelector("AO Map", material.aoMap);
-        TextureSelector("Normal Map", material.normalMap);
+        TextureSelector("Albedo Map", material.albedoMap, "albedo");
+        TextureSelector("Metallic Map", material.metallicMap, "metallic");
+        TextureSelector("Roughness Map", material.roughnessMap, "roughness");
+        TextureSelector("AO Map", material.aoMap, "ao");
+        TextureSelector("Normal Map", material.normalMap, "normal");
     }
 }
 
@@ -351,28 +363,51 @@ void EditorUI::ShowMaterialEditor()
     ImGui::End();
 }
 
-void EditorUI::TextureSelector(const char *label, std::shared_ptr<Texture> &texture)
+bool EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture, const std::string &idSuffix)
 {
-    ImGui::Text("%s", label);
-    ImGui::SameLine();
+    ImGui::Text("%s", label.c_str());
 
     if (texture)
     {
-        ImGui::Text("%s", texture->GetPath().c_str());
-        ImGui::SameLine();
-
-        if (ImGui::Button("Clear"))
-        {
-            texture.reset();
-        }
+        ImGui::Text("Current: %s", std::to_string(texture->GetID()).c_str());
     }
     else
     {
-        if (ImGui::Button("Select"))
+        ImGui::Text("Current: None");
+    }
+
+    // 使用唯一ID创建按钮
+    std::string buttonLabel = "Select##" + label + idSuffix;
+    if (ImGui::Button(buttonLabel.c_str()))
+    {
+        std::string path =
+            FileDialog::OpenFile("Select Texture", "Image Files\0*.jpg;*.png;*.tga;*.bmp\0All Files\0*.*\0");
+        if (!path.empty())
         {
-            // 打开文件对话框选择纹理
+            texture = std::make_shared<Texture>();
+            if (texture->LoadFromFile(path))
+            {
+                // 纹理加载成功
+                return true;
+            }
+            else
+            {
+                // 纹理加载失败，处理错误
+                texture.reset();
+                ImGui::Text("Failed to load texture: %s", path.c_str());
+            }
         }
     }
+
+    // 添加清除按钮
+    std::string clearLabel = "Clear##" + label + idSuffix;
+    if (ImGui::Button(clearLabel.c_str()))
+    {
+        texture.reset();
+    }
+
+    ImGui::Separator();
+    return false;
 }
 
 void EditorUI::ShowRendererSettings()

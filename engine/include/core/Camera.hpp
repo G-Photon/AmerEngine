@@ -25,6 +25,7 @@ class Camera
     void ProcessMouseMovement(float xoffset, float yoffset, GLboolean constrainPitch = true);
     void ProcessMouseScroll(float yoffset);
 
+    void Reset();
     void Update(float deltaTime);
 
     glm::mat4 GetViewMatrix() const;

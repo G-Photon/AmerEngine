@@ -86,3 +86,11 @@ glm::mat4 Camera::GetProjectionMatrix(float aspectRatio) const
     }
     return glm::perspective(glm::radians(Zoom), aspectRatio, 0.1f, 100.0f);
 }
+
+void Camera::Reset()
+{
+    Position = glm::vec3(0.0f, 0.0f, 3.0f);
+    Yaw = -90.0f;
+    Pitch = 0.0f;
+    UpdateCameraVectors();
+}

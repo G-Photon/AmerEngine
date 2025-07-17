@@ -133,6 +133,12 @@ void Application::ProcessInput(float deltaTime)
         rightMousePressed = false;
     }
 
+    if (glfwGetKey(window, GLFW_KEY_R) == GLFW_PRESS)
+    {
+        // 处理R键按下事件
+        renderer->GetCamera()->Reset();
+    }
+
     // 切换线框模式
     if (glfwGetKey(window, GLFW_KEY_F1) == GLFW_PRESS)
     {

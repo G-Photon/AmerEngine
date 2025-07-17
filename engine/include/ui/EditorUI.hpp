@@ -7,7 +7,7 @@
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_opengl3.h>
 #include <memory>
-
+#include <string>
 
 class Renderer;
 
@@ -32,7 +32,7 @@ class EditorUI
     void ShowModelCreationDialog();
   private:
     void ShowMaterialEditor(Material &material);
-    void TextureSelector(const char *label, std::shared_ptr<Texture> &texture);
+    bool TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture, const std::string &idSuffix = "");
 
     GLFWwindow *window;
     Renderer *renderer;

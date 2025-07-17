@@ -13,6 +13,7 @@ void Model::Draw(Shader &shader)
 {
     for (auto &mesh : meshes)
     {
+        mesh->SetTransform(position, rotation, scale);
         mesh->Draw(shader);
     }
 }

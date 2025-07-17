@@ -24,8 +24,17 @@ class Geometry
         glm::vec3 position;
         glm::vec3 scale;
         glm::vec3 rotation;
-        std::shared_ptr<Material> material;
         std::shared_ptr<Mesh> mesh;
+        void SetTransform(const glm::vec3 &pos, const glm::vec3 &rot, const glm::vec3 &scl)
+        {
+            position = pos;
+            rotation = rot;
+            scale = scl;
+            if (mesh)
+            {
+                mesh->SetTransform(pos, rot, scl);
+            }
+        }
     };
 
     static std::shared_ptr<Mesh> CreateSphere(float radius = 1.0f, int segments = 32);
