@@ -15,9 +15,12 @@ class Geometry
         PRISM,
         PYRAMID,
         TORUS,
-        ELLIPSOID
+        ELLIPSOID,
+        FRUSTUM,
+        END
     };
 
+    static std::wstring name[Geometry::Type::END + 1];
     struct Primitive
     {
         Type type;
@@ -47,4 +50,6 @@ class Geometry
                                              int minorSegments = 12);
     static std::shared_ptr<Mesh> CreateEllipsoid(float radiusX = 1.0f, float radiusY = 0.8f, float radiusZ = 1.2f,
                                                  int segments = 32);
+    static std::shared_ptr<Mesh> CreateFrustum(float radiusTop = 0.5f, float radiusBottom = 0.5f, float height = 1.0f,
+                                               int segments = 32);
 };

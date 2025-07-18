@@ -1,13 +1,13 @@
 #pragma once
 
 #include "Shader.hpp"
+#include "glm/fwd.hpp"
 #include <imgui.h>
 
 class Light
 {
   public:
     virtual ~Light() = default;
-    virtual void OnInspectorGUI() = 0;
     virtual void SetupShader(Shader &shader, int index = 0) const = 0;
     virtual int getNum() const
     {
@@ -19,8 +19,17 @@ class Light
         // 默认实现为空，子类可以重载此方法
     }
 
-    glm::vec3 position = glm::vec3(0.0f);
-    glm::vec3 diffuse = glm::vec3(1.0f);
+    virtual glm::vec3 getPosition()=0;
+
+    virtual glm::vec3 getLightColor() const
+    {
+        return glm::vec3(1.0f); // 默认返回白色光
+    }
+
+    virtual int getType() const
+    {
+        return 0; // 默认返回0，子类可以重载此方法
+    }
 };
 
 class PointLight : public Light
@@ -29,12 +38,25 @@ class PointLight : public Light
     PointLight(const glm::vec3 &position = glm::vec3(0.0f), const glm::vec3 &ambient = glm::vec3(1.0f), const glm::vec3 &diffuse = glm::vec3(1.0f), const glm::vec3 &specular = glm::vec3(1.0f), float intensity = 1.0f);
 
     void SetupShader(Shader &shader, int index) const override;
-    void OnInspectorGUI() override;
     int getNum() const override
     {
         return number;
     }
 
+    glm::vec3 getPosition() override
+    {
+        return position;
+    }
+
+    glm::vec3 getLightColor() const override
+    {
+        return diffuse;
+    }
+
+    int getType() const override
+    {
+        return 0; // 点光源类型
+    }
     int number;
     static int count;
 
@@ -56,10 +78,24 @@ class DirectionalLight : public Light
                      const glm::vec3 &ambient = glm::vec3(1.0f), const glm::vec3 &diffuse = glm::vec3(1.0f), const glm::vec3 &specular = glm::vec3(1.0f), float intensity = 1.0f);
 
     void SetupShader(Shader &shader, int index) const override;
-    void OnInspectorGUI() override;
     int getNum() const override
     {
         return number;
+    }
+
+    glm::vec3 getPosition() override
+    {
+        return glm::vec3(0.0f); // 定向光没有位置，返回零向量
+    }
+
+    glm::vec3 getLightColor() const override
+    {
+        return diffuse;
+    }
+
+    int getType() const override
+    {
+        return 1; // 定向光类型
     }
 
     int number;
@@ -80,11 +116,24 @@ class SpotLight : public Light
               float intensity = 1.0f, float cutOff = 12.5f, float outerCutOff = 17.5f);
 
     void SetupShader(Shader &shader, int index) const override;
-    void OnInspectorGUI() override;
 
     int getNum() const override
     {
         return number;
+    }
+
+    glm::vec3 getPosition() override
+    {
+        return position;
+    }
+    glm::vec3 getLightColor() const override
+    {
+        return diffuse;
+    }
+
+    int getType() const override
+    {
+        return 2; // 聚光灯类型
     }
     int number;
     static int count;

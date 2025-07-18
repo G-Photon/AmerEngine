@@ -355,17 +355,16 @@ void Renderer::RenderLights()
     lightsShader->Use();
 
     // 设置VP矩阵
-    lightsShader->SetMat4("u_ViewProjection", mainCamera->GetProjectionMatrix(width * 1.0f / height) * mainCamera->GetViewMatrix());
+    lightsShader->SetMat4("view", mainCamera->GetViewMatrix());
+    lightsShader->SetMat4("projection", mainCamera->GetProjectionMatrix(width * 1.0f / height));
 
     // 遍历所有光源
     for (const std::shared_ptr<Light> &light : GetLights())
     {
         auto sphereModel = Geometry::CreateSphere();
 
-        sphereModel->SetTransform(light->position, glm::vec3(0.0f), glm::vec3(0.2f));
-        lightsShader->SetVec3("u_Model", light->position);
-        lightsShader->SetVec3("u_LightColor", light->diffuse);
-
+        sphereModel->SetTransform(light->getPosition(), glm::vec3(0.0f), glm::vec3(0.2f));
+        lightsShader->SetVec3("lightColor", light->getLightColor());
         // 绘制光源球体（假设有Sphere模型类）
         sphereModel->Draw(*lightsShader);
     }
@@ -408,6 +407,9 @@ void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, c
         break;
     case Geometry::ELLIPSOID:
         primitive.mesh = Geometry::CreateEllipsoid();
+        break;
+    case Geometry::FRUSTUM:
+        primitive.mesh = Geometry::CreateFrustum();
         break;
     default:
         std::cerr << "Unsupported geometry type!" << std::endl;

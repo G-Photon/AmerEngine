@@ -1,4 +1,5 @@
-#pragma once
+﻿#pragma once
+#include "core/Light.hpp"
 #include "core/Material.hpp"
 #include "core/Texture.hpp"
 #include "core/Renderer.hpp"
@@ -10,6 +11,8 @@
 #include <string>
 #include <vector>
 #include <filesystem>
+#include <codecvt>
+#include <locale>
 
 class Renderer;
 
@@ -34,7 +37,8 @@ public:
     void ShowPrimitiveSelectionDialog();
     void ShowLightSelectionDialog();
     void ShowModelCreationDialog();
-    
+    void OnLightInspectorGUI(Light &light);
+
 private:
     void ShowMaterialEditor(Material &material);
     void TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture,
@@ -42,6 +46,12 @@ private:
     
     void RefreshAssetList(); // 刷新资源列表
     void CreateDefaultLayout(); // 创建默认布局
+
+    static std::string ConvertToUTF8(const std::wstring &wstr)
+    {
+        std::wstring_convert<std::codecvt_utf8<wchar_t>> converter;
+        return converter.to_bytes(wstr);
+    }
 
     GLFWwindow *window;
     Renderer *renderer;
@@ -52,8 +62,8 @@ private:
     bool showInspector = true;
     bool showAssetsPanel = true; // 新增资源面板状态
     bool showViewport = true;    // 新增视口面板状态
-    bool showRendererSettings = false;
-    bool showMaterialEditor = false;
+    bool showRendererSettings = true;
+    bool showMaterialEditor = true;
 
     int selectedObjectIndex = -1;
     

@@ -1,7 +1,9 @@
-#include "core/Geometry.hpp"
+﻿#include "core/Geometry.hpp"
 #include <glm/gtc/constants.hpp>
 #include <vector>
 
+std::wstring Geometry::name[Geometry::Type::END + 1] = {
+    L"球体", L"立方体", L"圆柱体", L"圆锥体", L"棱柱", L"金字塔", L"环面", L"椭球体", L"截头锥"};
 
 std::shared_ptr<Mesh> Geometry::CreateSphere(float radius, int segments)
 {
@@ -468,6 +470,72 @@ std::shared_ptr<Mesh> Geometry::CreateEllipsoid(float radiusX, float radiusY, fl
             indices.push_back(next);
             indices.push_back(current + 1);
             indices.push_back(next + 1);
+        }
+    }
+
+    return std::make_shared<Mesh>(vertices, indices);
+}
+
+std::shared_ptr<Mesh> Geometry::CreateFrustum(float radiusTop, float radiusBottom, float height, int segments)
+{
+    std::vector<Vertex> vertices;
+    std::vector<unsigned int> indices;
+
+    float halfHeight = height / 2.0f;
+
+    // 顶部中心顶点
+    vertices.push_back({{0, halfHeight, 0}, {0, 1, 0}, {0.5f, 0.5f}});
+    // 底部中心顶点
+    vertices.push_back({{0, -halfHeight, 0}, {0, -1, 0}, {0.5f, 0.5f}});
+
+    // 生成顶部和底部圆面顶点
+    for (int i = 0; i <= segments; ++i) // 注意：i <= segments 确保闭合
+    {
+        float theta = i * 2.0f * glm::pi<float>() / segments;
+        float xTop = radiusTop * cos(theta);
+        float zTop = radiusTop * sin(theta);
+        float xBottom = radiusBottom * cos(theta);
+        float zBottom = radiusBottom * sin(theta);
+
+        // 顶部圆面顶点（法线朝上）
+        vertices.push_back({{xTop, halfHeight, zTop}, {0, 1, 0}, {i / (float)segments, 0}});
+        // 底部圆面顶点（法线朝下）
+        vertices.push_back({{xBottom, -halfHeight, zBottom}, {0, -1, 0}, {i / (float)segments, 1}});
+    }
+
+    // 生成侧面顶点
+    for (int i = 0; i < segments; ++i)
+    {
+        int topIndex = 2 + i * 2;          // 顶部圆面顶点索引
+        int bottomIndex = topIndex + 1;   // 底部圆面顶点索引
+        int nextTopIndex = topIndex + 2;   // 下一个顶部圆面顶点索引
+        int nextBottomIndex = bottomIndex + 2; // 下一个底部圆面顶点索引
+
+        // 计算当前和下一个的圆面顶点坐标
+        float theta = i * 2.0f * glm::pi<float>() / segments;
+        float xTop = radiusTop * cos(theta);
+        float zTop = radiusTop * sin(theta);
+        float xBottom = radiusBottom * cos(theta);
+        float zBottom = radiusBottom * sin(theta);
+
+        glm::vec3 sideNormal((radiusTop - radiusBottom) / height,
+                             (radiusTop + radiusBottom) / (2.0f * height), 0);
+        sideNormal = glm::normalize(sideNormal);
+
+        // 侧面顶点
+        vertices.push_back({{xTop, halfHeight, zTop}, sideNormal, {i / (float)segments, 0}});
+        vertices.push_back({{xBottom, -halfHeight, zBottom}, sideNormal, {i / (float)segments, 1}});
+
+        // 生成侧面索引
+        if (i < segments - 1)
+        {
+            indices.push_back(topIndex);
+            indices.push_back(nextTopIndex);
+            indices.push_back(bottomIndex);
+
+            indices.push_back(bottomIndex);
+            indices.push_back(nextTopIndex);
+            indices.push_back(nextBottomIndex);
         }
     }
 
