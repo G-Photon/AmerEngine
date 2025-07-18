@@ -17,9 +17,17 @@ Renderer::~Renderer()
     {
         model.reset();
     }
-    for (auto &light : lights)
+    for (auto &pointLight : pointLights)
     {
-        light.reset();
+        pointLight.reset();
+    }
+    for (auto &directionalLight : directionalLights)
+    {
+        directionalLight.reset();
+    }
+    for (auto &spotLight : spotLights)
+    {
+        spotLight.reset();
     }
     for (auto &primitive : primitives)
     {
@@ -89,10 +97,13 @@ void Renderer::Initialize()
     deferredGeometryShader =
         std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/geometry_pass.vert"),
                                  FileSystem::GetPath("resources/shaders/deferred/geometry_pass.frag"));
-    
+
     deferredLightingShader =
         std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/lighting_pass.vert"),
                                  FileSystem::GetPath("resources/shaders/deferred/lighting_pass.frag"));
+
+    lightsShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/utility/light.vert"),
+                                             FileSystem::GetPath("resources/shaders/utility/light.frag"));
     // 初始化帧缓冲
     SetupGBuffer();
     SetupShadowBuffer();
@@ -189,6 +200,12 @@ void Renderer::RenderScene()
         break;
     }
 
+    if (showLights)
+    {
+        // 渲染光源
+        RenderLights();
+    }
+
     if (hdrEnabled || bloomEnabled || ssaoEnabled)
     {
         RenderPostProcessing();
@@ -220,12 +237,20 @@ void Renderer::RenderForward()
     forwardShader->SetBool("ssaoEnabled", ssaoEnabled);
 
     // 设置光源
-    forwardShader->SetInt("numLights[0]", DirectionalLight::count); // 方向光数量
-    forwardShader->SetInt("numLights[1]", PointLight::count); // 点光
-    forwardShader->SetInt("numLights[2]", SpotLight::count); // 聚光灯数量
-    for (size_t i = 0; i < lights.size(); ++i)
+    forwardShader->SetInt("numLights[0]", directionalLights.size()); // 方向光数量
+    forwardShader->SetInt("numLights[1]", pointLights.size()); // 点光
+    forwardShader->SetInt("numLights[2]", spotLights.size()); // 聚光灯数量
+    for (size_t i = 0; i < pointLights.size(); ++i)
     {
-        lights[i]->SetupShader(*forwardShader, lights[i]->getNum());
+        pointLights[i]->SetupShader(*forwardShader, i);
+    }
+    for (size_t i = 0; i < directionalLights.size(); ++i)
+    {
+        directionalLights[i]->SetupShader(*forwardShader, i);
+    }
+    for (size_t i = 0; i < spotLights.size(); ++i)
+    {
+        spotLights[i]->SetupShader(*forwardShader, i);
     }
     // 渲染所有模型和几何体
     for (auto &model : models)
@@ -318,6 +343,35 @@ void Renderer::RenderSkybox()
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
     glDepthFunc(GL_LESS);
+}
+
+void Renderer::RenderLights()
+{
+    glDisable(GL_CULL_FACE); // 禁用面剔除确保小球可见
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE); // 避免写入深度
+
+    // 使用光源着色器
+    lightsShader->Use();
+
+    // 设置VP矩阵
+    lightsShader->SetMat4("u_ViewProjection", mainCamera->GetProjectionMatrix(width * 1.0f / height) * mainCamera->GetViewMatrix());
+
+    // 遍历所有光源
+    for (const std::shared_ptr<Light> &light : GetLights())
+    {
+        auto sphereModel = Geometry::CreateSphere();
+
+        sphereModel->SetTransform(light->position, glm::vec3(0.0f), glm::vec3(0.2f));
+        lightsShader->SetVec3("u_Model", light->position);
+        lightsShader->SetVec3("u_LightColor", light->diffuse);
+
+        // 绘制光源球体（假设有Sphere模型类）
+        sphereModel->Draw(*lightsShader);
+    }
+
+    glDepthMask(GL_TRUE);
+    glEnable(GL_CULL_FACE); // 恢复默认状态
 }
 
 void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, const glm::vec3 &scale,
@@ -470,7 +524,18 @@ std::shared_ptr<Model> Renderer::LoadModel(const std::string &path)
 
 void Renderer::AddLight(const std::shared_ptr<Light> &light)
 {
-    lights.push_back(light);
+    if (std::dynamic_pointer_cast<PointLight>(light))
+    {
+        pointLights.push_back(std::dynamic_pointer_cast<PointLight>(light));
+    }
+    else if (std::dynamic_pointer_cast<DirectionalLight>(light))
+    {
+        directionalLights.push_back(std::dynamic_pointer_cast<DirectionalLight>(light));
+    }
+    else if (std::dynamic_pointer_cast<SpotLight>(light))
+    {
+        spotLights.push_back(std::dynamic_pointer_cast<SpotLight>(light));
+    }
 }
 
 void Renderer::SetGammaCorrection(bool enabled)

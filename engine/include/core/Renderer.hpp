@@ -62,8 +62,12 @@ class Renderer
 
     // 光源管理
     void AddLight(const std::shared_ptr<Light> &light);
-    const std::vector<std::shared_ptr<Light>> &GetLights() const
+    std::vector<std::shared_ptr<Light>> GetLights() const
     {
+        std::vector<std::shared_ptr<Light>> lights;
+        lights.insert(lights.end(), pointLights.begin(), pointLights.end());
+        lights.insert(lights.end(), directionalLights.begin(), directionalLights.end());
+        lights.insert(lights.end(), spotLights.begin(), spotLights.end());
         return lights;
     }
 
@@ -76,6 +80,10 @@ class Renderer
     void SetShadow(bool enabled);
     void SetPBR(bool enabled);
     void SetIBL(bool enabled);
+    void SetLightsEnabled(bool enabled)
+    {
+        showLights = enabled;
+    }
 
     // 渲染模式
     void SetRenderMode(RenderMode mode);
@@ -117,6 +125,10 @@ class Renderer
     {
         return iblEnabled;
     }
+    bool IsLightsEnabled() const
+    {
+        return showLights;
+    }
 
     // 场景对象访问
     const std::vector<std::shared_ptr<Model>> &GetModels() const
@@ -143,7 +155,7 @@ class Renderer
 
     void DeleteObject(int index)
     {
-        if (index < 0 || index >= models.size() + primitives.size())
+        if (index < 0 || index >= models.size() + primitives.size()+ pointLights.size() + directionalLights.size() + spotLights.size())
             return;
 
         if (index < models.size())
@@ -156,19 +168,51 @@ class Renderer
             index -= models.size();
             primitives.erase(primitives.begin() + index);
         }
-        else if (index < models.size() + primitives.size() + lights.size())
+        else if (index < models.size() + primitives.size() + pointLights.size() + directionalLights.size() + spotLights.size())
         {
             // 删除光源
             index -= (models.size() + primitives.size());
-            lights.erase(lights.begin() + index);
+            // 依次检查并删除对应类型的光源
+            if (index < pointLights.size())
+            {
+                pointLights.erase(pointLights.begin() + index);
+            }
+            else if (index < pointLights.size() + directionalLights.size())
+            {
+                index -= pointLights.size();
+                directionalLights.erase(directionalLights.begin() + index);
+            }
+            else if (index < pointLights.size() + directionalLights.size() + spotLights.size())
+            {
+                index -= (pointLights.size() + directionalLights.size());
+                spotLights.erase(spotLights.begin() + index);
+            }
         }
-        return ;
+        return;
     }
 
+    std::vector<std::shared_ptr<Material>> getALLMaterials() const
+    {
+        std::vector<std::shared_ptr<Material>> allMaterials;
+        for (const auto &model : models)
+        {
+            for (const auto &mesh : model->GetMeshes())
+            {
+                allMaterials.push_back(mesh->GetMaterial());
+            }
+        }
+        for (const auto &primitive : primitives)
+        {
+            allMaterials.push_back(primitive.mesh->GetMaterial());
+        }
+        return allMaterials;
+    }
+    
   private:
     void RenderForward();
     void RenderDeferred();
     void RenderPostProcessing();
+    void RenderLights();
 
     void SetupGBuffer();
     void SetupShadowBuffer();
@@ -198,12 +242,15 @@ class Renderer
     std::unique_ptr<Shader> hdrShader;
     std::unique_ptr<Shader> bloomShader;
     std::unique_ptr<Shader> ssaoShader;
+    std::unique_ptr<Shader> lightsShader;
 
     std::unordered_map<std::string, std::shared_ptr<Shader>> shaders;
 
     // 场景数据
     std::vector<std::shared_ptr<Model>> models;
-    std::vector<std::shared_ptr<Light>> lights;
+    std::vector<std::shared_ptr<PointLight>> pointLights;
+    std::vector<std::shared_ptr<DirectionalLight>> directionalLights;
+    std::vector<std::shared_ptr<SpotLight>> spotLights;
     std::vector<Geometry::Primitive> primitives;
 
     // 环境
@@ -222,4 +269,5 @@ class Renderer
     bool shadowEnabled = false;
     bool pbrEnabled = false;
     bool iblEnabled = false;
+    bool showLights = false;
 };

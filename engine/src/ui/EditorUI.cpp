@@ -1,5 +1,6 @@
 #include "ui/EditorUI.hpp"
 #include "utils/FileDialog.hpp"
+#include <functional>
 EditorUI::EditorUI(GLFWwindow *window, Renderer *renderer) : window(window), renderer(renderer)
 {
 }
@@ -19,6 +20,8 @@ void EditorUI::Initialize()
     io.ConfigFlags |= ImGuiConfigFlags_None;
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
+    //io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -31,9 +34,9 @@ void EditorUI::Render()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    #ifdef IMGUI_HAS_DOCK
-        ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-    #endif
+    // #ifdef IMGUI_HAS_DOCK
+    //     ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
+    // #endif
 
     ShowMainMenuBar();
     if (showSceneHierarchy)
@@ -84,15 +87,18 @@ void EditorUI::ShowModelCreationDialog()
     //ImGui::OpenPopup("Create Model");
     if (ImGui::BeginPopup("Create Model"))
     {
-        ImGui::Text("Model Path:");
-        static char modelPath[128] = "";
-        ImGui::InputText("##ModelPath", modelPath, IM_ARRAYSIZE(modelPath));
-
-        if (ImGui::Button("Create"))
+        //用FileDialog选择模型文件
+        ImGui::Text("Select Model File:");
+        if (ImGui::Button("Browse"))
         {
-            // 创建模型逻辑
-            renderer->LoadModel(modelPath);
-            ImGui::CloseCurrentPopup();
+            std::string modelPath = FileDialog::OpenFile("Select Model File",
+                                                         "Model Files\0*.obj;*.fbx;*.gltf;*.glb\0");
+            if (!modelPath.empty())
+            {
+                // 这里可以处理模型路径
+                renderer->LoadModel(modelPath);
+                ImGui::CloseCurrentPopup(); // 关闭对话框
+            }
         }
         ImGui::EndPopup();
     }
@@ -192,7 +198,7 @@ void EditorUI::ShowSceneHierarchy()
 
     if (ImGui::TreeNode("Lights"))
     {
-        auto &lights = renderer->GetLights();
+        const auto &lights = renderer->GetLights();
         auto &primitives = renderer->GetPrimitives();
         for (int i = 0; i < lights.size(); ++i)
         {
@@ -272,14 +278,17 @@ void EditorUI::ShowInspector()
 
             model->SetTransform(position, rotation, scale);
 
-            // 材质编辑器
+            // 材质编辑器 可能有很多个不同的mesh，imgui需要分配不同id
             for (auto &mesh : model->GetMeshes())
             {
+                ImGui::PushID(&mesh);
+                ImGui::Text("Mesh: %s", mesh->GetName().c_str());
                 if (ImGui::TreeNode(mesh->GetName().c_str()))
                 {
                     ShowMaterialEditor(*mesh->GetMaterial());
                     ImGui::TreePop();
                 }
+                ImGui::PopID();
             }
         }
         else if (selectedObjectIndex < modelCount + primitiveCount)
@@ -336,10 +345,15 @@ void EditorUI::ShowMaterialEditor(Material &material)
         ImGui::DragFloat("Shininess", &material.shininess, 1.0f, 1.0f, 256.0f);
 
         // 贴图选择器
-        material.useAmbientMap = TextureSelector("Ambient Map", material.ambientMap, "ambient");
-        material.useDiffuseMap = TextureSelector("Diffuse Map", material.diffuseMap, "diffuse");
-        material.useSpecularMap = TextureSelector("Specular Map", material.specularMap, "specular");
-        material.useNormalMap = TextureSelector("Normal Map", material.normalMap, "normal");
+        TextureSelector("Ambient Map", material.ambientMap, "ambient");
+        TextureSelector("Diffuse Map", material.diffuseMap, "diffuse");
+        TextureSelector("Specular Map", material.specularMap, "specular");
+        TextureSelector("Normal Map", material.normalMap, "normal");
+
+        material.useAmbientMap = material.ambientMap != nullptr;
+        material.useDiffuseMap = material.diffuseMap != nullptr;
+        material.useSpecularMap = material.specularMap != nullptr;
+        material.useNormalMap = material.normalMap != nullptr;
     }
     else
     {
@@ -354,16 +368,36 @@ void EditorUI::ShowMaterialEditor(Material &material)
         TextureSelector("Roughness Map", material.roughnessMap, "roughness");
         TextureSelector("AO Map", material.aoMap, "ao");
         TextureSelector("Normal Map", material.normalMap, "normal");
+        material.useAlbedoMap = material.albedoMap != nullptr;
+        material.useMetallicMap = material.metallicMap != nullptr;
+        material.useRoughnessMap = material.roughnessMap != nullptr;
+        material.useAOMap = material.aoMap != nullptr;
+        material.useNormalMap = material.normalMap != nullptr;
     }
 }
-
+// 现存的所有Material编辑器，可以直接选择材质进行更改
 void EditorUI::ShowMaterialEditor()
 {
     ImGui::Begin("Material Editor");
+
+    // Example: If you want to show all materials from the renderer
+    const auto &allMaterials = renderer->getALLMaterials();
+    for (auto &material : allMaterials)
+    {
+        ImGui::PushID(std::hash<std::shared_ptr<Material>>{}(material));
+        ImGui::Text("Material: %s", material->name.c_str());
+        if (ImGui::TreeNode(material->name.c_str()))
+        {
+            ShowMaterialEditor(*material);
+            ImGui::TreePop();
+        }
+        ImGui::PopID();
+    }
+
     ImGui::End();
 }
 
-bool EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture, const std::string &idSuffix)
+void EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture, const std::string &idSuffix)
 {
     ImGui::Text("%s", label.c_str());
 
@@ -387,12 +421,9 @@ bool EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture
             texture = std::make_shared<Texture>();
             if (texture->LoadFromFile(path))
             {
-                // 纹理加载成功
-                return true;
             }
             else
             {
-                // 纹理加载失败，处理错误
                 texture.reset();
                 ImGui::Text("Failed to load texture: %s", path.c_str());
             }
@@ -407,7 +438,6 @@ bool EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture
     }
 
     ImGui::Separator();
-    return false;
 }
 
 void EditorUI::ShowRendererSettings()
@@ -471,6 +501,11 @@ void EditorUI::ShowRendererSettings()
         renderer->SetIBL(ibl);
     }
 
+    bool showLights = renderer->IsLightsEnabled();
+    if (ImGui::Checkbox("Show Lights", &showLights))
+    {
+        renderer->SetLightsEnabled(showLights);
+    }
     ImGui::End();
 }
 

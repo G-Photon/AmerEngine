@@ -13,6 +13,14 @@ class Light
     {
         return 1; // 默认返回1，子类可以重载此方法
     }
+
+    virtual void RemoveFromScene(int index = 0)
+    {
+        // 默认实现为空，子类可以重载此方法
+    }
+
+    glm::vec3 position = glm::vec3(0.0f);
+    glm::vec3 diffuse = glm::vec3(1.0f);
 };
 
 class PointLight : public Light

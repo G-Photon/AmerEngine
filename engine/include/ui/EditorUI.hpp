@@ -8,12 +8,14 @@
 #include <imgui_impl_opengl3.h>
 #include <memory>
 #include <string>
+#include <vector>
+#include <filesystem>
 
 class Renderer;
 
 class EditorUI
 {
-  public:
+public:
     EditorUI(GLFWwindow *window, Renderer *renderer);
     ~EditorUI();
 
@@ -25,23 +27,37 @@ class EditorUI
     void ShowMainMenuBar();
     void ShowSceneHierarchy();
     void ShowInspector();
+    void ShowAssetsPanel(); // 新增资源面板
+    void ShowViewport();    // 新增视口面板
     void ShowRendererSettings();
     void ShowMaterialEditor();
     void ShowPrimitiveSelectionDialog();
     void ShowLightSelectionDialog();
     void ShowModelCreationDialog();
-  private:
+    
+private:
     void ShowMaterialEditor(Material &material);
-    bool TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture, const std::string &idSuffix = "");
+    void TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture,
+                         const std::string &idSuffix = "");
+    
+    void RefreshAssetList(); // 刷新资源列表
+    void CreateDefaultLayout(); // 创建默认布局
 
     GLFWwindow *window;
     Renderer *renderer;
 
+    // 窗口显示状态
     bool showDemoWindow = false;
     bool showSceneHierarchy = true;
     bool showInspector = true;
-    bool showRendererSettings = true;
-    bool showMaterialEditor = true;
+    bool showAssetsPanel = true; // 新增资源面板状态
+    bool showViewport = true;    // 新增视口面板状态
+    bool showRendererSettings = false;
+    bool showMaterialEditor = false;
 
     int selectedObjectIndex = -1;
+    
+    // 资源管理相关
+    std::vector<std::filesystem::path> assetFiles;
+    std::string currentAssetPath = "assets"; // 默认资源路径
 };

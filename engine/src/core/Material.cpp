@@ -15,7 +15,7 @@ void Material::Bind(Shader &shader)
         shader.SetVec3("material.specular", specular);
         shader.SetFloat("material.shininess", shininess);
 
-        if (useAmbientMap && ambientMap)
+        if (useAmbientMap)
         {
             ambientMap->Bind(0);
             shader.SetBool("material.useAmbientMap", 1);
@@ -26,7 +26,7 @@ void Material::Bind(Shader &shader)
             shader.SetBool("material.useAmbientMap", 0);
         }
 
-        if (useDiffuseMap && diffuseMap)
+        if (useDiffuseMap)
         {
             diffuseMap->Bind(1);
             shader.SetBool("material.useDiffuseMap", 1);
@@ -37,7 +37,7 @@ void Material::Bind(Shader &shader)
             shader.SetBool("material.useDiffuseMap", 0);
         }
 
-        if (useSpecularMap && specularMap)
+        if (useSpecularMap)
         {
             specularMap->Bind(2);
             shader.SetBool("material.useSpecularMap", 1);
@@ -48,7 +48,7 @@ void Material::Bind(Shader &shader)
             shader.SetBool("material.useSpecularMap", 0);
         }
 
-        if (useNormalMap && normalMap)
+        if (useNormalMap)
         {
             normalMap->Bind(3);
             shader.SetBool("material.useNormalMap", 1);

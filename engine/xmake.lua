@@ -3,7 +3,8 @@ set_languages("c++20")
 add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
 -- Project: Engine
 add_requires("glm","glfw","glad", "assimp", "libsdl3", "tinyfiledialogs")
-add_requires("imgui",{configs = {glfw = true, opengl3 = true}})
+-- 选择imgui的docking分支而不是main分支
+add_requires("imgui docking",{configs = {glfw = true, opengl3 = true, docking = true}})
 target("engine")
     set_kind("binary")
     add_files("src/**.cpp")

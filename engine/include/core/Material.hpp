@@ -47,6 +47,11 @@ class Material
     std::shared_ptr<Texture> roughnessMap;
     std::shared_ptr<Texture> aoMap;
 
+    bool useAlbedoMap = false;
+    bool useMetallicMap = false;
+    bool useRoughnessMap = false;
+    bool useAOMap = false;
+
     MaterialType type;
     std::string name = "New Material";
 };

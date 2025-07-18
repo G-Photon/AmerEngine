@@ -30,7 +30,12 @@ void Model::LoadModel(const std::string &path)
         return;
     }
 
+    // WINDOWS端为'\'，其他平台为'/'
+    #ifdef _WIN32
+    directory = path.substr(0, path.find_last_of('\\'));
+    #else
     directory = path.substr(0, path.find_last_of('/'));
+    #endif
     ProcessNode(scene->mRootNode, scene);
 }
 
@@ -116,8 +121,18 @@ std::shared_ptr<Mesh> Model::ProcessMesh(aiMesh *mesh, const aiScene *scene)
 std::shared_ptr<Material> Model::LoadMaterial(aiMaterial *mat)
 {
     auto material = std::make_shared<Material>();
+    
+    if (!mat)
+    {
+        std::cerr << "ERROR::ASSIMP::Material is null!" << std::endl;
+        return material;
+    }
     aiString name;
-    mat->Get(AI_MATKEY_NAME, name);
+    mat->Get(AI_MATKEY_NAME, name); // name经常读取到空字符串
+    if (name.length == 0)
+    {
+        name.Set("Default Material");
+    }
     material->name = name.C_Str();
 
     // 加载漫反射贴图
@@ -126,6 +141,7 @@ std::shared_ptr<Material> Model::LoadMaterial(aiMaterial *mat)
     if (!diffuseMaps.empty())
     {
         material->diffuseMap = diffuseMaps[0];
+        material->useDiffuseMap = true;
     }
 
     // 加载镜面反射贴图
@@ -134,6 +150,7 @@ std::shared_ptr<Material> Model::LoadMaterial(aiMaterial *mat)
     if (!specularMaps.empty())
     {
         material->specularMap = specularMaps[0];
+        material->useSpecularMap = true;
     }
 
     // 加载法线贴图
@@ -142,6 +159,7 @@ std::shared_ptr<Material> Model::LoadMaterial(aiMaterial *mat)
     if (!normalMaps.empty())
     {
         material->normalMap = normalMaps[0];
+        material->useNormalMap = true;
     }
 
     // 加载高度贴图
@@ -152,7 +170,7 @@ std::shared_ptr<Material> Model::LoadMaterial(aiMaterial *mat)
         // 视差贴图可以使用高度贴图
     }
 
-    // 加载金属度/粗糙度贴图 (PBR)
+    // 加载金属度/粗糙度 (PBR)
     aiColor3D color;
     if (mat->Get(AI_MATKEY_COLOR_DIFFUSE, color) == AI_SUCCESS)
     {
@@ -170,6 +188,44 @@ std::shared_ptr<Material> Model::LoadMaterial(aiMaterial *mat)
         material->roughness = roughness;
     }
 
+    // 如果PBR使用贴图
+    std::vector<std::shared_ptr<Texture>> albedoMaps =
+        LoadMaterialTextures(mat, aiTextureType_BASE_COLOR, "texture_albedo");
+    if (!albedoMaps.empty())
+    {
+        material->albedoMap = albedoMaps[0];
+        material->useAlbedoMap = true;
+    }
+    std::vector<std::shared_ptr<Texture>> metallicMaps =
+        LoadMaterialTextures(mat, aiTextureType_METALNESS, "texture_metallic");
+    if (!metallicMaps.empty())
+    {
+        material->metallicMap = metallicMaps[0];
+        material->useMetallicMap = true;
+    }
+    std::vector<std::shared_ptr<Texture>> roughnessMaps =
+        LoadMaterialTextures(mat, aiTextureType_DIFFUSE_ROUGHNESS, "texture_roughness");
+    if (!roughnessMaps.empty())
+    {
+        material->roughnessMap = roughnessMaps[0];
+        material->useRoughnessMap = true;
+    }
+    std::vector<std::shared_ptr<Texture>> aoMaps =
+        LoadMaterialTextures(mat, aiTextureType_AMBIENT_OCCLUSION, "texture_ao");
+    if (!aoMaps.empty())
+    {
+        material->aoMap = aoMaps[0];
+        material->useAOMap = true;
+    }
+    // 设置材质类型
+    if (!material->albedoMap && !material->metallicMap && !material->roughnessMap && !material->aoMap)
+    {
+        material->type = BLINN_PHONG;
+    }
+    else
+    {
+        material->type = PBR;
+    }
     return material;
 }
 
@@ -183,10 +239,18 @@ std::vector<std::shared_ptr<Texture>> Model::LoadMaterialTextures(aiMaterial *ma
         aiString str;
         mat->GetTexture(type, i, &str);
 
+        std::string filename = std::string(str.C_Str());
+        filename = directory + '/' + filename;
+
+
+#ifdef _WIN32
+        std::replace(filename.begin(), filename.end(), '\\', '/'); // 替换Windows路径分隔符
+#endif
+        
         bool skip = false;
         for (auto &tex : texturesLoaded)
         {
-            if (std::strcmp(tex->GetPath().data(), str.C_Str()) == 0)
+            if (std::strcmp(tex->GetPath().data(), filename.c_str()) == 0)
             {
                 textures.push_back(tex);
                 skip = true;
@@ -197,9 +261,8 @@ std::vector<std::shared_ptr<Texture>> Model::LoadMaterialTextures(aiMaterial *ma
         if (!skip)
         {
             auto texture = std::make_shared<Texture>();
-            std::string filename = std::string(str.C_Str());
-            filename = directory + '/' + filename;
-
+            // 作为模型读取材质，添加标识符示意不用翻转
+            filename += ".model";
             if (texture->LoadFromFile(filename))
             {
                 texture->type = typeName;

@@ -41,9 +41,23 @@ void Texture::Bind(unsigned int unit) const
     glBindTexture(GL_TEXTURE_2D, ID);
 }
 
-bool Texture::LoadFromFile(const std::string &filepath)
+bool Texture::LoadFromFile(const std::string &path)
 {
-    stbi_set_flip_vertically_on_load(true);
+    // 如果是模型 就不翻转，如果是普通读取材质，就翻转
+    if (path.empty())
+    {
+        std::cerr << "Texture path is empty!" << std::endl;
+        return false;
+    }
+    std::string filepath=path;
+    if (path.ends_with(".model")){
+        stbi_set_flip_vertically_on_load(false); // 模型贴图不翻转
+        filepath = filepath.substr(0, filepath.find_last_of('.')); // 去掉后缀
+    } else {
+        stbi_set_flip_vertically_on_load(true); // 普通贴图翻转
+    }
+    // 中文读取，防止乱码
+    setlocale(LC_ALL, "zh_CN.UTF-8");
 
     unsigned char *data = stbi_load(filepath.c_str(), &Width, &Height, &nrComponents, 0);
     if (data)
