@@ -1,5 +1,6 @@
 ﻿#include "ui/EditorUI.hpp"
 #include "glm/gtc/type_ptr.hpp"
+#include "imgui.h"
 #include "utils/FileDialog.hpp"
 #include "utils/FileSystem.hpp"
 #include <cstdio>
@@ -175,8 +176,12 @@ void EditorUI::ShowLightSelectionDialog()
 
 void EditorUI::ShowSceneHierarchy()
 {
+    // 能紧贴在应用程序的上下左右和悬空 能够被拖拽移动 窗口
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver); // 设置窗口位置
+    ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver); // 设置窗口大小
+    ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID); // 设置窗口视口
+    ImGui::SetNextWindowBgAlpha(0.5f); // 设置背景透明
     ImGui::Begin(ConvertToUTF8(L"场景层级").c_str());
-
     if (ImGui::TreeNode(ConvertToUTF8(L"模型").c_str()))
     {
         for (int i = 0; i < renderer->GetModelCount(); ++i)

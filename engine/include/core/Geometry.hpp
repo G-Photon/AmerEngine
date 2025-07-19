@@ -17,6 +17,7 @@ class Geometry
         TORUS,
         ELLIPSOID,
         FRUSTUM,
+        ARROW,
         END
     };
 
@@ -52,4 +53,5 @@ class Geometry
                                                  int segments = 32);
     static std::shared_ptr<Mesh> CreateFrustum(float radiusTop = 0.5f, float radiusBottom = 0.5f, float height = 1.0f,
                                                int segments = 32);
+    static std::shared_ptr<Mesh> CreateArrow(float length, float headSize);
 };

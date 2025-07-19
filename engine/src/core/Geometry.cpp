@@ -478,66 +478,142 @@ std::shared_ptr<Mesh> Geometry::CreateEllipsoid(float radiusX, float radiusY, fl
 
 std::shared_ptr<Mesh> Geometry::CreateFrustum(float radiusTop, float radiusBottom, float height, int segments)
 {
+    if (segments < 3)
+        segments = 3; // 确保至少3个分段
+
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
 
-    float halfHeight = height / 2.0f;
+    const float halfHeight = height / 2.0f;
+    const float slope = (radiusBottom - radiusTop) / height;
 
-    // 顶部中心顶点
-    vertices.push_back({{0, halfHeight, 0}, {0, 1, 0}, {0.5f, 0.5f}});
-    // 底部中心顶点
-    vertices.push_back({{0, -halfHeight, 0}, {0, -1, 0}, {0.5f, 0.5f}});
+    // 1. 创建顶部和底部中心顶点
+    vertices.push_back({{0.0f, halfHeight, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.5f, 1.0f}});   // 顶部中心 (0)
+    vertices.push_back({{0.0f, -halfHeight, 0.0f}, {0.0f, -1.0f, 0.0f}, {0.5f, 0.0f}}); // 底部中心 (1)
 
-    // 生成顶部和底部圆面顶点
-    for (int i = 0; i <= segments; ++i) // 注意：i <= segments 确保闭合
-    {
-        float theta = i * 2.0f * glm::pi<float>() / segments;
-        float xTop = radiusTop * cos(theta);
-        float zTop = radiusTop * sin(theta);
-        float xBottom = radiusBottom * cos(theta);
-        float zBottom = radiusBottom * sin(theta);
-
-        // 顶部圆面顶点（法线朝上）
-        vertices.push_back({{xTop, halfHeight, zTop}, {0, 1, 0}, {i / (float)segments, 0}});
-        // 底部圆面顶点（法线朝下）
-        vertices.push_back({{xBottom, -halfHeight, zBottom}, {0, -1, 0}, {i / (float)segments, 1}});
-    }
-
-    // 生成侧面顶点
+    // 2. 创建顶部和底部圆环顶点
     for (int i = 0; i < segments; ++i)
     {
-        int topIndex = 2 + i * 2;          // 顶部圆面顶点索引
-        int bottomIndex = topIndex + 1;   // 底部圆面顶点索引
-        int nextTopIndex = topIndex + 2;   // 下一个顶部圆面顶点索引
-        int nextBottomIndex = bottomIndex + 2; // 下一个底部圆面顶点索引
+        const float theta = i * 2.0f * glm::pi<float>() / segments;
+        const float cosTheta = cos(theta);
+        const float sinTheta = sin(theta);
 
-        // 计算当前和下一个的圆面顶点坐标
-        float theta = i * 2.0f * glm::pi<float>() / segments;
-        float xTop = radiusTop * cos(theta);
-        float zTop = radiusTop * sin(theta);
-        float xBottom = radiusBottom * cos(theta);
-        float zBottom = radiusBottom * sin(theta);
+        // 顶部圆环顶点 (法线向上)
+        vertices.push_back({
+            {radiusTop * cosTheta, halfHeight, radiusTop * sinTheta},
+            {0.0f, 1.0f, 0.0f},
+            {0.5f + 0.5f * cosTheta, 0.5f + 0.5f * sinTheta} // 圆形展开
+        });
 
-        glm::vec3 sideNormal((radiusTop - radiusBottom) / height,
-                             (radiusTop + radiusBottom) / (2.0f * height), 0);
-        sideNormal = glm::normalize(sideNormal);
+        // 底部圆环顶点 (法线向下)
+        vertices.push_back({
+            {radiusBottom * cosTheta, -halfHeight, radiusBottom * sinTheta},
+            {0.0f, -1.0f, 0.0f},
+            {0.5f + 0.5f * cosTheta, 0.5f + 0.5f * sinTheta} // 圆形展开
+        });
+    }
 
-        // 侧面顶点
-        vertices.push_back({{xTop, halfHeight, zTop}, sideNormal, {i / (float)segments, 0}});
-        vertices.push_back({{xBottom, -halfHeight, zBottom}, sideNormal, {i / (float)segments, 1}});
+    // 3. 创建侧面顶点 (每个顶点有独立的法线)
+    for (int i = 0; i < segments; ++i)
+    {
+        const float theta = i * 2.0f * glm::pi<float>() / segments;
+        const float cosTheta = cos(theta);
+        const float sinTheta = sin(theta);
 
-        // 生成侧面索引
-        if (i < segments - 1)
-        {
-            indices.push_back(topIndex);
-            indices.push_back(nextTopIndex);
-            indices.push_back(bottomIndex);
+        // 计算侧面法线 (基于斜率)
+        glm::vec3 normal(cosTheta, slope, sinTheta);
+        normal = glm::normalize(normal);
 
-            indices.push_back(bottomIndex);
-            indices.push_back(nextTopIndex);
-            indices.push_back(nextBottomIndex);
-        }
+        // 顶部环侧面顶点
+        vertices.push_back({
+            {radiusTop * cosTheta, halfHeight, radiusTop * sinTheta}, normal, {i / static_cast<float>(segments), 1.0f}
+            // U沿圆周，V=1.0顶部
+        });
+
+        // 底部环侧面顶点
+        vertices.push_back({
+            {radiusBottom * cosTheta, -halfHeight, radiusBottom * sinTheta},
+            normal,
+            {i / static_cast<float>(segments), 0.0f} // U沿圆周，V=0.0底部
+        });
+    }
+
+    // 4. 创建索引 (确保逆时针顺序)
+
+    // 顶部圆面 (逆时针)
+    for (int i = 0; i < segments; ++i)
+    {
+        const int next = (i + 1) % segments;
+        indices.push_back(0); // 顶部中心
+        indices.push_back(2 + 2 * next); // 下一个顶部点
+        indices.push_back(2 + 2 * i);    // 当前顶部点
+
+    }
+
+    // 底部圆面 (逆时针)
+    for (int i = 0; i < segments; ++i)
+    {
+        const int next = (i + 1) % segments;
+        indices.push_back(1);                // 底部中心
+        indices.push_back(2 + 2 * i + 1);    // 当前底部点
+        indices.push_back(2 + 2 * next + 1); // 下一个底部点
+    }
+
+    // 侧面 (逆时针)
+    const int sideStart = 2 + 2 * segments; // 侧面顶点起始索引
+    for (int i = 0; i < segments; ++i)
+    {
+        const int next = (i + 1) % segments;
+
+        // 当前四边形
+        const int topCurrent = sideStart + 2 * i;
+        const int bottomCurrent = topCurrent + 1;
+        const int topNext = sideStart + 2 * next;
+        const int bottomNext = topNext + 1;
+
+        // 第一个三角形 (顶部当前 -> 底部当前 -> 顶部下一个)
+        indices.push_back(topCurrent);
+        indices.push_back(topNext);
+        indices.push_back(bottomCurrent);
+
+        // 第二个三角形 (底部当前 -> 底部下一个 -> 顶部下一个)
+        indices.push_back(bottomCurrent);
+        indices.push_back(topNext);
+        indices.push_back(bottomNext);
     }
 
     return std::make_shared<Mesh>(vertices, indices);
+}
+
+std::shared_ptr<Mesh> Geometry::CreateArrow(float length, float headSize)
+{
+    // 创建箭头的主体部分（圆柱体）
+    auto cylinder = CreateCylinder(0.05f, length - headSize, 16);
+
+    // 创建箭头的头部部分（圆锥体）
+    auto cone = CreateCone(0.1f, headSize, 16);
+
+    // 设置圆锥的位置，使其位于圆柱的顶部
+    glm::vec3 conePosition(0.0f, (length - headSize) / 2.0f + headSize / 2.0f, 0.0f);
+    cone->SetTransform(conePosition, glm::vec3(0.0f), glm::vec3(1.0f));
+
+    // 合并圆柱和圆锥的顶点和索引
+    std::vector<Vertex> combinedVertices = cylinder->GetVertices();
+    std::vector<unsigned int> combinedIndices = cylinder->GetIndices();
+
+    const auto &coneVertices = cone->GetVertices();
+    const auto &coneIndices = cone->GetIndices();
+
+    // 更新圆锥的索引以适应合并后的顶点数组
+    unsigned int vertexOffset = static_cast<unsigned int>(combinedVertices.size());
+    for (const auto &vertex : coneVertices)
+    {
+        combinedVertices.push_back(vertex);
+    }
+    for (const auto &index : coneIndices)
+    {
+        combinedIndices.push_back(index + vertexOffset);
+    }
+
+    return std::make_shared<Mesh>(combinedVertices, combinedIndices);
 }
