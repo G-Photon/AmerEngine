@@ -595,7 +595,6 @@ std::shared_ptr<Mesh> Geometry::CreateArrow(float length, float headSize)
 
     // 设置圆锥的位置，使其位于圆柱的顶部
     glm::vec3 conePosition(0.0f, (length - headSize) / 2.0f + headSize / 2.0f, 0.0f);
-    cone->SetTransform(conePosition, glm::vec3(0.0f), glm::vec3(1.0f));
 
     // 合并圆柱和圆锥的顶点和索引
     std::vector<Vertex> combinedVertices = cylinder->GetVertices();
@@ -608,7 +607,9 @@ std::shared_ptr<Mesh> Geometry::CreateArrow(float length, float headSize)
     unsigned int vertexOffset = static_cast<unsigned int>(combinedVertices.size());
     for (const auto &vertex : coneVertices)
     {
-        combinedVertices.push_back(vertex);
+        Vertex newVertex = vertex;
+        newVertex.Position += conePosition; // 将圆锥顶点位置偏移到
+        combinedVertices.push_back(newVertex);
     }
     for (const auto &index : coneIndices)
     {

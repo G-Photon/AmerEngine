@@ -347,30 +347,75 @@ void Renderer::RenderSkybox()
 
 void Renderer::RenderLights()
 {
-    glDisable(GL_CULL_FACE); // 禁用面剔除确保小球可见
+    glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
-    glDepthMask(GL_FALSE); // 避免写入深度
+    glDepthMask(GL_FALSE);
 
-    // 使用光源着色器
     lightsShader->Use();
-
-    // 设置VP矩阵
     lightsShader->SetMat4("view", mainCamera->GetViewMatrix());
     lightsShader->SetMat4("projection", mainCamera->GetProjectionMatrix(width * 1.0f / height));
 
-    // 遍历所有光源
     for (const std::shared_ptr<Light> &light : GetLights())
     {
-        auto sphereModel = Geometry::CreateSphere();
+        std::shared_ptr<Mesh> lightMesh;
+        glm::vec3 scale(0.2f);
+        glm::vec3 rotation(0.0f);
 
-        sphereModel->SetTransform(light->getPosition(), glm::vec3(0.0f), glm::vec3(0.2f));
-        lightsShader->SetVec3("lightColor", light->getLightColor());
-        // 绘制光源球体（假设有Sphere模型类）
-        sphereModel->Draw(*lightsShader);
+        switch (light->getType())
+        {
+        case 0:
+            lightMesh = Geometry::CreateSphere();
+            lightMesh->SetTransform(light->getPosition(), rotation, scale);
+            break;
+        case 2: {
+            auto spotLight = std::dynamic_pointer_cast<SpotLight>(light);
+            if (spotLight)
+            {
+                // 计算圆锥的高度和半径（基于外切角）
+                const float coneHeight = 1.0f; // 固定高度，美观的比例
+                const float coneRadius = coneHeight * glm::tan(glm::acos(spotLight->outerCutOff));
+
+                // 创建圆台（顶部半径为0即为圆锥）
+                lightMesh = Geometry::CreateFrustum(0.0f, coneRadius, coneHeight/2, 16);
+
+                // 计算旋转使圆锥指向正确方向
+                glm::vec3 direction = glm::normalize(spotLight->direction);
+                glm::vec3 up(0.0f, 1.0f, 0.0f);
+
+                if (glm::length(direction) > 0.001f)
+                {
+                    direction = glm::normalize(-direction);
+
+                    // 计算旋转轴和角度
+                    glm::vec3 axis = glm::cross(up, direction);
+                    float angle = glm::acos(glm::dot(up, direction));
+
+                    rotation = glm::degrees(axis * angle);
+                }
+
+                // 调整位置使圆锥顶点在光源位置
+                // 圆锥顶点在光源位置，底部沿方向延伸
+                glm::vec3 position = spotLight->position;
+
+                // 设置变换并绘制
+                lightMesh->SetTransform(position, rotation, glm::vec3(1.0f));
+
+                // 恢复原始颜色
+                lightsShader->SetVec3("lightColor", light->getLightColor());
+            }
+            break;
+        }
+        }
+
+        if (lightMesh)
+        {
+            lightsShader->SetVec3("lightColor", light->getLightColor());
+            lightMesh->Draw(*lightsShader);
+        }
     }
 
     glDepthMask(GL_TRUE);
-    glEnable(GL_CULL_FACE); // 恢复默认状态
+    glEnable(GL_CULL_FACE);
 }
 
 void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, const glm::vec3 &scale,
@@ -410,6 +455,9 @@ void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, c
         break;
     case Geometry::FRUSTUM:
         primitive.mesh = Geometry::CreateFrustum();
+        break;
+    case Geometry::ARROW:
+        primitive.mesh = Geometry::CreateArrow(1.0f, 0.2f);
         break;
     default:
         std::cerr << "Unsupported geometry type!" << std::endl;

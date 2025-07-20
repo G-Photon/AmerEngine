@@ -126,7 +126,8 @@ void EditorUI::ShowPrimitiveSelectionDialog()
         ImGui::RadioButton(ConvertToUTF8(L"金字塔").c_str(), &primitiveType, 5);
         ImGui::RadioButton(ConvertToUTF8(L"环面").c_str(), &primitiveType, 6);
         ImGui::RadioButton(ConvertToUTF8(L"椭球体").c_str(), &primitiveType, 7);
-        ImGui::RadioButton(ConvertToUTF8(L"截头锥").c_str(), &primitiveType, 8);
+        ImGui::RadioButton(ConvertToUTF8(L"圆台").c_str(), &primitiveType, 8);
+        ImGui::RadioButton(ConvertToUTF8(L"箭头").c_str(), &primitiveType, 9);
 
         if (ImGui::Button(ConvertToUTF8(L"创建").c_str()))
         {
@@ -570,16 +571,19 @@ void EditorUI::OnLightInspectorGUI(Light &light)
         ImGui::ColorEdit3(ConvertToUTF8(L"高光").c_str(), glm::value_ptr(spotLight.specular));
         ImGui::DragFloat(ConvertToUTF8(L"强度").c_str(), &spotLight.intensity, 0.1f, 0.0f, 100.0f);
 
+        // 内切角应该小于外切角
         float degrees = glm::degrees(glm::acos(spotLight.cutOff));
-        if (ImGui::DragFloat(ConvertToUTF8(L"内切角").c_str(), &degrees, 1.0f, 0.0f, 90.0f))
+        float outerDegrees = glm::degrees(glm::acos(spotLight.outerCutOff));
+        // 内切角是光锥的角度，范围在0到90度之间
+        if (ImGui::DragFloat(ConvertToUTF8(L"内切角").c_str(), &degrees, 1.0f, 0.0f, outerDegrees))
         {
             spotLight.cutOff = glm::cos(glm::radians(degrees));
         }
 
-        degrees = glm::degrees(glm::acos(spotLight.outerCutOff));
-        if (ImGui::DragFloat(ConvertToUTF8(L"外切角").c_str(), &degrees, 1.0f, 0.0f, 90.0f))
+        // 外切角应该大于内切角
+        if (ImGui::DragFloat(ConvertToUTF8(L"外切角").c_str(), &outerDegrees, 1.0f, degrees, 89.9f))
         {
-            spotLight.outerCutOff = glm::cos(glm::radians(degrees));
+            spotLight.outerCutOff = glm::cos(glm::radians(outerDegrees));
         }
 
         ImGui::DragFloat(ConvertToUTF8(L"常数项").c_str(), &spotLight.constant, 0.01f, 0.0f, 1.0f);
