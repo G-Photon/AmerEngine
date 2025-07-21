@@ -27,7 +27,7 @@ void EditorUI::Initialize()
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
-    //io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
+    // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
     ImGui::StyleColorsDark();
 
     ImGui_ImplGlfw_InitForOpenGL(window, true);
@@ -90,16 +90,16 @@ void EditorUI::ShowMainMenuBar()
 
 void EditorUI::ShowModelCreationDialog()
 {
-    //ImGui::OpenPopup("Create Model");
+    // ImGui::OpenPopup("Create Model");
     if (ImGui::BeginPopup(ConvertToUTF8(L"导入模型").c_str()))
     {
-        //用FileDialog选择模型文件
+        // 用FileDialog选择模型文件
         ImGui::Text("%s", ConvertToUTF8(L"选择模型文件:").c_str());
-        
+
         if (ImGui::Button(ConvertToUTF8(L"浏览").c_str()))
         {
-            std::string modelPath = FileDialog::OpenFile(ConvertToUTF8(L"选择模型文件").c_str(),
-                                                         "Model Files\0*.obj;*.fbx;*.gltf;*.glb\0");
+            std::string modelPath =
+                FileDialog::OpenFile(ConvertToUTF8(L"选择模型文件").c_str(), "Model Files\0*.obj;*.fbx;*.gltf;*.glb\0");
             if (!modelPath.empty())
             {
                 // 这里可以处理模型路径
@@ -113,7 +113,7 @@ void EditorUI::ShowModelCreationDialog()
 
 void EditorUI::ShowPrimitiveSelectionDialog()
 {
-    //ImGui::OpenPopup("Create Primitive");
+    // ImGui::OpenPopup("Create Primitive");
     if (ImGui::BeginPopup(ConvertToUTF8(L"创建简单几何体").c_str()))
     {
         ImGui::Text("%s", ConvertToUTF8(L"几何体类型：").c_str());
@@ -132,9 +132,8 @@ void EditorUI::ShowPrimitiveSelectionDialog()
         if (ImGui::Button(ConvertToUTF8(L"创建").c_str()))
         {
             // 创建几何体逻辑
-            renderer->CreatePrimitive(static_cast<Geometry::Type>(primitiveType),
-                                      glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
-                                      Material());
+            renderer->CreatePrimitive(static_cast<Geometry::Type>(primitiveType), glm::vec3(0.0f), glm::vec3(1.0f),
+                                      glm::vec3(0.0f), Material());
             ImGui::CloseCurrentPopup();
         }
         ImGui::EndPopup();
@@ -143,7 +142,7 @@ void EditorUI::ShowPrimitiveSelectionDialog()
 
 void EditorUI::ShowLightSelectionDialog()
 {
-    //ImGui::OpenPopup("Create Light");
+    // ImGui::OpenPopup("Create Light");
     if (ImGui::BeginPopup(ConvertToUTF8(L"创建光源").c_str()))
     {
         ImGui::Text("%s", ConvertToUTF8(L"光源类型：").c_str());
@@ -178,10 +177,10 @@ void EditorUI::ShowLightSelectionDialog()
 void EditorUI::ShowSceneHierarchy()
 {
     // 能紧贴在应用程序的上下左右和悬空 能够被拖拽移动 窗口
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver); // 设置窗口位置
+    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);      // 设置窗口位置
     ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver); // 设置窗口大小
-    ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID); // 设置窗口视口
-    ImGui::SetNextWindowBgAlpha(0.5f); // 设置背景透明
+    ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);         // 设置窗口视口
+    ImGui::SetNextWindowBgAlpha(0.5f);                                  // 设置背景透明
     ImGui::Begin(ConvertToUTF8(L"场景层级").c_str());
     if (ImGui::TreeNode(ConvertToUTF8(L"模型").c_str()))
     {
@@ -312,10 +311,148 @@ void EditorUI::ShowInspector()
                         ConvertToUTF8(Geometry::name[primitive.type]).c_str());
 
             // 变换编辑器
-            ImGui::DragFloat3(ConvertToUTF8(L"位置").c_str(), (float*) glm::value_ptr(primitive.position), 0.1f);
-            ImGui::DragFloat3(ConvertToUTF8(L"旋转").c_str(), (float*) glm::value_ptr(primitive.rotation), 1.0f);
-            ImGui::DragFloat3(ConvertToUTF8(L"缩放").c_str(), (float*) glm::value_ptr(primitive.scale), 0.1f);
-
+            ImGui::DragFloat3(ConvertToUTF8(L"位置").c_str(), (float *)glm::value_ptr(primitive.position), 0.1f);
+            ImGui::DragFloat3(ConvertToUTF8(L"旋转").c_str(), (float *)glm::value_ptr(primitive.rotation), 1.0f);
+            ImGui::DragFloat3(ConvertToUTF8(L"缩放").c_str(), (float *)glm::value_ptr(primitive.scale), 0.1f);
+            // 更新几何体变换
+            // 根据几何体类型显示参数编辑器
+            switch (primitive.type)
+            {
+            case Geometry::SPHERE: {
+                auto &radius = primitive.params.sphere.radius;
+                auto &segments = primitive.params.sphere.segments;
+                if (ImGui::DragFloat(ConvertToUTF8(L"半径").c_str(), &radius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragInt(ConvertToUTF8(L"分段数").c_str(), &segments, 1, 3, 100))
+                {
+                    Geometry::UpdateSphere(primitive.mesh, radius, segments);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::CUBE: {
+                auto &width = primitive.params.cube.width;
+                auto &height = primitive.params.cube.height;
+                auto &depth = primitive.params.cube.depth;
+                if (ImGui::DragFloat(ConvertToUTF8(L"宽度").c_str(), &width, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"高度").c_str(), &height, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"深度").c_str(), &depth, 0.1f, 0.01f, 10.0f))
+                {
+                    Geometry::UpdateCube(primitive.mesh, width, height, depth);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::CYLINDER: {
+                auto &radius = primitive.params.cylinder.radius;
+                auto &height = primitive.params.cylinder.height;
+                auto &segments = primitive.params.cylinder.segments;
+                if (ImGui::DragFloat(ConvertToUTF8(L"半径").c_str(), &radius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"高度").c_str(), &height, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragInt(ConvertToUTF8(L"分段数").c_str(), &segments, 1, 3, 100))
+                {
+                    Geometry::UpdateCylinder(primitive.mesh, radius, height, segments);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::CONE: {
+                auto &radius = primitive.params.cone.radius;
+                auto &height = primitive.params.cone.height;
+                auto &segments = primitive.params.cone.segments;
+                if (ImGui::DragFloat(ConvertToUTF8(L"半径").c_str(), &radius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"高度").c_str(), &height, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragInt(ConvertToUTF8(L"分段数").c_str(), &segments, 1, 3, 100))
+                {
+                    Geometry::UpdateCone(primitive.mesh, radius, height, segments);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::PRISM: {
+                auto &sides = primitive.params.prism.sides;
+                auto &radius = primitive.params.prism.radius;
+                auto &height = primitive.params.prism.height;
+                if (ImGui::DragInt(ConvertToUTF8(L"边数").c_str(), &sides, 1, 3, 20) || ImGui::DragFloat(ConvertToUTF8(L"半径").c_str(), &radius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"高度").c_str(), &height, 0.1f, 0.01f, 10.0f))
+                {
+                    Geometry::UpdatePrism(primitive.mesh, sides, radius, height);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::PYRAMID: {
+                auto &sides = primitive.params.pyramid.sides;
+                auto &radius = primitive.params.pyramid.radius;
+                auto &height = primitive.params.pyramid.height;
+                if (ImGui::DragInt(ConvertToUTF8(L"边数").c_str(), &sides, 1, 3, 20) || ImGui::DragFloat(ConvertToUTF8(L"半径").c_str(), &radius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"高度").c_str(), &height, 0.1f, 0.01f, 10.0f))
+                {
+                    Geometry::UpdatePyramid(primitive.mesh, sides, radius, height);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::TORUS: {
+                auto &majorRadius = primitive.params.torus.majorRadius;
+                auto &minorRadius = primitive.params.torus.minorRadius;
+                auto &majorSegments = primitive.params.torus.majorSegments;
+                auto &minorSegments = primitive.params.torus.minorSegments;
+                if (ImGui::DragFloat(ConvertToUTF8(L"大半径").c_str(), &majorRadius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"小半径").c_str(), &minorRadius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragInt(ConvertToUTF8(L"环段数").c_str(), &majorSegments, 1, 3, 100) ||
+                    ImGui::DragInt(ConvertToUTF8(L"管段数").c_str(), &minorSegments, 1, 3, 100))
+                {
+                    Geometry::UpdateTorus(primitive.mesh, majorRadius, minorRadius, majorSegments, minorSegments);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::ELLIPSOID: {
+                auto &xRadius = primitive.params.ellipsoid.radiusX;
+                auto &yRadius = primitive.params.ellipsoid.radiusY;
+                auto &zRadius = primitive.params.ellipsoid.radiusZ;
+                auto &segments = primitive.params.ellipsoid.segments;
+                if (ImGui::DragFloat(ConvertToUTF8(L"X半径").c_str(), &xRadius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"Y半径").c_str(), &yRadius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"Z半径").c_str(), &zRadius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragInt(ConvertToUTF8(L"分段数").c_str(), &segments, 1, 3, 100))
+                {
+                    Geometry::UpdateEllipsoid(primitive.mesh, xRadius, yRadius, zRadius, segments);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::FRUSTUM: {
+                auto &topRadius = primitive.params.frustum.radiusTop;
+                auto &bottomRadius = primitive.params.frustum.radiusBottom;
+                auto &height = primitive.params.frustum.height;
+                auto &segments = primitive.params.frustum.segments;
+                if (ImGui::DragFloat(ConvertToUTF8(L"上底半径").c_str(), &topRadius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"下底半径").c_str(), &bottomRadius, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"高度").c_str(), &height, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragInt(ConvertToUTF8(L"分段数").c_str(), &segments, 1, 3, 100))
+                {
+                    Geometry::UpdateFrustum(primitive.mesh, topRadius, bottomRadius, height, segments);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::ARROW: {
+                // 箭头的长度和半径
+                auto &length = primitive.params.arrow.length;
+                auto &radius = primitive.params.arrow.headSize;
+                if (ImGui::DragFloat(ConvertToUTF8(L"箭头长度").c_str(), &length, 0.1f, 0.01f, 10.0f) ||
+                    ImGui::DragFloat(ConvertToUTF8(L"箭头半径").c_str(), &radius, 0.1f, 0.01f, 10.0f))
+                {
+                    Geometry::UpdateArrow(primitive.mesh, length, radius);
+                    primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
+                }
+                break;
+            }
+            case Geometry::END:
+            default:
+                break;
+            }
             primitive.mesh->SetTransform(primitive.position, primitive.rotation, primitive.scale);
             // 材质编辑器
             ShowMaterialEditor(*primitive.mesh->GetMaterial());
@@ -429,8 +566,8 @@ void EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture
     buttonLabel += "##" + label + idSuffix;
     if (ImGui::Button(buttonLabel.c_str()))
     {
-        std::string path =
-            FileDialog::OpenFile(ConvertToUTF8(L"选择贴图").c_str(), "Image Files\0*.jpg;*.png;*.tga;*.bmp\0All Files\0*.*\0");
+        std::string path = FileDialog::OpenFile(ConvertToUTF8(L"选择贴图").c_str(),
+                                                "Image Files\0*.jpg;*.png;*.tga;*.bmp\0All Files\0*.*\0");
         if (!path.empty())
         {
             texture = std::make_shared<Texture>();

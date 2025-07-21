@@ -57,6 +57,25 @@ class Mesh
         name = n;
     }
 
+    void UpdateMesh(const std::vector<Vertex> &vertices, const std::vector<unsigned int> &indices)
+    {
+        // 删除旧数据
+        glDeleteVertexArrays(1, &VAO);
+        glDeleteBuffers(1, &VBO);
+        glDeleteBuffers(1, &EBO);
+        // 重新设置数据
+        this->vertices = vertices;
+        this->indices = indices;
+        // 重新创建VAO和VBO
+        SetupMesh();
+        glBindVertexArray(VAO);
+        glBindBuffer(GL_ARRAY_BUFFER, VBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), &vertices[0], GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, EBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), &indices[0], GL_STATIC_DRAW);
+        glBindVertexArray(0);
+    }
   private:
     void SetupMesh();
 

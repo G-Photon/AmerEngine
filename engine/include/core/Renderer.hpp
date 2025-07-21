@@ -135,7 +135,7 @@ class Renderer
     {
         return models;
     }
-    const std::vector<Geometry::Primitive> &GetPrimitives() const
+    std::vector<Geometry::Primitive> &GetPrimitives()
     {
         return primitives;
     }

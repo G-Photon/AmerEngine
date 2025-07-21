@@ -431,33 +431,63 @@ void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, c
     {
     case Geometry::SPHERE:
         primitive.mesh = Geometry::CreateSphere();
+        primitive.params = {
+            .sphere = {1.0f, 16} // 默认半径和分段数
+        };
         break;
     case Geometry::CUBE:
         primitive.mesh = Geometry::CreateCube();
+        primitive.params = {
+            .cube = {1.0f, 1.0f, 1.0f} // 默认宽度、高度和深度
+        };
         break;
     case Geometry::CYLINDER:
         primitive.mesh = Geometry::CreateCylinder();
+        primitive.params = {
+            .cylinder = {0.5f, 1.0f, 32} // 默认半径、高度和分段数
+        };
         break;
     case Geometry::CONE:
         primitive.mesh = Geometry::CreateCone();
+        primitive.params = {
+            .cone = {0.5f, 1.0f, 32} // 默认半径、高度和分段数
+        };
         break;
     case Geometry::PRISM:
         primitive.mesh = Geometry::CreatePrism();
+        primitive.params = {
+            .prism = {6, 0.5f, 1.0f} // 默认六边形，半径和高度
+        };
         break;
     case Geometry::PYRAMID:
         primitive.mesh = Geometry::CreatePyramid();
+        primitive.params = {
+            .pyramid = {4, 0.5f, 1.0f} // 默认四边形金字塔，半径和高度
+        };
         break;
     case Geometry::TORUS:
         primitive.mesh = Geometry::CreateTorus();
+        primitive.params = {
+            .torus = {1.0f, 0.3f, 48, 12} // 默认大半径、小半径、环段数和管段数
+        };
         break;
     case Geometry::ELLIPSOID:
         primitive.mesh = Geometry::CreateEllipsoid();
+        primitive.params = {
+            .ellipsoid = {1.0f, 0.8f, 1.2f, 32} // 默认半径和分段数
+        };
         break;
     case Geometry::FRUSTUM:
         primitive.mesh = Geometry::CreateFrustum();
+        primitive.params = {
+            .frustum = {0.5f, 0.5f, 1.0f, 32} // 默认上底半径、下底半径、高度和分段数
+        };
         break;
     case Geometry::ARROW:
         primitive.mesh = Geometry::CreateArrow(1.0f, 0.2f);
+        primitive.params = {
+            .arrow = {1.0f, 0.2f} // 默认长度和箭头头部大小
+        };
         break;
     default:
         std::cerr << "Unsupported geometry type!" << std::endl;

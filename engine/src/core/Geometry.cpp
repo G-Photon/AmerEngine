@@ -1,11 +1,12 @@
 ﻿#include "core/Geometry.hpp"
 #include <glm/gtc/constants.hpp>
+#include <tuple>
 #include <vector>
 
-std::wstring Geometry::name[Geometry::Type::END + 1] = {
-    L"球体", L"立方体", L"圆柱体", L"圆锥体", L"棱柱", L"金字塔", L"环面", L"椭球体", L"截头锥"};
+std::wstring Geometry::name[Geometry::Type::END + 1] = {L"球体",   L"立方体", L"圆柱体", L"圆锥体", L"棱柱",
+                                                        L"金字塔", L"环面",   L"椭球体", L"截头锥"};
 
-std::shared_ptr<Mesh> Geometry::CreateSphere(float radius, int segments)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateSphereData(float radius, int segments)
 {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -51,11 +52,17 @@ std::shared_ptr<Mesh> Geometry::CreateSphere(float radius, int segments)
             indices.push_back(second + 1);
         }
     }
+    return std::make_tuple(vertices, indices);
+}
 
+std::shared_ptr<Mesh> Geometry::CreateSphere(float radius, int segments)
+{
+    auto [vertices, indices] = GenerateSphereData(radius, segments);
     return std::make_shared<Mesh>(vertices, indices);
 }
 
-std::shared_ptr<Mesh> Geometry::CreateCube(float width, float height, float depth)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateCubeData(float width, float height,
+                                                                                      float depth)
 {
     std::vector<Vertex> vertices = {
         // 前面 (Z正方向)
@@ -112,11 +119,17 @@ std::shared_ptr<Mesh> Geometry::CreateCube(float width, float height, float dept
 
                                          // 底面 (逆时针: 后左->后右->前右->前左)
                                          20, 21, 22, 20, 22, 23};
+    return std::make_tuple(vertices, indices);
+}
 
+std::shared_ptr<Mesh> Geometry::CreateCube(float width, float height, float depth)
+{
+    auto [vertices, indices] = GenerateCubeData(width, height, depth);
     return std::make_shared<Mesh>(vertices, indices);
 }
 
-std::shared_ptr<Mesh> Geometry::CreateCylinder(float radius, float height, int segments)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateCylinderData(float radius, float height,
+                                                                                          int segments)
 {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -159,7 +172,6 @@ std::shared_ptr<Mesh> Geometry::CreateCylinder(float radius, float height, int s
         indices.push_back(topSide2);
         indices.push_back(bottomSide1);
 
-
         indices.push_back(topSide2);
         indices.push_back(bottomSide2);
         indices.push_back(bottomSide1);
@@ -180,9 +192,17 @@ std::shared_ptr<Mesh> Geometry::CreateCylinder(float radius, float height, int s
         indices.push_back(i * 4 + 1);
         indices.push_back((i + 1) * 4 + 1);
     }
+    return std::make_tuple(vertices, indices);
+}
+
+std::shared_ptr<Mesh> Geometry::CreateCylinder(float radius, float height, int segments)
+{
+    auto [vertices, indices] = GenerateCylinderData(radius, height, segments);
     return std::make_shared<Mesh>(vertices, indices);
 }
-std::shared_ptr<Mesh> Geometry::CreateCone(float radius, float height, int segments)
+
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateConeData(float radius, float height,
+                                                                                      int segments)
 {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -229,11 +249,17 @@ std::shared_ptr<Mesh> Geometry::CreateCone(float radius, float height, int segme
         indices.push_back(bottom1);
         indices.push_back(bottom2);
     }
+    return std::make_tuple(vertices, indices);
+}
 
+std::shared_ptr<Mesh> Geometry::CreateCone(float radius, float height, int segments)
+{
+    auto [vertices, indices] = GenerateConeData(radius, height, segments);
     return std::make_shared<Mesh>(vertices, indices);
 }
 
-std::shared_ptr<Mesh> Geometry::CreatePrism(int sides, float radius, float height)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GeneratePrismData(int sides, float radius,
+                                                                                       float height)
 {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -241,11 +267,6 @@ std::shared_ptr<Mesh> Geometry::CreatePrism(int sides, float radius, float heigh
     float halfHeight = height / 2.0f;
     float angleStep = 2.0f * glm::pi<float>() / sides;
 
-    // // 顶部中心顶点
-    // vertices.push_back({{0, halfHeight, 0}, {0, 1, 0}, {0.5f, 0.5f}});
-    // // 底部中心顶点
-    // vertices.push_back({{0, -halfHeight, 0}, {0, -1, 0}, {0.5f, 0.5f}});
-    // 生成顶部、底部和侧面顶点
     for (int i = 0; i <= sides; ++i) // 注意：i <= sides 以确保闭合
     {
         float angle = i * angleStep;
@@ -293,17 +314,21 @@ std::shared_ptr<Mesh> Geometry::CreatePrism(int sides, float radius, float heigh
         indices.push_back(sideTop2);
         indices.push_back(sideBottom1);
 
-
         // 第二个三角形
         indices.push_back(sideTop2);
         indices.push_back(sideBottom2);
         indices.push_back(sideBottom1);
-
     }
-
+    return std::make_tuple(vertices, indices);
+}
+std::shared_ptr<Mesh> Geometry::CreatePrism(int sides, float radius, float height)
+{
+    auto [vertices, indices] = GeneratePrismData(sides, radius, height);
     return std::make_shared<Mesh>(vertices, indices);
 }
-std::shared_ptr<Mesh> Geometry::CreatePyramid(int sides, float baseSize, float height)
+
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GeneratePyramidData(int sides, float baseSize,
+                                                                                         float height)
 {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -344,7 +369,6 @@ std::shared_ptr<Mesh> Geometry::CreatePyramid(int sides, float baseSize, float h
         indices.push_back(bottom1);
         indices.push_back(bottom2);
 
-
         // 侧面三角形（逆时针）
         int side1 = 2 + i * 2;
         int side2 = 2 + ((i + 1) % sides) * 2;
@@ -352,11 +376,19 @@ std::shared_ptr<Mesh> Geometry::CreatePyramid(int sides, float baseSize, float h
         indices.push_back(topIndex);
         indices.push_back(side2);
     }
+    return std::make_tuple(vertices, indices);
+}
 
+std::shared_ptr<Mesh> Geometry::CreatePyramid(int sides, float baseSize, float height)
+{
+    auto [vertices, indices] = GeneratePyramidData(sides, baseSize, height);
     return std::make_shared<Mesh>(vertices, indices);
 }
 
-std::shared_ptr<Mesh> Geometry::CreateTorus(float majorRadius, float minorRadius, int majorSegments, int minorSegments)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateTorusData(float majorRadius,
+                                                                                       float minorRadius,
+                                                                                       int majorSegments,
+                                                                                       int minorSegments)
 {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -409,10 +441,17 @@ std::shared_ptr<Mesh> Geometry::CreateTorus(float majorRadius, float minorRadius
         }
     }
 
+    return std::make_tuple(vertices, indices);
+}
+
+std::shared_ptr<Mesh> Geometry::CreateTorus(float majorRadius, float minorRadius, int majorSegments, int minorSegments)
+{
+    auto [vertices, indices] = GenerateTorusData(majorRadius, minorRadius, majorSegments, minorSegments);
     return std::make_shared<Mesh>(vertices, indices);
 }
 
-std::shared_ptr<Mesh> Geometry::CreateEllipsoid(float radiusX, float radiusY, float radiusZ, int segments)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateEllipsoidData(float radiusX, float radiusY,
+                                                                                           float radiusZ, int segments)
 {
     std::vector<Vertex> vertices;
     std::vector<unsigned int> indices;
@@ -472,11 +511,18 @@ std::shared_ptr<Mesh> Geometry::CreateEllipsoid(float radiusX, float radiusY, fl
             indices.push_back(next + 1);
         }
     }
+    return std::make_tuple(vertices, indices);
+}
 
+std::shared_ptr<Mesh> Geometry::CreateEllipsoid(float radiusX, float radiusY, float radiusZ, int segments)
+{
+    auto [vertices, indices] = GenerateEllipsoidData(radiusX, radiusY, radiusZ, segments);
     return std::make_shared<Mesh>(vertices, indices);
 }
 
-std::shared_ptr<Mesh> Geometry::CreateFrustum(float radiusTop, float radiusBottom, float height, int segments)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateFrustumData(float radiusTop,
+                                                                                         float radiusBottom,
+                                                                                         float height, int segments)
 {
     if (segments < 3)
         segments = 3; // 确保至少3个分段
@@ -544,10 +590,9 @@ std::shared_ptr<Mesh> Geometry::CreateFrustum(float radiusTop, float radiusBotto
     for (int i = 0; i < segments; ++i)
     {
         const int next = (i + 1) % segments;
-        indices.push_back(0); // 顶部中心
+        indices.push_back(0);            // 顶部中心
         indices.push_back(2 + 2 * next); // 下一个顶部点
         indices.push_back(2 + 2 * i);    // 当前顶部点
-
     }
 
     // 底部圆面 (逆时针)
@@ -581,27 +626,30 @@ std::shared_ptr<Mesh> Geometry::CreateFrustum(float radiusTop, float radiusBotto
         indices.push_back(topNext);
         indices.push_back(bottomNext);
     }
+    return std::make_tuple(vertices, indices);
+}
+
+std::shared_ptr<Mesh> Geometry::CreateFrustum(float radiusTop, float radiusBottom, float height, int segments)
+{
+    auto [vertices, indices] = GenerateFrustumData(radiusTop, radiusBottom, height, segments);
 
     return std::make_shared<Mesh>(vertices, indices);
 }
 
-std::shared_ptr<Mesh> Geometry::CreateArrow(float length, float headSize)
+std::tuple<std::vector<Vertex>, std::vector<unsigned int>> Geometry::GenerateArrowData(float length, float headSize)
 {
     // 创建箭头的主体部分（圆柱体）
-    auto cylinder = CreateCylinder(0.05f, length - headSize, 16);
+    auto [cylinderVertices, cylinderIndices] = GenerateCylinderData(0.05f, length - headSize, 16);
 
     // 创建箭头的头部部分（圆锥体）
-    auto cone = CreateCone(0.1f, headSize, 16);
+    auto [coneVertices, coneIndices] = GenerateConeData(0.1f, headSize, 16);
 
     // 设置圆锥的位置，使其位于圆柱的顶部
     glm::vec3 conePosition(0.0f, (length - headSize) / 2.0f + headSize / 2.0f, 0.0f);
 
     // 合并圆柱和圆锥的顶点和索引
-    std::vector<Vertex> combinedVertices = cylinder->GetVertices();
-    std::vector<unsigned int> combinedIndices = cylinder->GetIndices();
-
-    const auto &coneVertices = cone->GetVertices();
-    const auto &coneIndices = cone->GetIndices();
+    std::vector<Vertex> combinedVertices = cylinderVertices;
+    std::vector<unsigned int> combinedIndices = cylinderIndices;
 
     // 更新圆锥的索引以适应合并后的顶点数组
     unsigned int vertexOffset = static_cast<unsigned int>(combinedVertices.size());
@@ -616,5 +664,75 @@ std::shared_ptr<Mesh> Geometry::CreateArrow(float length, float headSize)
         combinedIndices.push_back(index + vertexOffset);
     }
 
-    return std::make_shared<Mesh>(combinedVertices, combinedIndices);
+    return std::make_tuple(combinedVertices, combinedIndices);
+}
+
+std::shared_ptr<Mesh> Geometry::CreateArrow(float length, float headSize)
+{
+    auto [vertices, indices] = GenerateArrowData(length, headSize);
+
+    return std::make_shared<Mesh>(vertices, indices);
+}
+
+void Geometry::UpdateSphere(std::shared_ptr<Mesh> mesh, float radius, int segments)
+{
+    auto [vertices, indices] = GenerateSphereData(radius, segments);
+
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdateCube(std::shared_ptr<Mesh> mesh, float width, float height, float depth)
+{
+    auto [vertices, indices] = GenerateCubeData(width, height, depth);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdateCylinder(std::shared_ptr<Mesh> mesh, float radius, float height, int segments)
+{
+    auto [vertices, indices] = GenerateCylinderData(radius, height, segments);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdateCone(std::shared_ptr<Mesh> mesh, float radius, float height, int segments)
+{
+    auto [vertices, indices] = GenerateConeData(radius, height, segments);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdatePrism(std::shared_ptr<Mesh> mesh, int sides, float radius, float height)
+{
+    auto [vertices, indices] = GeneratePrismData(sides, radius, height);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdatePyramid(std::shared_ptr<Mesh> mesh, int sides, float radius, float height)
+{
+    auto [vertices, indices] = GeneratePyramidData(sides, radius, height);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdateTorus(std::shared_ptr<Mesh> mesh, float majorRadius, float minorRadius, int majorSegments,
+                           int minorSegments)
+{
+    auto [vertices, indices] = GenerateTorusData(majorRadius, minorRadius, majorSegments, minorSegments);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdateEllipsoid(std::shared_ptr<Mesh> mesh, float radiusX, float radiusY, float radiusZ, int segments)
+{
+    auto [vertices, indices] = GenerateEllipsoidData(radiusX, radiusY, radiusZ, segments);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdateFrustum(std::shared_ptr<Mesh> mesh, float radiusTop, float radiusBottom, float height,
+                             int segments)
+{
+    auto [vertices, indices] = GenerateFrustumData(radiusTop, radiusBottom, height, segments);
+    mesh->UpdateMesh(vertices, indices);
+}
+
+void Geometry::UpdateArrow(std::shared_ptr<Mesh> mesh, float length, float headSize)
+{
+    auto [vertices, indices] = GenerateArrowData(length, headSize);
+    mesh->UpdateMesh(vertices, indices);
 }
