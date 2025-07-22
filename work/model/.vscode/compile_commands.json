@@ -1,6 +1,0 @@
-[
-{
-  "directory": "D:\\Adata\\study\\opengl\\model",
-  "arguments": ["C:\\msys64\\mingw64\\bin\\x86_64-w64-mingw32-g++.exe", "-c", "-m64", "-fvisibility=hidden", "-fvisibility-inlines-hidden", "-O3", "-Iinclude", "-Ibuild\\.gens\\main\\mingw\\x86_64\\release\\platform\\windows\\idl", "-IC:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\g\\glm\\1.0.1\\378dc80ba7ac4e73a965cdd988ceb89e\\include", "-IC:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\i\\imgui\\v1.91.8\\c76dfc06e5a44763b8185bc3e450cafd\\include", "-IC:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\i\\imgui\\v1.91.8\\c76dfc06e5a44763b8185bc3e450cafd\\include\\imgui", "-IC:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\i\\imgui\\v1.91.8\\c76dfc06e5a44763b8185bc3e450cafd\\include\\backends", "-IC:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\i\\imgui\\v1.91.8\\c76dfc06e5a44763b8185bc3e450cafd\\include\\misc\\cpp", "-IC:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\g\\glad\\v0.1.36\\536ebfe6c3044e32b9a2c58440821cf1\\include", "-IC:\\Users\\11035\\AppData\\Local\\.xmake\\packages\\a\\assimp\\v5.4.3\\2b0ba9e2ba8d4adc9cf1bbfebc358d8a\\include", "-IC:\\msys64\\mingw64\\include\\minizip", "-IC:\\msys64\\mingw64\\bin\\..\\include", "-DNDEBUG", "-o", "build\\.objs\\main\\mingw\\x86_64\\release\\src\\main.cpp.obj", "src\\main.cpp"],
-  "file": "src\\main.cpp"
-}]
