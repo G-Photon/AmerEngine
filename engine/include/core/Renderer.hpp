@@ -213,10 +213,14 @@ class Renderer
     void RenderDeferred();
     void RenderPostProcessing();
     void RenderLights();
+    void RenderQuad();
 
     void SetupGBuffer();
     void SetupShadowBuffer();
     void SetupHDRBuffer();
+    void SetupBloomBuffer();
+    void SetupSSAOBuffer();
+    void SetupPostProcessBuffer();
     void SetupSkybox();
 
     void RenderSkybox();
@@ -230,8 +234,10 @@ class Renderer
     std::unique_ptr<Framebuffer> gBuffer;
     std::unique_ptr<Framebuffer> shadowBuffer;
     std::unique_ptr<Framebuffer> hdrBuffer;
-    std::unique_ptr<Framebuffer> bloomBuffer;
+    std::unique_ptr<Framebuffer> bloomPrefilterBuffer;
+    std::unique_ptr<Framebuffer> bloomBlurBuffers[2];
     std::unique_ptr<Framebuffer> ssaoBuffer;
+    std::unique_ptr<Framebuffer> postProcessBuffer;
 
     // 着色器
     std::unique_ptr<Shader> forwardShader;
@@ -240,9 +246,11 @@ class Renderer
     std::unique_ptr<Shader> shadowDepthShader;
     std::unique_ptr<Shader> skyboxShader;
     std::unique_ptr<Shader> hdrShader;
-    std::unique_ptr<Shader> bloomShader;
+    std::unique_ptr<Shader> bloomPreShader;
+    std::unique_ptr<Shader> bloomBlurShader;
     std::unique_ptr<Shader> ssaoShader;
     std::unique_ptr<Shader> lightsShader;
+    std::unique_ptr<Shader> postProcessShader;
 
     std::unordered_map<std::string, std::shared_ptr<Shader>> shaders;
 

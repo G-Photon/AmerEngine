@@ -37,7 +37,11 @@ Renderer::~Renderer()
     gBuffer.reset();
     shadowBuffer.reset();
     hdrBuffer.reset();
-    bloomBuffer.reset();
+    bloomPrefilterBuffer.reset();
+    for (auto &blurBuffer : bloomBlurBuffers)
+    {
+        blurBuffer.reset();
+    }
     ssaoBuffer.reset();
     forwardShader.reset();
     deferredGeometryShader.reset();
@@ -45,7 +49,8 @@ Renderer::~Renderer()
     shadowDepthShader.reset();
     skyboxShader.reset();
     hdrShader.reset();
-    bloomShader.reset();
+    bloomPreShader.reset();
+    bloomBlurShader.reset();
     ssaoShader.reset();
     environmentMap.reset();
     mainCamera.reset();
@@ -103,11 +108,25 @@ void Renderer::Initialize()
                                  FileSystem::GetPath("resources/shaders/deferred/lighting_pass.frag"));
 
     lightsShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/utility/light.vert"),
-                                             FileSystem::GetPath("resources/shaders/utility/light.frag"));
+                                            FileSystem::GetPath("resources/shaders/utility/light.frag"));
+
+    postProcessShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
+                                                 FileSystem::GetPath("resources/shaders/postprocess/post.frag"));
+
+    ssaoShader =
+        std::make_unique<Shader>("resources/shaders/postprocess/quad.vert", "resources/shaders/postprocess/ssao.frag");
+    bloomPreShader = std::make_unique<Shader>("resources/shaders/postprocess/quad.vert",
+                                              "resources/shaders/postprocess/bloom_prefilter.frag");
+    bloomBlurShader = std::make_unique<Shader>("resources/shaders/postprocess/quad.vert",
+                                               "resources/shaders/postprocess/bloom_blur.frag");
+
     // 初始化帧缓冲
-    SetupGBuffer();
     SetupShadowBuffer();
+    SetupGBuffer();
     SetupHDRBuffer();
+    SetupBloomBuffer();
+    SetupSSAOBuffer();
+    SetupPostProcessBuffer();
 
     // 加载默认纹理
     auto whiteTexture = std::make_shared<Texture>();
@@ -153,10 +172,34 @@ void Renderer::SetupHDRBuffer()
     hdrBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
     hdrBuffer->AddDepthBuffer();
     hdrBuffer->CheckComplete();
+}
 
-    bloomBuffer = std::make_unique<Framebuffer>(width, height);
-    bloomBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
-    bloomBuffer->CheckComplete();
+void Renderer::SetupBloomBuffer()
+{
+    bloomPrefilterBuffer = std::make_unique<Framebuffer>(width, height);
+    bloomPrefilterBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
+    bloomPrefilterBuffer->CheckComplete();
+
+    for (int i = 0; i < 2; ++i)
+    {
+        bloomBlurBuffers[i] = std::make_unique<Framebuffer>(width / (1 << i), height / (1 << i));
+        bloomBlurBuffers[i]->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
+        bloomBlurBuffers[i]->CheckComplete();
+    }
+}
+
+void Renderer::SetupSSAOBuffer()
+{
+    ssaoBuffer = std::make_unique<Framebuffer>(width, height);
+    ssaoBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
+    ssaoBuffer->CheckComplete();
+}
+
+void Renderer::SetupPostProcessBuffer()
+{
+    postProcessBuffer = std::make_unique<Framebuffer>(width, height);
+    postProcessBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
+    postProcessBuffer->CheckComplete();
 }
 
 void Renderer::SetupSkybox()
@@ -206,15 +249,12 @@ void Renderer::RenderScene()
         RenderLights();
     }
 
-    if (hdrEnabled || bloomEnabled || ssaoEnabled)
-    {
-        RenderPostProcessing();
-    }
+    RenderPostProcessing();
 }
 
 void Renderer::RenderForward()
 {
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    hdrBuffer->Bind();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glEnable(GL_DEPTH_TEST);
@@ -418,6 +458,31 @@ void Renderer::RenderLights()
     glEnable(GL_CULL_FACE);
 }
 
+void Renderer::RenderQuad()
+{
+    static GLuint quadVAO = 0, quadVBO = 0;
+    if (quadVAO == 0)
+    {
+        float quadVertices[] = {
+            // positions        // texture coords
+            -1.0f, 1.0f, 0.0f, 0.0f, 1.0f, -1.0f, -1.0f, 0.0f, 0.0f, 0.0f,
+            1.0f,  1.0f, 0.0f, 1.0f, 1.0f, 1.0f,  -1.0f, 0.0f, 1.0f, 0.0f,
+        };
+        glGenVertexArrays(1, &quadVAO);
+        glGenBuffers(1, &quadVBO);
+        glBindVertexArray(quadVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, quadVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(quadVertices), quadVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(float), (void *)(3 * sizeof(float)));
+    }
+    glBindVertexArray(quadVAO);
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
+    glBindVertexArray(0);
+}
+
 void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, const glm::vec3 &scale,
                                const glm::vec3 &rotation, const Material &material)
 {
@@ -547,52 +612,63 @@ void Renderer::SetGlobalUniforms(const Camera &camera)
     forwardShader->SetVec3("viewPos", camera.Position);
 }
 
-
 void Renderer::RenderPostProcessing()
 {
-    // 后处理效果
-    if (hdrEnabled)
-    {
-        hdrShader->Use();
-        hdrShader->SetInt("scene", 0);
-        hdrBuffer->BindTexture(0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawArrays(GL_TRIANGLES, 0, 6); // 渲染全屏四边形
-    }
-    if (bloomEnabled)
-    {
-        bloomShader->Use();
-        bloomShader->SetInt("scene", 0);
-        bloomBuffer->BindTexture(0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawArrays(GL_TRIANGLES, 0, 6); // 渲染全屏四边形
-    }
+    // 1. SSAO Pass
     if (ssaoEnabled)
     {
+        ssaoBuffer->Bind();
+        glClear(GL_COLOR_BUFFER_BIT);
         ssaoShader->Use();
-        ssaoShader->SetInt("scene", 0);
-        ssaoBuffer->BindTexture(0);
-        glBindFramebuffer(GL_FRAMEBUFFER, 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        glDrawArrays(GL_TRIANGLES, 0, 6); // 渲染全屏四边形
+        // 绑定 G-Buffer 纹理、投影矩阵、噪声贴图、kernel
+        RenderQuad();
     }
-    if (gammaCorrection)
+
+    // 2. Bloom Prefilter
+    if (bloomEnabled)
     {
-        // 应用伽马校正
-        glEnable(GL_FRAMEBUFFER_SRGB);
+        bloomPrefilterBuffer->Bind();
+        glClear(GL_COLOR_BUFFER_BIT);
+        bloomPreShader->Use();
+        bloomPreShader->SetFloat("threshold", 1.0f);
+        hdrBuffer->BindTexture(0, 0); // scene
+        RenderQuad();
+
+        // 3. Bloom Blur (Ping-Pong)
+        bool horizontal = true;
+        for (int i = 0; i < 10; ++i)
+        {
+            bloomBlurBuffers[horizontal]->Bind();
+            bloomBlurShader->Use();
+            bloomBlurShader->SetBool("horizontal", horizontal);
+            (i == 0 ? bloomPrefilterBuffer : bloomBlurBuffers[!horizontal])->BindTexture(0, 0);
+            RenderQuad();
+            horizontal = !horizontal;
+        }
     }
-    else
-    {
-        glDisable(GL_FRAMEBUFFER_SRGB);
-    }
+
+    // 4. Final Compose
+    postProcessBuffer->Bind();
+    glClear(GL_COLOR_BUFFER_BIT);
+    postProcessShader->Use();
+    postProcessShader->SetBool("hdrEnabled", hdrEnabled);
+    postProcessShader->SetBool("bloomEnabled", bloomEnabled);
+    postProcessShader->SetBool("ssaoEnabled", ssaoEnabled);
+    postProcessShader->SetBool("gammaEnabled", gammaCorrection);
+    postProcessShader->SetFloat("exposure", 1.0f);
+
+    hdrBuffer->BindTexture(0, 0);
+    if (bloomEnabled)
+        bloomBlurBuffers[false]->BindTexture(0, 1);
+    if (ssaoEnabled)
+        ssaoBuffer->BindTexture(0, 2);
+    RenderQuad();
+
+    // 5. 输出到屏幕
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_2D, hdrBuffer->GetColorTexture(0));
-    glDrawArrays(GL_TRIANGLES, 0, 6); // 渲染全屏四边形
+    glClear(GL_COLOR_BUFFER_BIT);
+    postProcessBuffer->BindTexture(0, 0);
+    RenderQuad();
 }
 // 其他方法实现...
 std::shared_ptr<Model> Renderer::LoadModel(const std::string &path)
@@ -674,13 +750,23 @@ void Renderer::SetRenderMode(RenderMode mode)
 
 void Renderer::Resize(int newWidth, int newHeight)
 {
+    if (width == newWidth && height == newHeight)
+        return; // 避免重复
+
+    // 1. 解绑所有当前绑定的 FBO，防止驱动还在用
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glViewport(0, 0, newWidth, newHeight);
+
     width = newWidth;
     height = newHeight;
 
     // 更新帧缓冲和着色器
     gBuffer->Resize(newWidth, newHeight);
     hdrBuffer->Resize(newWidth, newHeight);
-    bloomBuffer->Resize(newWidth, newHeight);
+    bloomBlurBuffers[0]->Resize(newWidth, newHeight);
+    bloomBlurBuffers[1]->Resize(newWidth, newHeight);
+    bloomPrefilterBuffer->Resize(newWidth, newHeight);
+    ssaoBuffer->Resize(newWidth, newHeight);
+    postProcessBuffer->Resize(newWidth, newHeight);
     shadowBuffer->Resize(2048, 2048); // 阴影缓冲大小固定
-    glViewport(0, 0, newWidth, newHeight);
 }
