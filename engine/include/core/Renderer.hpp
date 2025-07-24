@@ -220,7 +220,6 @@ class Renderer
     void SetupHDRBuffer();
     void SetupBloomBuffer();
     void SetupSSAOBuffer();
-    void SetupPostProcessBuffer();
     void SetupSkybox();
 
     void RenderSkybox();
@@ -237,7 +236,6 @@ class Renderer
     std::unique_ptr<Framebuffer> bloomPrefilterBuffer;
     std::unique_ptr<Framebuffer> bloomBlurBuffers[2];
     std::unique_ptr<Framebuffer> ssaoBuffer;
-    std::unique_ptr<Framebuffer> postProcessBuffer;
 
     // 着色器
     std::unique_ptr<Shader> forwardShader;

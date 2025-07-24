@@ -155,7 +155,7 @@ std::shared_ptr<Material> Model::LoadMaterial(aiMaterial *mat)
 
     // 加载法线贴图
     std::vector<std::shared_ptr<Texture>> normalMaps =
-        LoadMaterialTextures(mat, aiTextureType_NORMALS, "texture_normal");
+        LoadMaterialTextures(mat, aiTextureType_HEIGHT, "texture_normal");
     if (!normalMaps.empty())
     {
         material->normalMap = normalMaps[0];

@@ -25,9 +25,9 @@ void Camera::ProcessInput(GLFWwindow *window, float deltaTime)
         Position -= Right * velocity;
     if (glfwGetKey(window, GLFW_KEY_D) == GLFW_PRESS)
         Position += Right * velocity;
-    if (glfwGetKey(window, GLFW_KEY_SPACE) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_Q) == GLFW_PRESS)
         Position += WorldUp * velocity;
-    if (glfwGetKey(window, GLFW_KEY_LEFT_SHIFT) == GLFW_PRESS)
+    if (glfwGetKey(window, GLFW_KEY_E) == GLFW_PRESS)
         Position -= WorldUp * velocity;
 
     UpdateCameraVectors();

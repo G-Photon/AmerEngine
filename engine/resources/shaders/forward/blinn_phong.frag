@@ -88,6 +88,10 @@ void main() {
         vec3 T = normalize(Tangent);
         vec3 B = normalize(Bitangent);
         vec3 N = normalize(Normal);
+
+        // 确保T和B正交
+        T = normalize(T - dot(T, N) * N);
+        B = cross(N, T);
         mat3 TBN = mat3(T, B, N);
         
         norm = normalize(TBN * normalMap);
@@ -121,8 +125,8 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir) {
     float diff = max(dot(normal, lightDir), 0.0);
     
     // 镜面反射
-    vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
     
     // 组合结果
     vec3 ambient, diffuse, specular;
@@ -152,8 +156,8 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     float diff = max(dot(normal, lightDir), 0.0);
     
     // 镜面反射
-    vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
     
     // 衰减
     float distance = length(light.position - fragPos);
@@ -191,8 +195,8 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     float diff = max(dot(normal, lightDir), 0.0);
     
     // 镜面反射
-    vec3 reflectDir = reflect(-lightDir, normal);
-    float spec = pow(max(dot(viewDir, reflectDir), 0.0), material.shininess);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
     
     // 衰减
     float distance = length(light.position - fragPos);

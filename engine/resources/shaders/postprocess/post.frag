@@ -2,30 +2,36 @@
 out vec4 FragColor;
 in vec2 TexCoords;
 
-uniform sampler2D scene;   // HDRBuffer
-uniform sampler2D bloom;   // BloomBlur
-uniform sampler2D ssao;    // SSAO
+uniform sampler2D scene;
+uniform sampler2D bloom;
+uniform sampler2D ssao;
 uniform bool hdrEnabled;
 uniform bool bloomEnabled;
 uniform bool ssaoEnabled;
 uniform bool gammaEnabled;
 uniform float exposure = 1.0;
+uniform float bloomIntensity = 1.0; // 新增
 
 void main()
 {
     vec3 color = texture(scene, TexCoords).rgb;
+    
+    // SSAO处理 (显式单通道)
+    float occlusion = ssaoEnabled ? texture(ssao, TexCoords).r : 1.0;
+    color *= occlusion;
+    
+    // Bloom处理 (带强度控制)
+    vec3 bloomColor = bloomEnabled ? texture(bloom, TexCoords).rgb * bloomIntensity : vec3(0.0);
+    if (!hdrEnabled) bloomColor = min(bloomColor, vec3(1.0)); // LDR保护
+    color += bloomColor;
 
-    if (ssaoEnabled)
-        color *= texture(ssao, TexCoords).r;
-
-    if (bloomEnabled)
-        color += texture(bloom, TexCoords).rgb;
-
+    // HDR色调映射
     if (hdrEnabled)
-        color = vec3(1.0) - exp(-color * exposure); // Reinhard
-
+        color = vec3(1.0) - exp(-color * exposure);
+    
+    // Gamma校正 (最后执行)
     if (gammaEnabled)
         color = pow(color, vec3(1.0 / 2.2));
-
+    
     FragColor = vec4(color, 1.0);
 }

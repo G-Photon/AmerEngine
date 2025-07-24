@@ -1,6 +1,8 @@
 #include "core/Renderer.hpp"
+#include "core/Camera.hpp"
 #include "core/Geometry.hpp"
 #include "core/Light.hpp"
+#include "core/Texture.hpp"
 #include "utils/FileSystem.hpp"
 #include <iostream>
 
@@ -60,7 +62,7 @@ Renderer::~Renderer()
 void Renderer::BeginFrame()
 {
     glViewport(0, 0, width, height);
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
@@ -126,7 +128,6 @@ void Renderer::Initialize()
     SetupHDRBuffer();
     SetupBloomBuffer();
     SetupSSAOBuffer();
-    SetupPostProcessBuffer();
 
     // 加载默认纹理
     auto whiteTexture = std::make_shared<Texture>();
@@ -195,13 +196,6 @@ void Renderer::SetupSSAOBuffer()
     ssaoBuffer->CheckComplete();
 }
 
-void Renderer::SetupPostProcessBuffer()
-{
-    postProcessBuffer = std::make_unique<Framebuffer>(width, height);
-    postProcessBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
-    postProcessBuffer->CheckComplete();
-}
-
 void Renderer::SetupSkybox()
 {
     float skyboxVertices[] = {
@@ -267,14 +261,6 @@ void Renderer::RenderForward()
     forwardShader->SetMat4("view", view);
     forwardShader->SetMat4("projection", projection);
     forwardShader->SetVec3("viewPos", mainCamera->Position);
-    forwardShader->SetBool("iblEnabled", iblEnabled);
-    forwardShader->SetBool("pbrEnabled", pbrEnabled);
-    forwardShader->SetBool("gammaCorrection", gammaCorrection);
-    forwardShader->SetBool("shadowEnabled", shadowEnabled);
-    forwardShader->SetBool("iblEnabled", iblEnabled);
-    forwardShader->SetBool("hdrEnabled", hdrEnabled);
-    forwardShader->SetBool("bloomEnabled", bloomEnabled);
-    forwardShader->SetBool("ssaoEnabled", ssaoEnabled);
 
     // 设置光源
     forwardShader->SetInt("numLights[0]", directionalLights.size()); // 方向光数量
@@ -387,6 +373,7 @@ void Renderer::RenderSkybox()
 
 void Renderer::RenderLights()
 {
+    hdrBuffer->Bind();
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -615,7 +602,7 @@ void Renderer::SetGlobalUniforms(const Camera &camera)
 void Renderer::RenderPostProcessing()
 {
     // 1. SSAO Pass
-    if (ssaoEnabled)
+    if (ssaoEnabled && currentMode == DEFERRED)
     {
         ssaoBuffer->Bind();
         glClear(GL_COLOR_BUFFER_BIT);
@@ -648,26 +635,24 @@ void Renderer::RenderPostProcessing()
     }
 
     // 4. Final Compose
-    postProcessBuffer->Bind();
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClear(GL_COLOR_BUFFER_BIT);
     postProcessShader->Use();
     postProcessShader->SetBool("hdrEnabled", hdrEnabled);
     postProcessShader->SetBool("bloomEnabled", bloomEnabled);
-    postProcessShader->SetBool("ssaoEnabled", ssaoEnabled);
+    postProcessShader->SetBool("ssaoEnabled", ssaoEnabled && currentMode == DEFERRED);
     postProcessShader->SetBool("gammaEnabled", gammaCorrection);
     postProcessShader->SetFloat("exposure", 1.0f);
 
+    // 绑定 HDR、Bloom、SSAO 纹理
+    postProcessShader->SetInt("scene", 0);
+    postProcessShader->SetInt("bloom", 1);
+    postProcessShader->SetInt("ssao", 2);
     hdrBuffer->BindTexture(0, 0);
     if (bloomEnabled)
         bloomBlurBuffers[false]->BindTexture(0, 1);
-    if (ssaoEnabled)
+    if (ssaoEnabled && currentMode == DEFERRED)
         ssaoBuffer->BindTexture(0, 2);
-    RenderQuad();
-
-    // 5. 输出到屏幕
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glClear(GL_COLOR_BUFFER_BIT);
-    postProcessBuffer->BindTexture(0, 0);
     RenderQuad();
 }
 // 其他方法实现...
@@ -767,6 +752,5 @@ void Renderer::Resize(int newWidth, int newHeight)
     bloomBlurBuffers[1]->Resize(newWidth, newHeight);
     bloomPrefilterBuffer->Resize(newWidth, newHeight);
     ssaoBuffer->Resize(newWidth, newHeight);
-    postProcessBuffer->Resize(newWidth, newHeight);
     shadowBuffer->Resize(2048, 2048); // 阴影缓冲大小固定
 }
