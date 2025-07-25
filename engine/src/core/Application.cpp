@@ -28,7 +28,7 @@ void Application::Initialize()
     glfwWindowHint(GLFW_SAMPLES, 4); // MSAA
 
     // 创建窗口
-    window = glfwCreateWindow(width, height, "MyEngine", nullptr, nullptr);
+    window = glfwCreateWindow(width, height, "AmerEngine", nullptr, nullptr);
     if (!window)
     {
         Logger::Error("Failed to create GLFW window");
@@ -90,7 +90,6 @@ void Application::Initialize()
         auto app = static_cast<Application *>(glfwGetWindowUserPointer(window));
         app->renderer->GetCamera()->ProcessMouseScroll(static_cast<float>(yoffset));
     });
-
 }
 
 void Application::Run()

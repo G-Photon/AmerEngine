@@ -28,8 +28,61 @@ void EditorUI::Initialize()
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
     io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
     // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
+
+    // 1. 先加载 Dark 作为基底
     ImGui::StyleColorsDark();
 
+    // 2. 拿到当前 style 的指针
+    ImGuiStyle &style = ImGui::GetStyle();
+    ImVec4 *colors = style.Colors;
+
+    // 3. 把关键颜色改成黑红
+    colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);             // 文字纯白
+    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);     // 禁用文字
+    colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.06f, 0.06f, 0.94f);         // 窗口背景—深黑
+    colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);          // 子窗口背景
+    colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);          // 弹出背景
+    colors[ImGuiCol_Border] = ImVec4(0.43f, 0.00f, 0.00f, 0.50f);           // 边框暗红
+    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);     // 无边框阴影
+    colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.00f, 0.00f, 0.54f);          // 输入框背景红
+    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.40f, 0.00f, 0.00f, 0.54f);   // 悬停更亮
+    colors[ImGuiCol_FrameBgActive] = ImVec4(0.60f, 0.00f, 0.00f, 0.67f);    // 激活最亮
+    colors[ImGuiCol_TitleBg] = ImVec4(0.27f, 0.00f, 0.00f, 1.00f);          // 标题栏红
+    colors[ImGuiCol_TitleBgActive] = ImVec4(0.32f, 0.00f, 0.00f, 1.00f);    // 激活标题栏
+    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.27f, 0.00f, 0.00f, 0.51f); // 折叠标题栏
+    colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.00f, 0.00f, 1.00f);        // 菜单栏红色
+    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);      // 滚动条背景黑
+    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.00f, 0.00f, 1.00f);    // 滚动条滑块红
+    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_CheckMark] = ImVec4(0.90f, 0.00f, 0.00f, 1.00f); // 勾选红色
+    colors[ImGuiCol_SliderGrab] = ImVec4(0.60f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.80f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_Button] = ImVec4(0.63f, 0.00f, 0.00f, 0.40f); // 按钮红
+    colors[ImGuiCol_ButtonHovered] = ImVec4(0.83f, 0.00f, 0.00f, 0.60f);
+    colors[ImGuiCol_ButtonActive] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_Header] = ImVec4(0.63f, 0.00f, 0.00f, 0.31f); // 折叠栏
+    colors[ImGuiCol_HeaderHovered] = ImVec4(0.83f, 0.00f, 0.00f, 0.80f);
+    colors[ImGuiCol_HeaderActive] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_Separator] = ImVec4(0.43f, 0.00f, 0.00f, 0.50f);
+    colors[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.59f, 0.98f, 0.25f); // 可忽略
+    colors[ImGuiCol_Tab] = ImVec4(0.18f, 0.00f, 0.00f, 0.86f);        // Tab 红
+    colors[ImGuiCol_TabHovered] = ImVec4(0.36f, 0.00f, 0.00f, 0.80f);
+    colors[ImGuiCol_TabActive] = ImVec4(0.54f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_TabUnfocused] = ImVec4(0.07f, 0.10f, 0.15f, 0.97f);
+    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.26f, 0.42f, 1.00f);
+    colors[ImGuiCol_DockingPreview] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
+    colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f); // 折线红色
+    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogram] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f); // 柱状图红色
+    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.25f, 0.00f, 0.00f, 0.35f);
+    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 0.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.00f, 0.00f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.00f, 0.00f, 0.35f);
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
 }
@@ -688,8 +741,8 @@ void EditorUI::OnLightInspectorGUI(Light &light)
     {
         auto &directionalLight = static_cast<DirectionalLight &>(light);
         ImGui::Text("%s %d", ConvertToUTF8(L"方向光源").c_str(), directionalLight.number);
-        ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(directionalLight.direction), 0.1f);
-        directionalLight.direction = glm::normalize(directionalLight.direction);
+        ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(directionalLight.direction), 0.1f,- 1.0f, 1.0f);
+        //directionalLight.direction = glm::normalize(directionalLight.direction);
         ImGui::Text("%s: (0.0, 0.0, 0.0)", ConvertToUTF8(L"位置").c_str()); // 定向光没有位置
         ImGui::ColorEdit3(ConvertToUTF8(L"环境光").c_str(), glm::value_ptr(directionalLight.ambient));
         ImGui::ColorEdit3(ConvertToUTF8(L"漫反射").c_str(), glm::value_ptr(directionalLight.diffuse));
@@ -701,8 +754,8 @@ void EditorUI::OnLightInspectorGUI(Light &light)
         auto &spotLight = static_cast<SpotLight &>(light);
         ImGui::Text("%s", ConvertToUTF8(L"聚光灯").c_str());
         ImGui::DragFloat3(ConvertToUTF8(L"位置").c_str(), glm::value_ptr(spotLight.position), 0.1f);
-        ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(spotLight.direction), 0.01f);
-        spotLight.direction = glm::normalize(spotLight.direction);
+        ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(spotLight.direction), 0.01f, -1.0f, 1.0f);
+        //spotLight.direction = glm::normalize(spotLight.direction);
         ImGui::ColorEdit3(ConvertToUTF8(L"环境光").c_str(), glm::value_ptr(spotLight.ambient));
         ImGui::ColorEdit3(ConvertToUTF8(L"漫反射").c_str(), glm::value_ptr(spotLight.diffuse));
         ImGui::ColorEdit3(ConvertToUTF8(L"高光").c_str(), glm::value_ptr(spotLight.specular));

@@ -39,6 +39,7 @@ Renderer::~Renderer()
     gBuffer.reset();
     shadowBuffer.reset();
     hdrBuffer.reset();
+    hdrBufferMS.reset();
     bloomPrefilterBuffer.reset();
     for (auto &blurBuffer : bloomBlurBuffers)
     {
@@ -51,6 +52,8 @@ Renderer::~Renderer()
     shadowDepthShader.reset();
     skyboxShader.reset();
     hdrShader.reset();
+    postProcessShader.reset();
+    postShaderMS.reset();
     bloomPreShader.reset();
     bloomBlurShader.reset();
     ssaoShader.reset();
@@ -114,6 +117,8 @@ void Renderer::Initialize()
 
     postProcessShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
                                                  FileSystem::GetPath("resources/shaders/postprocess/post.frag"));
+    postShaderMS = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
+                                             FileSystem::GetPath("resources/shaders/postprocess/post_msaa.frag"));
 
     ssaoShader =
         std::make_unique<Shader>("resources/shaders/postprocess/quad.vert", "resources/shaders/postprocess/ssao.frag");
@@ -126,6 +131,7 @@ void Renderer::Initialize()
     SetupShadowBuffer();
     SetupGBuffer();
     SetupHDRBuffer();
+    SetupHDRBufferMS();
     SetupBloomBuffer();
     SetupSSAOBuffer();
 
@@ -150,11 +156,13 @@ void Renderer::SetupGBuffer()
 {
     gBuffer = std::make_unique<Framebuffer>(width, height);
 
-    // 位置、法线、反照率、金属度/粗糙度/ao
+    // 位置、法线、反照率、金属度/粗糙度/ao、漫反射/镜面反射贴图
     gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);      // 位置 + 深度
     gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);      // 法线
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 反照率
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 金属度/粗糙度/ao
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 漫反射贴图
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 镜面反射贴图
 
     gBuffer->AddDepthBuffer();
     gBuffer->CheckComplete();
@@ -173,6 +181,13 @@ void Renderer::SetupHDRBuffer()
     hdrBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
     hdrBuffer->AddDepthBuffer();
     hdrBuffer->CheckComplete();
+}
+void Renderer::SetupHDRBufferMS()
+{
+    hdrBufferMS = std::make_unique<Framebuffer>(width, height);
+    hdrBufferMS->AddColorTextureMultisample(GL_RGBA16F, 4); // 使用4倍多重采样
+    hdrBufferMS->AddDepthBufferMultisample();
+    hdrBufferMS->CheckComplete();
 }
 
 void Renderer::SetupBloomBuffer()
@@ -248,7 +263,14 @@ void Renderer::RenderScene()
 
 void Renderer::RenderForward()
 {
-    hdrBuffer->Bind();
+    if (msaaEnabled)
+    {
+        hdrBufferMS->Bind();
+    }
+    else
+    {
+        hdrBuffer->Bind();
+    }
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     glEnable(GL_DEPTH_TEST);
@@ -303,7 +325,10 @@ void Renderer::RenderDeferred()
 
     deferredGeometryShader->Use();
     // 设置相机等uniform
-
+    deferredGeometryShader->SetMat4("view", mainCamera->GetViewMatrix());
+    deferredGeometryShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
+    deferredGeometryShader->SetVec3("viewPos", mainCamera->Position);
+    deferredGeometryShader->SetInt("iblEnabled", iblEnabled ? 1 : 0);
     for (auto &model : models)
     {
         model->Draw(*deferredGeometryShader);
@@ -315,15 +340,34 @@ void Renderer::RenderDeferred()
     }
 
     // 光照处理阶段
-    glBindFramebuffer(GL_FRAMEBUFFER, hdrBuffer->GetID());
+    hdrBuffer->Bind();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     deferredLightingShader->Use();
     // 绑定GBuffer纹理并设置uniform
 
-    // 渲染全屏四边形
-    glBindVertexArray(0);
-    glDrawArrays(GL_TRIANGLES, 0, 3);
+    // 设置相机
+    deferredLightingShader->SetMat4("view", mainCamera->GetViewMatrix());
+    deferredLightingShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
+    deferredLightingShader->SetVec3("viewPos", mainCamera->Position);
+    deferredLightingShader->SetInt("gPosition", 0);
+    deferredLightingShader->SetInt("gNormal", 1);
+    deferredLightingShader->SetInt("gAlbedo", 2);
+    deferredLightingShader->SetInt("gMetallic", 3);
+    deferredLightingShader->SetInt("gRoughness", 4);
+    deferredLightingShader->SetInt("gAO", 5);
+    deferredLightingShader->SetInt("gDiffuse", 6);
+    deferredLightingShader->SetInt("gSpecular", 7);
+    gBuffer->BindTexture(0, 0); // 位置 + 深度
+    gBuffer->BindTexture(1, 1); // 法线
+    gBuffer->BindTexture(2, 2); // 反照率
+    gBuffer->BindTexture(3, 3); // 金属度/粗糙度/ao
+    gBuffer->BindTexture(4, 4); // 漫反射贴图
+    gBuffer->BindTexture(5, 5); // 镜面反射贴图
+    gBuffer->BindTexture(6, 6); // 漫反射贴图
+    gBuffer->BindTexture(7, 7); // 镜面反射贴图
+    // 真光体积渲染
+    
 
     if (iblEnabled)
     {
@@ -373,7 +417,14 @@ void Renderer::RenderSkybox()
 
 void Renderer::RenderLights()
 {
-    hdrBuffer->Bind();
+    if (msaaEnabled)
+    {
+        hdrBufferMS->Bind();
+    }
+    else
+    {
+        hdrBuffer->Bind();
+    }
     glDisable(GL_CULL_FACE);
     glEnable(GL_DEPTH_TEST);
     glDepthMask(GL_FALSE);
@@ -601,6 +652,16 @@ void Renderer::SetGlobalUniforms(const Camera &camera)
 
 void Renderer::RenderPostProcessing()
 {
+    if (msaaEnabled)
+    {
+        hdrBuffer->Bind();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        postShaderMS->Use();
+        postShaderMS->SetInt("uSamples", 4);
+        hdrBufferMS->BindTexture(0, 0); // 绑定多重采样的 HDR 纹理
+        RenderQuad();
+    }
+
     // 1. SSAO Pass
     if (ssaoEnabled && currentMode == DEFERRED)
     {
@@ -748,6 +809,7 @@ void Renderer::Resize(int newWidth, int newHeight)
     // 更新帧缓冲和着色器
     gBuffer->Resize(newWidth, newHeight);
     hdrBuffer->Resize(newWidth, newHeight);
+    hdrBufferMS->Resize(newWidth, newHeight);
     bloomBlurBuffers[0]->Resize(newWidth, newHeight);
     bloomBlurBuffers[1]->Resize(newWidth, newHeight);
     bloomPrefilterBuffer->Resize(newWidth, newHeight);

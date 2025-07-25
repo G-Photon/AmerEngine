@@ -24,6 +24,9 @@ class Framebuffer
     // 深度/模板渲染缓冲（默认附件，兼容旧显卡）
     void AddDepthBuffer();
 
+    // 多重采样深度缓冲
+    void AddDepthBufferMultisample();
+
     // 检查完整性
     void CheckComplete();
 
@@ -90,4 +93,5 @@ class Framebuffer
 
     unsigned int depthTexture = 0;
     unsigned int depthBuffer = 0;
+    int lastSamples = 1;
 };

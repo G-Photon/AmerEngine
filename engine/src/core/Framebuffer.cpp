@@ -80,6 +80,18 @@ void Framebuffer::AddDepthBuffer()
     glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
     glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH24_STENCIL8, width, height);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
+    lastSamples = 1;
+}
+
+void Framebuffer::AddDepthBufferMultisample()
+{
+    glBindFramebuffer(GL_FRAMEBUFFER, ID);
+
+    glGenRenderbuffers(1, &depthBuffer);
+    glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, width, height);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
+    lastSamples = 4; // 使用4倍多重采样
 }
 
 void Framebuffer::CheckComplete()
@@ -173,7 +185,12 @@ void Framebuffer::Resize(int newWidth, int newHeight)
     if (hadDepthTex)
         AddDepthTexture();
     if (hadDepthBuf)
-        AddDepthBuffer();
+    {
+        if (lastSamples > 1)
+            AddDepthBufferMultisample();
+        else
+            AddDepthBuffer();
+    }
 
     CheckComplete();
 }
@@ -185,4 +202,3 @@ void Framebuffer::Clear(const glm::vec4 &color)
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
-

@@ -5,7 +5,7 @@ add_rules("plugin.compile_commands.autoupdate", {outputdir = ".vscode"})
 add_requires("glm","glfw","glad", "assimp", "libsdl3", "tinyfiledialogs")
 -- 选择imgui的docking分支而不是main分支
 add_requires("imgui docking",{configs = {glfw = true, opengl3 = true, docking = true}})
-target("engine")
+target("AmerEngine")
     set_kind("binary")
     add_files("src/**.cpp")
     add_includedirs("include")
@@ -14,6 +14,10 @@ target("engine")
     after_build(function (target)
         os.cp("resources", target:targetdir() .. "/")
     end)
+    if is_plat("windows") then
+        add_ldflags("/subsystem:windows", {force = true})
+        add_ldflags("/entry:mainCRTStartup", {force = true})
+    end
 
 --
 -- If you want to known more usage about xmake, please see https://xmake.io

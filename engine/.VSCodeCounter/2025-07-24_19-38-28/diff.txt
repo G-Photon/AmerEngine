@@ -1,0 +1,54 @@
+Date : 2025-07-24 19:38:28
+Directory : d:\Adata\study\opengl\engine
+Total : 17 files,  673 codes, 33 comments, 73 blanks, all 779 lines
+
+Languages
++----------+------------+------------+------------+------------+------------+
+| language | files      | code       | comment    | blank      | total      |
++----------+------------+------------+------------+------------+------------+
+| C++      |         10 |        556 |         28 |         51 |        635 |
+| GLSL     |          6 |        113 |          5 |         22 |        140 |
+| XMake    |          1 |          4 |          0 |          0 |          4 |
++----------+------------+------------+------------+------------+------------+
+
+Directories
++---------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| path                                                                            | files      | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+| .                                                                               |         17 |        673 |         33 |         73 |        779 |
+| . (Files)                                                                       |          1 |          4 |          0 |          0 |          4 |
+| include                                                                         |          4 |        119 |         16 |         19 |        154 |
+| include\core                                                                    |          4 |        119 |         16 |         19 |        154 |
+| resources                                                                       |          6 |        113 |          5 |         22 |        140 |
+| resources\shaders                                                               |          6 |        113 |          5 |         22 |        140 |
+| resources\shaders\forward                                                       |          1 |          2 |          1 |          1 |          4 |
+| resources\shaders\postprocess                                                   |          5 |        111 |          4 |         21 |        136 |
+| src                                                                             |          6 |        437 |         12 |         32 |        481 |
+| src (Files)                                                                     |          1 |          1 |          1 |          0 |          2 |
+| src\core                                                                        |          4 |        255 |          3 |         31 |        289 |
+| src\ui                                                                          |          1 |        181 |          8 |          1 |        190 |
++---------------------------------------------------------------------------------+------------+------------+------------+------------+------------+
+
+Files
++---------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| filename                                                                        | language | code       | comment    | blank      | total      |
++---------------------------------------------------------------------------------+----------+------------+------------+------------+------------+
+| d:\Adata\study\opengl\engine\include\core\Framebuffer.hpp                       | C++      |         12 |         12 |         14 |         38 |
+| d:\Adata\study\opengl\engine\include\core\Geometry.hpp                          | C++      |         86 |          1 |          4 |         91 |
+| d:\Adata\study\opengl\engine\include\core\Mesh.hpp                              | C++      |         15 |          3 |          1 |         19 |
+| d:\Adata\study\opengl\engine\include\core\Renderer.hpp                          | C++      |          6 |          0 |          0 |          6 |
+| d:\Adata\study\opengl\engine\resources\shaders\forward\blinn_phong.frag         | GLSL     |          2 |          1 |          1 |          4 |
+| d:\Adata\study\opengl\engine\resources\shaders\postprocess\bloom_blur.frag      | GLSL     |         28 |          0 |          2 |         30 |
+| d:\Adata\study\opengl\engine\resources\shaders\postprocess\bloom_prefilter.frag | GLSL     |         14 |          0 |          2 |         16 |
+| d:\Adata\study\opengl\engine\resources\shaders\postprocess\post.frag            | GLSL     |         26 |          4 |          7 |         37 |
+| d:\Adata\study\opengl\engine\resources\shaders\postprocess\quad.vert            | GLSL     |          9 |          0 |          3 |         12 |
+| d:\Adata\study\opengl\engine\resources\shaders\postprocess\ssao.frag            | GLSL     |         34 |          0 |          7 |         41 |
+| d:\Adata\study\opengl\engine\src\core\Application.cpp                           | C++      |          0 |          0 |         -1 |         -1 |
+| d:\Adata\study\opengl\engine\src\core\Framebuffer.cpp                           | C++      |         37 |          1 |         10 |         48 |
+| d:\Adata\study\opengl\engine\src\core\Geometry.cpp                              | C++      |        112 |         -5 |         11 |        118 |
+| d:\Adata\study\opengl\engine\src\core\Renderer.cpp                              | C++      |        106 |          7 |         11 |        124 |
+| d:\Adata\study\opengl\engine\src\main.cpp                                       | C++      |          1 |          1 |          0 |          2 |
+| d:\Adata\study\opengl\engine\src\ui\EditorUI.cpp                                | C++      |        181 |          8 |          1 |        190 |
+| d:\Adata\study\opengl\engine\xmake.lua                                          | XMake    |          4 |          0 |          0 |          4 |
+| Total                                                                           |          |        673 |         33 |         73 |        779 |
++---------------------------------------------------------------------------------+----------+------------+------------+------------+------------+

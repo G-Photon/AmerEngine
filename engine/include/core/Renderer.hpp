@@ -218,6 +218,7 @@ class Renderer
     void SetupGBuffer();
     void SetupShadowBuffer();
     void SetupHDRBuffer();
+    void SetupHDRBufferMS();
     void SetupBloomBuffer();
     void SetupSSAOBuffer();
     void SetupSkybox();
@@ -237,7 +238,9 @@ class Renderer
     std::unique_ptr<Framebuffer> bloomBlurBuffers[2];
     std::unique_ptr<Framebuffer> ssaoBuffer;
 
-    // 着色器
+    std::unique_ptr<Framebuffer> hdrBufferMS;
+
+        // 着色器
     std::unique_ptr<Shader> forwardShader;
     std::unique_ptr<Shader> deferredGeometryShader;
     std::unique_ptr<Shader> deferredLightingShader;
@@ -249,6 +252,7 @@ class Renderer
     std::unique_ptr<Shader> ssaoShader;
     std::unique_ptr<Shader> lightsShader;
     std::unique_ptr<Shader> postProcessShader;
+    std::unique_ptr<Shader> postShaderMS; // 采样 sampler2DMS
 
     std::unordered_map<std::string, std::shared_ptr<Shader>> shaders;
 
