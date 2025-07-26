@@ -106,3 +106,47 @@ void Texture::CreateNormalMap()
     Image_Format = GL_RGB;
     Generate(1, 1, data);
 }
+
+void Texture::LoadCubemap(const std::vector<std::string> &faces)
+{
+    if (faces.size() != 6)
+    {
+        std::cerr << "Cubemap faces must be exactly 6!" << std::endl;
+        return;
+    }
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ID);
+    for (unsigned int i = 0; i < faces.size(); ++i)
+    {
+        unsigned char *data = stbi_load(faces[i].c_str(), &Width, &Height, &nrComponents, 0);
+        if (data)
+        {
+            if (nrComponents == 3)
+            {
+                Internal_Format = GL_RGB;
+                Image_Format = GL_RGB;
+            }
+            else if (nrComponents == 4)
+            {
+                Internal_Format = GL_RGBA;
+                Image_Format = GL_RGBA;
+            }
+            glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, Internal_Format, Width, Height, 0, Image_Format,
+                         GL_UNSIGNED_BYTE, data);
+            stbi_image_free(data);
+        }
+        else
+        {
+            std::cerr << "Cubemap texture failed to load at path: " << faces[i] << std::endl;
+            stbi_image_free(data);
+        }
+    }
+
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+}

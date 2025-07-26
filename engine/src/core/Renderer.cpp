@@ -2,6 +2,7 @@
 #include "core/Camera.hpp"
 #include "core/Geometry.hpp"
 #include "core/Light.hpp"
+#include "core/Shader.hpp"
 #include "core/Texture.hpp"
 #include "utils/FileSystem.hpp"
 #include <iostream>
@@ -145,9 +146,17 @@ void Renderer::Initialize()
     auto normalTexture = std::make_shared<Texture>();
     normalTexture->CreateNormalMap();
 
+    environmentMap = std::make_shared<Texture>();
+    environmentMap->LoadCubemap({FileSystem::GetPath("resources/textures/skybox/right.jpg"),
+                                 FileSystem::GetPath("resources/textures/skybox/left.jpg"),
+                                 FileSystem::GetPath("resources/textures/skybox/top.jpg"),
+                                 FileSystem::GetPath("resources/textures/skybox/bottom.jpg"),
+                                 FileSystem::GetPath("resources/textures/skybox/front.jpg"),
+                                 FileSystem::GetPath("resources/textures/skybox/back.jpg")});
+    
     // 设置天空盒
-    // SetupSkybox();
-
+    SetupSkybox();
+    
     // 设置相机
     mainCamera = std::make_shared<Camera>();
 }
@@ -213,15 +222,24 @@ void Renderer::SetupSSAOBuffer()
 
 void Renderer::SetupSkybox()
 {
-    float skyboxVertices[] = {
-        // positions
-        -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f,
-        1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f,
-        -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  -1.0f, 1.0f,
-        1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,
-        1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,
-        -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,
-    };
+    float skyboxVertices[] = {// positions
+                              -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f,
+                              1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f,
+
+                              -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f,
+                              -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,
+
+                              1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,
+                              1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f,
+
+                              -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
+                              1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,
+
+                              -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,
+                              1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f,
+
+                              -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f,
+                              1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f};
 
     glGenVertexArrays(1, &skyboxVAO);
     glGenBuffers(1, &skyboxVBO);
@@ -367,7 +385,11 @@ void Renderer::RenderDeferred()
     gBuffer->BindTexture(6, 6); // 漫反射贴图
     gBuffer->BindTexture(7, 7); // 镜面反射贴图
     // 真光体积渲染
-    
+    for (const auto &light : GetLights())
+    {
+        light->SetupShader(*deferredLightingShader);
+        
+    }
 
     if (iblEnabled)
     {
@@ -401,11 +423,22 @@ void Renderer::RenderShadows()
 void Renderer::RenderSkybox()
 {
     glDepthFunc(GL_LEQUAL);
+    glDisable(GL_CULL_FACE);
     skyboxShader->Use();
-    // 设置视图矩阵(移除平移部分)
+    // 设置环境贴图
+    skyboxShader->SetInt("skybox", 0);
+    // 设置视图矩阵(移除平移部分)   
     glm::mat4 view = glm::mat4(glm::mat3(mainCamera->GetViewMatrix()));
     skyboxShader->SetMat4("view", view);
     skyboxShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
+    if (gammaCorrection)
+    {
+        skyboxShader->SetBool("gammaEnabled", true);
+    }
+    else
+    {
+        skyboxShader->SetBool("gammaEnabled", false);
+    }
 
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);
@@ -413,6 +446,7 @@ void Renderer::RenderSkybox()
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
     glDepthFunc(GL_LESS);
+    glEnable(GL_CULL_FACE);
 }
 
 void Renderer::RenderLights()

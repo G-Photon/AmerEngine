@@ -3,6 +3,8 @@
 #include <glm/glm.hpp>
 #include <string>
 #include <glad/glad.h>
+#include <stb_image.h>
+#include <vector>
 
 class Texture
 {
@@ -16,6 +18,7 @@ class Texture
 
     void CreateSolidColor(const glm::vec3 &color);
     void CreateNormalMap();
+    void LoadCubemap(const std::vector<std::string> &faces);
 
     unsigned int GetID() const
     {
