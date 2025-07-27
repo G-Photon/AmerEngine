@@ -14,7 +14,7 @@ target("AmerEngine")
     after_build(function (target)
         os.cp("resources", target:targetdir() .. "/")
     end)
-    if is_plat("windows") then
+    if is_plat("windows") and is_mode("release") then
         add_ldflags("/subsystem:windows", {force = true})
         add_ldflags("/entry:mainCRTStartup", {force = true})
     end

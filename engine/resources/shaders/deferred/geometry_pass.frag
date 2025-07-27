@@ -2,7 +2,10 @@
 layout (location = 0) out vec4 gPosition;
 layout (location = 1) out vec4 gNormal;
 layout (location = 2) out vec4 gAlbedo;
-layout (location = 3) out vec4 gMRao;
+layout (location = 3) out vec4 gSpecular;
+layout (location = 4) out vec4 gMetallic; // 金属度
+layout (location = 5) out vec4 gRoughness; // 粗糙度
+layout (location = 6) out vec4 gAo; // 环境光遮蔽
 
 in vec2 TexCoords;
 in vec3 FragPos;
@@ -11,22 +14,27 @@ in vec3 Tangent;
 in vec3 Bitangent;
 
 struct Material {
-    vec3 albedo;
-    float metallic;
-    float roughness;
-    float ao;
+    vec3 ambient;
+    vec3 diffuse;
+    vec3 specular;
+    float metallic; // 金属度
+    float roughness; // 粗糙度
+    float ao; // 环境光遮蔽
+    float shininess;
     
-    sampler2D albedoMap;
+    sampler2D diffuseMap;
+    sampler2D specularMap;
+    sampler2D normalMap;
     sampler2D metallicMap;
     sampler2D roughnessMap;
     sampler2D aoMap;
-    sampler2D normalMap;
-    
-    bool useAlbedoMap;
+
+    bool useDiffuseMap;
+    bool useSpecularMap;
+    bool useNormalMap;
     bool useMetallicMap;
     bool useRoughnessMap;
     bool useAoMap;
-    bool useNormalMap;
 };
 
 uniform Material material;
@@ -50,17 +58,16 @@ void main() {
     gNormal = vec4(N, 1.0);
     
     // 存储反照率
-    vec3 albedo = material.useAlbedoMap ? 
-        texture(material.albedoMap, TexCoords).rgb : material.albedo;
-    gAlbedo = vec4(albedo, 1.0);
+    gAlbedo = vec4(material.useDiffuseMap ? 
+        texture(material.diffuseMap, TexCoords).rgb : material.diffuse, 1.0);
     
     // 存储金属度、粗糙度和AO
-    float metallic = material.useMetallicMap ? 
-        texture(material.metallicMap, TexCoords).r : material.metallic;
-    float roughness = material.useRoughnessMap ? 
-        texture(material.roughnessMap, TexCoords).r : material.roughness;
-    float ao = material.useAoMap ? 
-        texture(material.aoMap, TexCoords).r : material.ao;
-    
-    gMRao = vec4(metallic, roughness, ao, 1.0);
+    gSpecular = vec4(material.useSpecularMap ? 
+        texture(material.specularMap, TexCoords).rgb : material.specular, 1.0);
+    gMetallic = vec4(material.useMetallicMap ? 
+        texture(material.metallicMap, TexCoords).r : material.metallic, 0.0, 0.0, 1.0);
+    gRoughness = vec4(material.useRoughnessMap ?
+        texture(material.roughnessMap, TexCoords).r : material.roughness, 0.0, 0.0, 1.0);
+    gAo = vec4(material.useAoMap ?
+        texture(material.aoMap, TexCoords).r : material.ao, 0.0, 0.0, 1.0);
 }

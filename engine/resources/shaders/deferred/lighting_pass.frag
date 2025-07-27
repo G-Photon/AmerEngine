@@ -1,179 +1,164 @@
-    #version 460 core
+#version 460 core
 out vec4 FragColor;
 
 in vec2 TexCoords;
 
+// G-Buffer 纹理
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
 uniform sampler2D gAlbedo;
-uniform sampler2D gMRao;
+uniform sampler2D gSpecular;
+uniform sampler2D gMetallic;
+uniform sampler2D gRoughness;
+uniform sampler2D gAo;
 
-struct DirLight {
-    vec3 direction;
-    vec3 color;
-};
-
-struct PointLight {
-    vec3 position;
-    vec3 color;
+// 光源结构体
+struct Light {
+    vec3 position;      // 位置（点光源和聚光灯）
+    vec3 direction;     // 方向（方向光和聚光灯）
+    vec3 ambient;       // 环境光
+    vec3 diffuse;       // 漫反射
+    vec3 specular;      // 镜面反射
+    
+    // 衰减参数
     float constant;
     float linear;
     float quadratic;
+    
+    // 聚光灯参数
+    float cutOff;       // 内切角余弦值
+    float outerCutOff;  // 外切角余弦值
 };
+uniform Light light;
 
-struct SpotLight {
-    vec3 position;
-    vec3 direction;
-    vec3 color;
-    float cutOff;
-    float outerCutOff;
-    float constant;
-    float linear;
-    float quadratic;
-};
-
-#define NR_POINT_LIGHTS 4
-uniform DirLight dirLight;
-uniform PointLight pointLights[NR_POINT_LIGHTS];
-uniform SpotLight spotLights[NR_POINT_LIGHTS];
-
-uniform vec3 viewPos;
-uniform bool useIBL;
-uniform samplerCube irradianceMap;
-uniform samplerCube prefilterMap;
-uniform sampler2D brdfLUT;
+uniform int lightType;  // 0:点光源, 1:方向光, 2:聚光灯
+uniform vec3 viewPos;   // 相机位置
 
 const float PI = 3.14159265359;
+const float SHININESS_FACTOR = 128.0; // 高光系数
 
-// PBR光照计算函数
-vec3 CalculateDirLight(DirLight light, vec3 normal, vec3 viewDir, 
-                      vec3 albedo, float metallic, float roughness, float ao, vec3 F0);
-vec3 CalculatePointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,
-                        vec3 albedo, float metallic, float roughness, float ao, vec3 F0);
-vec3 CalculateSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,
-                       vec3 albedo, float metallic, float roughness, float ao, vec3 F0);
-
-// IBL函数
-vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
-vec3 CalculateIBL(vec3 normal, vec3 viewDir, vec3 albedo, float metallic, float roughness, float ao);
+// 光照计算函数
+vec3 calculateDirectionalLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao);
+vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao);
+vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao);
 
 void main() {
     // 从G缓冲中获取数据
-    vec3 FragPos = texture(gPosition, TexCoords).rgb;
-    vec3 Normal = texture(gNormal, TexCoords).rgb;
-    vec3 Albedo = texture(gAlbedo, TexCoords).rgb;
-    float Metallic = texture(gMRao, TexCoords).r;
-    float Roughness = texture(gMRao, TexCoords).g;
-    float Ao = texture(gMRao, TexCoords).b;
+    vec3 fragPos = texture(gPosition, TexCoords).rgb;
+    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
+    vec3 albedo = texture(gAlbedo, TexCoords).rgb;
+    vec3 specularColor = texture(gSpecular, TexCoords).rgb;
+    float roughness = texture(gRoughness, TexCoords).r;
+    float ao = texture(gAo, TexCoords).r;
     
-    // 输入光照数据
-    vec3 N = normalize(Normal);
-    vec3 V = normalize(viewPos - FragPos);
-    vec3 R = reflect(-V, N);
+    vec3 result = vec3(0.0);
     
-    // 计算反射率
-    vec3 F0 = vec3(0.04); 
-    F0 = mix(F0, Albedo, Metallic);
-    
-    // 反射光方程
-    vec3 Lo = vec3(0.0);
-    
-    // 方向光
-    Lo += CalculateDirLight(dirLight, N, V, Albedo, Metallic, Roughness, Ao, F0);
-    
-    // 点光源
-    for(int i = 0; i < NR_POINT_LIGHTS; i++) {
-        Lo += CalculatePointLight(pointLights[i], N, FragPos, V, Albedo, Metallic, Roughness, Ao, F0);
+    // 根据光源类型计算光照
+    switch(lightType) {
+        case 0: // 点光源
+            result = calculatePointLight(fragPos, normal, albedo, specularColor, roughness, ao);
+            break;
+        case 1: // 方向光
+            result = calculateDirectionalLight(fragPos, normal, albedo, specularColor, roughness, ao);
+            break;
+        case 2: // 聚光灯
+            result = calculateSpotLight(fragPos, normal, albedo, specularColor, roughness, ao);
+            break;
     }
     
-    // 聚光灯
-    for(int i = 0; i < NR_POINT_LIGHTS; i++) {
-        Lo += CalculateSpotLight(spotLights[i], N, FragPos, V, Albedo, Metallic, Roughness, Ao, F0);
-    }
-    
-    // 环境光 (IBL)
-    vec3 ambient = vec3(0.03) * Albedo * Ao;
-    if (useIBL) {
-        ambient = CalculateIBL(N, V, Albedo, Metallic, Roughness, Ao);
-    }
-    
-    vec3 color = ambient + Lo;
-    
-    // HDR色调映射
-    color = color / (color + vec3(1.0));
-    // gamma校正
-    color = pow(color, vec3(1.0/2.2));
-    
-    FragColor = vec4(color, 1.0);
+    FragColor = vec4(result, 1.0);
 }
 
-// 实现各种光照计算函数...
-vec3 CalculateDirLight(DirLight light, vec3 normal, vec3 viewDir, 
-                      vec3 albedo, float metallic, float roughness, float ao, vec3 F0) {
-    // 计算漫反射和镜面反射
+// 计算方向光
+vec3 calculateDirectionalLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao) {
+    // 光源方向（从光源指向片段）
     vec3 lightDir = normalize(-light.direction);
+    // 视线方向（从片段指向相机）
+    vec3 viewDir = normalize(viewPos - fragPos);
+    
+    // 漫反射分量
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = diff * light.color * albedo;
+    vec3 diffuse = light.diffuse * diff * albedo;
     
+    // 镜面反射分量（Blinn-Phong）
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), 1.0 / (roughness * roughness));
-    vec3 specular = spec * light.color * F0;
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), roughness * SHININESS_FACTOR);
+    vec3 specular = light.specular * spec * specularColor;
     
-    return (diffuse + specular) * ao;
+    // 环境光分量
+    vec3 ambient = light.ambient * albedo * ao;
+    
+    return ambient + diffuse + specular;
 }
 
-vec3 CalculatePointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir,
-                        vec3 albedo, float metallic, float roughness, float ao, vec3 F0) {
+// 计算点光源
+vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao) {
+    // 光源方向（从片段指向光源）
     vec3 lightDir = normalize(light.position - fragPos);
+    // 视线方向（从片段指向相机）
+    vec3 viewDir = normalize(viewPos - fragPos);
+    
+    // 距离衰减计算
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + 
-                              light.quadratic * (distance * distance));
+                             light.quadratic * (distance * distance));
     
+    // 漫反射分量
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = diff * light.color * albedo * attenuation;
+    vec3 diffuse = light.diffuse * diff * albedo;
     
+    // 镜面反射分量（Blinn-Phong）
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), 1.0 / (roughness * roughness));
-    vec3 specular = spec * light.color * F0 * attenuation;
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), roughness * SHININESS_FACTOR);
+    vec3 specular = light.specular * spec * specularColor;
     
-    return (diffuse + specular) * ao;
+    // 环境光分量
+    vec3 ambient = light.ambient * albedo * ao;
+    
+    // 应用衰减
+    ambient *= attenuation;
+    diffuse *= attenuation;
+    specular *= attenuation;
+    
+    return ambient + diffuse + specular;
 }
 
-vec3 CalculateSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir,
-                       vec3 albedo, float metallic, float roughness, float ao, vec3 F0) {
+// 计算聚光灯
+vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao) {
+    // 光源方向（从片段指向光源）
     vec3 lightDir = normalize(light.position - fragPos);
-    float distance = length(light.position - fragPos);
-    float attenuation = 1.0 / (light.constant + light.linear * distance + 
-                              light.quadratic * (distance * distance));
+    // 视线方向（从片段指向相机）
+    vec3 viewDir = normalize(viewPos - fragPos);
     
-    float theta = dot(lightDir, normalize(-light.direction));
+    // 聚光灯方向（从光源指向目标）
+    vec3 spotDir = normalize(-light.direction);
+    
+    // 计算聚光灯角度
+    float theta = dot(lightDir, spotDir);
     float epsilon = light.cutOff - light.outerCutOff;
     float intensity = clamp((theta - light.outerCutOff) / epsilon, 0.0, 1.0);
     
+    // 距离衰减计算
+    float distance = length(light.position - fragPos);
+    float attenuation = 1.0 / (light.constant + light.linear * distance + 
+                             light.quadratic * (distance * distance));
+    
+    // 漫反射分量
     float diff = max(dot(normal, lightDir), 0.0);
-    vec3 diffuse = diff * light.color * albedo * attenuation * intensity;
+    vec3 diffuse = light.diffuse * diff * albedo;
     
+    // 镜面反射分量（Blinn-Phong）
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), 1.0 / (roughness * roughness));
-    vec3 specular = spec * light.color * F0 * attenuation * intensity;
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), roughness * SHININESS_FACTOR);
+    vec3 specular = light.specular * spec * specularColor;
     
-    return (diffuse + specular) * ao;
-}
-
-vec3 FresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness) {
-    return F0 + (max(vec3(1.0 - roughness), vec3(0.0)) - F0) * pow(1.0 - cosTheta, 5.0);
-}
-
-vec3 CalculateIBL(vec3 normal, vec3 viewDir, vec3 albedo, float metallic, float roughness, float ao) {
-    // 计算环境光照
-    vec3 irradiance = texture(irradianceMap, normal).rgb;
+    // 环境光分量
+    vec3 ambient = light.ambient * albedo * ao;
     
-    // 预过滤环境贴图
-    vec3 prefilteredColor = textureLod(prefilterMap, reflect(-viewDir, normal), roughness * 128.0).rgb;
+    // 应用衰减和聚光强度
+    ambient *= attenuation * intensity;
+    diffuse *= attenuation * intensity;
+    specular *= attenuation * intensity;
     
-    // BRDF计算
-    vec2 brdf = texture(brdfLUT, vec2(max(dot(normal, viewDir), 0.0), roughness)).rg;
-    
-    // 环境光照
-    return (irradiance * albedo + prefilteredColor * brdf.x) * ao;
+    return ambient + diffuse + specular;
 }

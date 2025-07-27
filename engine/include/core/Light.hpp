@@ -2,7 +2,9 @@
 
 #include "Shader.hpp"
 #include "glm/fwd.hpp"
+#include "Geometry.hpp"
 #include <imgui.h>
+#include <memory>
 
 class Light
 {
@@ -29,6 +31,11 @@ class Light
     virtual int getType() const
     {
         return 0; // 默认返回0，子类可以重载此方法
+    }
+
+    virtual void drawLightMesh(const std::unique_ptr<Shader> &shader)
+    {
+        // 默认实现为空，子类可以重载此方法
     }
 };
 
@@ -57,6 +64,8 @@ class PointLight : public Light
     {
         return 0; // 点光源类型
     }
+
+    void drawLightMesh(const std::unique_ptr<Shader> &shader) override;
     int number;
     static int count;
 
@@ -97,6 +106,7 @@ class DirectionalLight : public Light
     {
         return 1; // 定向光类型
     }
+    void drawLightMesh(const std::unique_ptr<Shader> &shader) override;
 
     int number;
     static int count;
@@ -135,6 +145,8 @@ class SpotLight : public Light
     {
         return 2; // 聚光灯类型
     }
+
+    void drawLightMesh(const std::unique_ptr<Shader> &shader) override;
     int number;
     static int count;
 

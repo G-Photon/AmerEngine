@@ -168,10 +168,11 @@ void Renderer::SetupGBuffer()
     // 位置、法线、反照率、金属度/粗糙度/ao、漫反射/镜面反射贴图
     gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);      // 位置 + 深度
     gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);      // 法线
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 反照率
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 金属度/粗糙度/ao
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 漫反射贴图
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 镜面反射贴图
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 金属度
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 粗糙度
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // AO
 
     gBuffer->AddDepthBuffer();
     gBuffer->CheckComplete();
@@ -342,11 +343,12 @@ void Renderer::RenderDeferred()
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
     deferredGeometryShader->Use();
+    
     // 设置相机等uniform
     deferredGeometryShader->SetMat4("view", mainCamera->GetViewMatrix());
     deferredGeometryShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
     deferredGeometryShader->SetVec3("viewPos", mainCamera->Position);
-    deferredGeometryShader->SetInt("iblEnabled", iblEnabled ? 1 : 0);
+
     for (auto &model : models)
     {
         model->Draw(*deferredGeometryShader);
@@ -361,6 +363,13 @@ void Renderer::RenderDeferred()
     hdrBuffer->Bind();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // 设置光照阶段状态
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_ONE, GL_ONE); // 叠加混合模式
+    glDepthMask(GL_FALSE);       // 禁用深度写入
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL); // 使用LEQUAL深度测试
+
     deferredLightingShader->Use();
     // 绑定GBuffer纹理并设置uniform
 
@@ -368,33 +377,31 @@ void Renderer::RenderDeferred()
     deferredLightingShader->SetMat4("view", mainCamera->GetViewMatrix());
     deferredLightingShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
     deferredLightingShader->SetVec3("viewPos", mainCamera->Position);
+                                    // */
     deferredLightingShader->SetInt("gPosition", 0);
     deferredLightingShader->SetInt("gNormal", 1);
     deferredLightingShader->SetInt("gAlbedo", 2);
-    deferredLightingShader->SetInt("gMetallic", 3);
-    deferredLightingShader->SetInt("gRoughness", 4);
-    deferredLightingShader->SetInt("gAO", 5);
-    deferredLightingShader->SetInt("gDiffuse", 6);
-    deferredLightingShader->SetInt("gSpecular", 7);
-    gBuffer->BindTexture(0, 0); // 位置 + 深度
-    gBuffer->BindTexture(1, 1); // 法线
-    gBuffer->BindTexture(2, 2); // 反照率
-    gBuffer->BindTexture(3, 3); // 金属度/粗糙度/ao
-    gBuffer->BindTexture(4, 4); // 漫反射贴图
-    gBuffer->BindTexture(5, 5); // 镜面反射贴图
-    gBuffer->BindTexture(6, 6); // 漫反射贴图
-    gBuffer->BindTexture(7, 7); // 镜面反射贴图
+    deferredLightingShader->SetInt("gSpecular", 3);
+    deferredLightingShader->SetInt("gMetallic", 4);
+    deferredLightingShader->SetInt("gRoughness", 5);
+    deferredLightingShader->SetInt("gAo", 6);
+    gBuffer->BindTexture(0, 0);
+    gBuffer->BindTexture(1, 1);
+    gBuffer->BindTexture(2, 2);
+    gBuffer->BindTexture(3, 3);
+    gBuffer->BindTexture(4, 4);
+    gBuffer->BindTexture(5, 5);
+    gBuffer->BindTexture(6, 6);
+
     // 真光体积渲染
     for (const auto &light : GetLights())
     {
-        light->SetupShader(*deferredLightingShader);
-        
+        light->drawLightMesh(deferredLightingShader);
     }
 
-    if (iblEnabled)
-    {
-        RenderSkybox();
-    }
+    glDisable(GL_BLEND);
+    glDepthMask(GL_TRUE); // 恢复深度写入
+    glDepthFunc(GL_LESS); // 恢复默认深度测试
 }
 
 void Renderer::RenderShadows()
