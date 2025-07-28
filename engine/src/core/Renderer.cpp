@@ -1,5 +1,6 @@
 #include "core/Renderer.hpp"
 #include "core/Camera.hpp"
+#include "core/Framebuffer.hpp"
 #include "core/Geometry.hpp"
 #include "core/Light.hpp"
 #include "core/Shader.hpp"
@@ -340,7 +341,9 @@ void Renderer::RenderDeferred()
 {
     // 几何处理阶段
     gBuffer->Bind();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
 
     deferredGeometryShader->Use();
     
@@ -359,16 +362,21 @@ void Renderer::RenderDeferred()
         primitive.mesh->Draw(*deferredGeometryShader);
     }
 
+    
     // 光照处理阶段
-    hdrBuffer->Bind();
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    GLuint targetFBO = msaaEnabled ? hdrBufferMS->GetID() : hdrBuffer->GetID();
+    glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
+    glViewport(0, 0, width, height);
 
-    // 设置光照阶段状态
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_ONE, GL_ONE); // 叠加混合模式
-    glDepthMask(GL_FALSE);       // 禁用深度写入
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL); // 使用LEQUAL深度测试
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, gBuffer->GetID());
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, targetFBO);
+    glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_DEPTH_BUFFER_BIT, GL_NEAREST);
+
+    glClear(GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
+
+    glDepthMask(GL_FALSE);     // 不写入深度
+    glEnable(GL_STENCIL_TEST); // 全程开模板 
+    glDisable(GL_CULL_FACE);   // 由每个 pass 自己决定
 
     deferredLightingShader->Use();
     // 绑定GBuffer纹理并设置uniform
@@ -377,31 +385,61 @@ void Renderer::RenderDeferred()
     deferredLightingShader->SetMat4("view", mainCamera->GetViewMatrix());
     deferredLightingShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
     deferredLightingShader->SetVec3("viewPos", mainCamera->Position);
+    deferredLightingShader->SetVec2("screenSize", glm::vec2(width, height));
                                     // */
-    deferredLightingShader->SetInt("gPosition", 0);
-    deferredLightingShader->SetInt("gNormal", 1);
-    deferredLightingShader->SetInt("gAlbedo", 2);
-    deferredLightingShader->SetInt("gSpecular", 3);
-    deferredLightingShader->SetInt("gMetallic", 4);
-    deferredLightingShader->SetInt("gRoughness", 5);
-    deferredLightingShader->SetInt("gAo", 6);
-    gBuffer->BindTexture(0, 0);
-    gBuffer->BindTexture(1, 1);
-    gBuffer->BindTexture(2, 2);
-    gBuffer->BindTexture(3, 3);
-    gBuffer->BindTexture(4, 4);
-    gBuffer->BindTexture(5, 5);
-    gBuffer->BindTexture(6, 6);
-
-    // 真光体积渲染
-    for (const auto &light : GetLights())
+    const int texSlots[7] = {0, 1, 2, 3, 4, 5, 6};
+    const char *texNames[7] = {"gPosition", "gNormal", "gAlbedo", "gSpecular", "gMetallic", "gRoughness", "gAo"};
+    for (int i = 0; i < 7; ++i)
     {
-        light->drawLightMesh(deferredLightingShader);
+        deferredLightingShader->SetInt(texNames[i], texSlots[i]);
+        gBuffer->BindTexture(i, texSlots[i]);
     }
 
+    for (const auto &light : GetLights())
+    {
+        // === 第一步：标记光体积区域 ===
+        glClear(GL_STENCIL_BUFFER_BIT);
+        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);           // 不写颜色
+        glDepthMask(GL_FALSE);
+        glEnable(GL_DEPTH_TEST);
+        glDisable(GL_CULL_FACE);  // 正背面都要
+
+        glStencilFunc(GL_ALWAYS, 0, 0);
+        glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
+        glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
+
+        // 绘制光体积（仅更新模板缓冲区）
+        light->drawLightMesh(deferredLightingShader);
+        // 注意：此时光体积的模板值会被设置为1（或其他非0值），表示该区域有光照影响
+
+        // === 第二步：渲染光照（仅标记区域） ===
+        glDisable(GL_DEPTH_TEST);
+        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+        glEnable(GL_BLEND);
+        glBlendEquation(GL_FUNC_ADD);
+        glBlendFunc(GL_ONE, GL_ONE);
+        glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
+        glEnable(GL_CULL_FACE);
+        glCullFace(GL_FRONT);
+
+        // 再次绘制光体积（实际渲染光照）
+        light->drawLightMesh(deferredLightingShader);
+        glCullFace(GL_BACK);
+        glDisable(GL_BLEND);
+    }
+
+    // 恢复状态
+    glDisable(GL_STENCIL_TEST);
     glDisable(GL_BLEND);
-    glDepthMask(GL_TRUE); // 恢复深度写入
-    glDepthFunc(GL_LESS); // 恢复默认深度测试
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+    glCullFace(GL_BACK);
+    glEnable(GL_CULL_FACE);
+
+    if (iblEnabled)
+    {
+        RenderSkybox();
+    }
 }
 
 void Renderer::RenderShadows()
@@ -430,6 +468,7 @@ void Renderer::RenderShadows()
 void Renderer::RenderSkybox()
 {
     glDepthFunc(GL_LEQUAL);
+    glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);
     skyboxShader->Use();
     // 设置环境贴图
@@ -453,6 +492,7 @@ void Renderer::RenderSkybox()
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
     glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);
 }
 

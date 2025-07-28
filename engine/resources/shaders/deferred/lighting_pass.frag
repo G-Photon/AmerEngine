@@ -1,8 +1,6 @@
 #version 460 core
 out vec4 FragColor;
 
-in vec2 TexCoords;
-
 // G-Buffer 纹理
 uniform sampler2D gPosition;
 uniform sampler2D gNormal;
@@ -13,7 +11,7 @@ uniform sampler2D gRoughness;
 uniform sampler2D gAo;
 
 // 光源结构体
-struct Light {
+struct L {
     vec3 position;      // 位置（点光源和聚光灯）
     vec3 direction;     // 方向（方向光和聚光灯）
     vec3 ambient;       // 环境光
@@ -29,23 +27,30 @@ struct Light {
     float cutOff;       // 内切角余弦值
     float outerCutOff;  // 外切角余弦值
 };
-uniform Light light;
+uniform L light;
 
-uniform int lightType;  // 0:点光源, 1:方向光, 2:聚光灯
+uniform int lightType; // 0:点光源, 1:方向光, 2:聚光灯
 uniform vec3 viewPos;   // 相机位置
+uniform vec2 screenSize; // 屏幕尺寸，用于计算纹理坐标
 
 const float PI = 3.14159265359;
-const float SHININESS_FACTOR = 128.0; // 高光系数
+const float SHININESS_FACTOR = 32.0; // 高光系数
 
 // 光照计算函数
 vec3 calculateDirectionalLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao);
 vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao);
 vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularColor, float roughness, float ao);
+vec2 CalcTexCoord()
+{
+   return gl_FragCoord.xy / screenSize;
+}
 
 void main() {
     // 从G缓冲中获取数据
+    vec2 TexCoords = CalcTexCoord();
     vec3 fragPos = texture(gPosition, TexCoords).rgb;
     vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
+
     vec3 albedo = texture(gAlbedo, TexCoords).rgb;
     vec3 specularColor = texture(gSpecular, TexCoords).rgb;
     float roughness = texture(gRoughness, TexCoords).r;
@@ -65,7 +70,7 @@ void main() {
             result = calculateSpotLight(fragPos, normal, albedo, specularColor, roughness, ao);
             break;
     }
-    
+
     FragColor = vec4(result, 1.0);
 }
 
@@ -82,7 +87,7 @@ vec3 calculateDirectionalLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 spec
     
     // 镜面反射分量（Blinn-Phong）
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), roughness * SHININESS_FACTOR);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), SHININESS_FACTOR);
     vec3 specular = light.specular * spec * specularColor;
     
     // 环境光分量
@@ -109,7 +114,7 @@ vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularCo
     
     // 镜面反射分量（Blinn-Phong）
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), roughness * SHININESS_FACTOR);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), SHININESS_FACTOR);
     vec3 specular = light.specular * spec * specularColor;
     
     // 环境光分量
@@ -149,7 +154,7 @@ vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 albedo, vec3 specularCol
     
     // 镜面反射分量（Blinn-Phong）
     vec3 halfwayDir = normalize(lightDir + viewDir);
-    float spec = pow(max(dot(normal, halfwayDir), 0.0), roughness * SHININESS_FACTOR);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), SHININESS_FACTOR);
     vec3 specular = light.specular * spec * specularColor;
     
     // 环境光分量

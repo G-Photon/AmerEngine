@@ -55,6 +55,7 @@ void main() {
         mat3 TBN = mat3(T, B, N);
         N = normalize(TBN * tangentNormal);
     }
+    
     gNormal = vec4(N, 1.0);
     
     // 存储反照率

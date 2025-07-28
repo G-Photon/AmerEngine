@@ -1,4 +1,5 @@
 #include "core/Light.hpp"
+#include "core/Geometry.hpp"
 #include "glm/trigonometric.hpp"
 
 static void RenderQuad()
@@ -51,12 +52,40 @@ void PointLight::SetupShader(Shader &shader, int index) const
 void PointLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
 {
     // 1. 复用单位球体（可缓存）
-    static auto lightMesh = Geometry::CreateSphere(1.0f, 32);
+    static GLuint lightMeshVAO = 0, lightMeshVBO = 0, lightMeshEBO = 0;
+    static size_t indexCount = 0; // 存储索引数量
+
+    if (lightMeshVAO == 0)
+    {
+        static auto [vertices, indices] = Geometry::GenerateSphereData(1.0f, 32);
+        indexCount = indices.size(); // 保存索引数量
+
+        glGenVertexArrays(1, &lightMeshVAO);
+        glGenBuffers(1, &lightMeshVBO);
+        glGenBuffers(1, &lightMeshEBO);
+
+        glBindVertexArray(lightMeshVAO);
+
+        glBindBuffer(GL_ARRAY_BUFFER, lightMeshVBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lightMeshEBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, Normal));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, TexCoords));
+
+        glBindVertexArray(0);
+    }
 
     // 2. 根据衰减系数计算光体积半径
-    //    经验公式：亮度降到 1/256 时的距离
+    //    经验公式：亮度降到 3/256 时的距离
     float maxBrightness = std::max({diffuse.r, diffuse.g, diffuse.b}) * intensity;
-    float denom = 256.0f * maxBrightness;
+    float denom = 256.0f/3.0f * maxBrightness;
     float radius = (-linear + std::sqrt(linear * linear - 4 * quadratic * (constant - denom))) / (2.0f * quadratic);
     radius = std::max(radius, 0.01f);
 
@@ -74,9 +103,12 @@ void PointLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetFloat("light.constant", constant);
     shader->SetFloat("light.linear", linear);
     shader->SetFloat("light.quadratic", quadratic);
-    shader->SetInt("lightType", getType());
+    shader->SetInt("lightType", this->getType());
+
     // 5. 绘制球体
-    lightMesh->Draw(*shader);
+    glBindVertexArray(lightMeshVAO);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexCount), GL_UNSIGNED_INT, 0);
+    glBindVertexArray(0);
 }
 
 // 方向光
@@ -105,7 +137,7 @@ void DirectionalLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetVec3("light.ambient", ambient * intensity);
     shader->SetVec3("light.diffuse", diffuse * intensity);
     shader->SetVec3("light.specular", specular * intensity);
-    shader->SetInt("lightType", getType());
+    shader->SetInt("lightType", this->getType());
 
     /*-------------------------------------------------
      * 2. 直接绘制全屏 Quad
@@ -142,7 +174,26 @@ void SpotLight::SetupShader(Shader &shader, int index) const
 
 void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
 {
-    static auto lightCone = Geometry::CreateCone(1.0f, 1.0f, 32);
+    static GLuint lightConeVAO = 0, lightConeVBO = 0, lightConeEBO = 0;
+    if (lightConeVAO == 0)
+    {
+        auto [vertices, indices] = Geometry::GenerateConeData(1, 1, 32);
+        glGenVertexArrays(1, &lightConeVAO);
+        glGenBuffers(1, &lightConeVBO);
+        glGenBuffers(1, &lightConeEBO);
+        glBindVertexArray(lightConeVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, lightConeVBO);
+        glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lightConeEBO);
+        glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, Normal));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, TexCoords));
+        glBindVertexArray(0);
+    }
 
     /* 1. 根据衰减求有效照射距离（替代缺失的 range） */
     float maxChannel = glm::max(glm::max(diffuse.r, diffuse.g), diffuse.b) * intensity;
@@ -159,17 +210,19 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
 
     /* 3. 模型矩阵：缩放 → 旋转 → 平移 */
     glm::mat4 model(1.0f);
-    model = glm::scale(model, glm::vec3(baseRadius, range, baseRadius));
 
     glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
     glm::vec3 dirNorm = glm::normalize(direction);
     glm::vec3 right = glm::normalize(glm::cross(up, dirNorm));
     glm::vec3 newUp = glm::cross(dirNorm, right);
-    glm::mat4 rot(1.0f);
-    rot[0] = glm::vec4(right, 0.0f);
-    rot[1] = glm::vec4(newUp, 0.0f);
-    rot[2] = glm::vec4(dirNorm, 0.0f);
-    model = glm::translate(glm::mat4(1.0f), position) * rot * model;
+    glm::vec3 rotation = glm::eulerAngles(glm::quatLookAt(dirNorm, newUp));
+    model = glm::translate(model, position);                             // 平移到光源位置
+    model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+    model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+    model = glm::scale(model, glm::vec3(baseRadius, range, baseRadius)); // 缩放到合适大小
+
+    
 
     /* 4. 传 uniform（与旧 SetupShader 字段保持一致） */
     shader->SetMat4("model", model);
@@ -183,8 +236,10 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetFloat("light.constant", constant);
     shader->SetFloat("light.linear", linear);
     shader->SetFloat("light.quadratic", quadratic);
-    shader->SetInt("lightType", getType());
+    shader->SetInt("lightType", this->getType());
 
     /* 5. 绘制 */
-    lightCone->Draw(*shader);
+    glBindVertexArray(lightConeVAO);
+    glDrawElements(GL_TRIANGLE_STRIP, 32, GL_UNSIGNED_INT, 0); // 绘制圆锥
+    glBindVertexArray(0);
 }
