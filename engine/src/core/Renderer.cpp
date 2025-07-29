@@ -63,7 +63,6 @@ Renderer::~Renderer()
     mainCamera.reset();
 }
 
-
 void Renderer::BeginFrame()
 {
     glViewport(0, 0, width, height);
@@ -73,7 +72,6 @@ void Renderer::BeginFrame()
 
 void Renderer::EndFrame()
 {
-
 }
 
 void Renderer::Update(float deltaTime)
@@ -120,7 +118,7 @@ void Renderer::Initialize()
     postProcessShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
                                                  FileSystem::GetPath("resources/shaders/postprocess/post.frag"));
     postShaderMS = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
-                                             FileSystem::GetPath("resources/shaders/postprocess/post_msaa.frag"));
+                                            FileSystem::GetPath("resources/shaders/postprocess/post_msaa.frag"));
 
     ssaoShader =
         std::make_unique<Shader>("resources/shaders/postprocess/quad.vert", "resources/shaders/postprocess/ssao.frag");
@@ -154,10 +152,10 @@ void Renderer::Initialize()
                                  FileSystem::GetPath("resources/textures/skybox/bottom.jpg"),
                                  FileSystem::GetPath("resources/textures/skybox/front.jpg"),
                                  FileSystem::GetPath("resources/textures/skybox/back.jpg")});
-    
+
     // 设置天空盒
     SetupSkybox();
-    
+
     // 设置相机
     mainCamera = std::make_shared<Camera>();
 }
@@ -174,6 +172,7 @@ void Renderer::SetupGBuffer()
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 金属度
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 粗糙度
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // AO
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 环境光贴图
 
     gBuffer->AddDepthBuffer();
     gBuffer->CheckComplete();
@@ -295,7 +294,7 @@ void Renderer::RenderForward()
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
-    
+
     forwardShader->Use();
     // 设置相机、光照等uniform
     glm::mat4 view = mainCamera->GetViewMatrix();
@@ -306,8 +305,8 @@ void Renderer::RenderForward()
 
     // 设置光源
     forwardShader->SetInt("numLights[0]", directionalLights.size()); // 方向光数量
-    forwardShader->SetInt("numLights[1]", pointLights.size()); // 点光
-    forwardShader->SetInt("numLights[2]", spotLights.size()); // 聚光灯数量
+    forwardShader->SetInt("numLights[1]", pointLights.size());       // 点光
+    forwardShader->SetInt("numLights[2]", spotLights.size());        // 聚光灯数量
     for (size_t i = 0; i < pointLights.size(); ++i)
     {
         pointLights[i]->SetupShader(*forwardShader, i);
@@ -346,7 +345,7 @@ void Renderer::RenderDeferred()
     glEnable(GL_CULL_FACE);
 
     deferredGeometryShader->Use();
-    
+
     // 设置相机等uniform
     deferredGeometryShader->SetMat4("view", mainCamera->GetViewMatrix());
     deferredGeometryShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
@@ -362,7 +361,6 @@ void Renderer::RenderDeferred()
         primitive.mesh->Draw(*deferredGeometryShader);
     }
 
-    
     // 光照处理阶段
     GLuint targetFBO = msaaEnabled ? hdrBufferMS->GetID() : hdrBuffer->GetID();
     glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
@@ -375,7 +373,7 @@ void Renderer::RenderDeferred()
     glClear(GL_STENCIL_BUFFER_BIT | GL_COLOR_BUFFER_BIT);
 
     glDepthMask(GL_FALSE);     // 不写入深度
-    glEnable(GL_STENCIL_TEST); // 全程开模板 
+    glEnable(GL_STENCIL_TEST); // 全程开模板
     glDisable(GL_CULL_FACE);   // 由每个 pass 自己决定
 
     deferredLightingShader->Use();
@@ -386,10 +384,10 @@ void Renderer::RenderDeferred()
     deferredLightingShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
     deferredLightingShader->SetVec3("viewPos", mainCamera->Position);
     deferredLightingShader->SetVec2("screenSize", glm::vec2(width, height));
-                                    // */
-    const int texSlots[7] = {0, 1, 2, 3, 4, 5, 6};
-    const char *texNames[7] = {"gPosition", "gNormal", "gAlbedo", "gSpecular", "gMetallic", "gRoughness", "gAo"};
-    for (int i = 0; i < 7; ++i)
+    // */
+    const int texSlots[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    const char *texNames[8] = {"gPosition", "gNormal", "gAlbedo", "gSpecular", "gMetallic", "gRoughness", "gAo", "gAmbient"};
+    for (int i = 0; i < 8; ++i)
     {
         deferredLightingShader->SetInt(texNames[i], texSlots[i]);
         gBuffer->BindTexture(i, texSlots[i]);
@@ -397,35 +395,47 @@ void Renderer::RenderDeferred()
 
     for (const auto &light : GetLights())
     {
-        // === 第一步：标记光体积区域 ===
-        glClear(GL_STENCIL_BUFFER_BIT);
-        glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE);           // 不写颜色
-        glDepthMask(GL_FALSE);
-        glEnable(GL_DEPTH_TEST);
-        glDisable(GL_CULL_FACE);  // 正背面都要
+        if (light->getType() != 1)
+        {
+            // === 第一步：标记光体积区域 ===
+            glClear(GL_STENCIL_BUFFER_BIT);
+            glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); // 不写颜色
+            glDepthMask(GL_FALSE);
+            glEnable(GL_DEPTH_TEST);
+            glDisable(GL_CULL_FACE); // 正背面都要
 
-        glStencilFunc(GL_ALWAYS, 0, 0);
-        glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
-        glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
+            glStencilFunc(GL_ALWAYS, 0, 0);
+            glStencilOpSeparate(GL_BACK, GL_KEEP, GL_INCR_WRAP, GL_KEEP);
+            glStencilOpSeparate(GL_FRONT, GL_KEEP, GL_DECR_WRAP, GL_KEEP);
 
-        // 绘制光体积（仅更新模板缓冲区）
-        light->drawLightMesh(deferredLightingShader);
-        // 注意：此时光体积的模板值会被设置为1（或其他非0值），表示该区域有光照影响
+            // 绘制光体积（仅更新模板缓冲区）
+            light->drawLightMesh(deferredLightingShader);
+            // 注意：此时光体积的模板值会被设置为1（或其他非0值），表示该区域有光照影响
 
-        // === 第二步：渲染光照（仅标记区域） ===
-        glDisable(GL_DEPTH_TEST);
-        glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
-        glEnable(GL_BLEND);
-        glBlendEquation(GL_FUNC_ADD);
-        glBlendFunc(GL_ONE, GL_ONE);
-        glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
-        glEnable(GL_CULL_FACE);
-        glCullFace(GL_FRONT);
+            // === 第二步：渲染光照（仅标记区域） ===
+            glDisable(GL_DEPTH_TEST);
+            glColorMask(GL_TRUE, GL_TRUE, GL_TRUE, GL_TRUE);
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_ONE, GL_ONE);
+            glStencilFunc(GL_NOTEQUAL, 0, 0xFF);
+            glEnable(GL_CULL_FACE);
+            glCullFace(GL_FRONT);
 
-        // 再次绘制光体积（实际渲染光照）
-        light->drawLightMesh(deferredLightingShader);
-        glCullFace(GL_BACK);
-        glDisable(GL_BLEND);
+            // 再次绘制光体积（实际渲染光照）
+            light->drawLightMesh(deferredLightingShader);
+            glCullFace(GL_BACK);
+            glDisable(GL_BLEND);
+        }
+        else
+        {
+            glDisable(GL_STENCIL_TEST); // 关闭模板测试
+            glDisable(GL_CULL_FACE);    // 关闭面剔除
+            glEnable(GL_BLEND);
+            glBlendEquation(GL_FUNC_ADD);
+            glBlendFunc(GL_ONE, GL_ONE);
+            light->drawLightMesh(deferredLightingShader);
+        }
     }
 
     // 恢复状态
@@ -473,7 +483,7 @@ void Renderer::RenderSkybox()
     skyboxShader->Use();
     // 设置环境贴图
     skyboxShader->SetInt("skybox", 0);
-    // 设置视图矩阵(移除平移部分)   
+    // 设置视图矩阵(移除平移部分)
     glm::mat4 view = glm::mat4(glm::mat3(mainCamera->GetViewMatrix()));
     skyboxShader->SetMat4("view", view);
     skyboxShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
@@ -535,7 +545,7 @@ void Renderer::RenderLights()
                 const float coneRadius = coneHeight * glm::tan(glm::acos(spotLight->outerCutOff));
 
                 // 创建圆台（顶部半径为0即为圆锥）
-                lightMesh = Geometry::CreateFrustum(0.0f, coneRadius, coneHeight/2, 16);
+                lightMesh = Geometry::CreateFrustum(0.0f, coneRadius, coneHeight / 2, 16);
 
                 // 计算旋转使圆锥指向正确方向
                 glm::vec3 direction = glm::normalize(spotLight->direction);

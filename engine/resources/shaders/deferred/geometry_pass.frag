@@ -6,6 +6,7 @@ layout (location = 3) out vec4 gSpecular;
 layout (location = 4) out vec4 gMetallic; // 金属度
 layout (location = 5) out vec4 gRoughness; // 粗糙度
 layout (location = 6) out vec4 gAo; // 环境光遮蔽
+layout (location = 7) out vec4 gAmbient; // 环境光
 
 in vec2 TexCoords;
 in vec3 FragPos;
@@ -19,9 +20,9 @@ struct Material {
     vec3 specular;
     float metallic; // 金属度
     float roughness; // 粗糙度
-    float ao; // 环境光遮蔽
     float shininess;
     
+    sampler2D ambientMap;
     sampler2D diffuseMap;
     sampler2D specularMap;
     sampler2D normalMap;
@@ -29,6 +30,7 @@ struct Material {
     sampler2D roughnessMap;
     sampler2D aoMap;
 
+    bool useAmbientMap;
     bool useDiffuseMap;
     bool useSpecularMap;
     bool useNormalMap;
@@ -70,5 +72,7 @@ void main() {
     gRoughness = vec4(material.useRoughnessMap ?
         texture(material.roughnessMap, TexCoords).r : material.roughness, 0.0, 0.0, 1.0);
     gAo = vec4(material.useAoMap ?
-        texture(material.aoMap, TexCoords).r : material.ao, 0.0, 0.0, 1.0);
+        texture(material.aoMap, TexCoords).r : 1.0, 0.0, 0.0, 1.0);
+    gAmbient = vec4(material.useAmbientMap ?
+        texture(material.ambientMap, TexCoords).rgb : material.ambient, 1.0);
 }

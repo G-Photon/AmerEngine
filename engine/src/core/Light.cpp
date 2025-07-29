@@ -52,24 +52,24 @@ void PointLight::SetupShader(Shader &shader, int index) const
 void PointLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
 {
     // 1. 复用单位球体（可缓存）
-    static GLuint lightMeshVAO = 0, lightMeshVBO = 0, lightMeshEBO = 0;
-    static size_t indexCount = 0; // 存储索引数量
+    static GLuint lightSphereVAO = 0, lightSphereVBO = 0, lightSphereEBO = 0;
+    static size_t SphereIndexCount = 0; // 存储索引数量
 
-    if (lightMeshVAO == 0)
+    if (lightSphereVAO == 0)
     {
         static auto [vertices, indices] = Geometry::GenerateSphereData(1.0f, 32);
-        indexCount = indices.size(); // 保存索引数量
+        SphereIndexCount = indices.size(); // 保存索引数量
 
-        glGenVertexArrays(1, &lightMeshVAO);
-        glGenBuffers(1, &lightMeshVBO);
-        glGenBuffers(1, &lightMeshEBO);
+        glGenVertexArrays(1, &lightSphereVAO);
+        glGenBuffers(1, &lightSphereVBO);
+        glGenBuffers(1, &lightSphereEBO);
 
-        glBindVertexArray(lightMeshVAO);
+        glBindVertexArray(lightSphereVAO);
 
-        glBindBuffer(GL_ARRAY_BUFFER, lightMeshVBO);
+        glBindBuffer(GL_ARRAY_BUFFER, lightSphereVBO);
         glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(Vertex), vertices.data(), GL_STATIC_DRAW);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lightMeshEBO);
+        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, lightSphereEBO);
         glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(unsigned int), indices.data(), GL_STATIC_DRAW);
 
         glEnableVertexAttribArray(0);
@@ -106,8 +106,8 @@ void PointLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetInt("lightType", this->getType());
 
     // 5. 绘制球体
-    glBindVertexArray(lightMeshVAO);
-    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(indexCount), GL_UNSIGNED_INT, 0);
+    glBindVertexArray(lightSphereVAO);
+    glDrawElements(GL_TRIANGLES, static_cast<GLsizei>(SphereIndexCount), GL_UNSIGNED_INT, 0);
     glBindVertexArray(0);
 }
 
@@ -175,6 +175,7 @@ void SpotLight::SetupShader(Shader &shader, int index) const
 void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
 {
     static GLuint lightConeVAO = 0, lightConeVBO = 0, lightConeEBO = 0;
+    static size_t ConeindexCount = 0;
     if (lightConeVAO == 0)
     {
         auto [vertices, indices] = Geometry::GenerateConeData(1, 1, 32);
@@ -193,11 +194,13 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
         glEnableVertexAttribArray(2);
         glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void *)offsetof(Vertex, TexCoords));
         glBindVertexArray(0);
+        ConeindexCount = indices.size(); // 保存索引数量
     }
 
     /* 1. 根据衰减求有效照射距离（替代缺失的 range） */
+    // 3/256 的亮度阈值
     float maxChannel = glm::max(glm::max(diffuse.r, diffuse.g), diffuse.b) * intensity;
-    float threshold = maxChannel / 256.0f;
+    float threshold = 3.0f / 256.0f * maxChannel;
     float discriminant = linear * linear - 4.0f * quadratic * (constant - 1.0f / threshold);
     float range = 0.0f;
     if (discriminant >= 0.0f)
@@ -240,6 +243,6 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
 
     /* 5. 绘制 */
     glBindVertexArray(lightConeVAO);
-    glDrawElements(GL_TRIANGLE_STRIP, 32, GL_UNSIGNED_INT, 0); // 绘制圆锥
+    glDrawElements(GL_TRIANGLES, ConeindexCount, GL_UNSIGNED_INT, 0); // 绘制圆锥
     glBindVertexArray(0);
 }
