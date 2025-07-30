@@ -384,7 +384,7 @@ void Renderer::RenderDeferred()
     deferredLightingShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
     deferredLightingShader->SetVec3("viewPos", mainCamera->Position);
     deferredLightingShader->SetVec2("screenSize", glm::vec2(width, height));
-    // */
+
     const int texSlots[8] = {0, 1, 2, 3, 4, 5, 6, 7};
     const char *texNames[8] = {"gPosition", "gNormal", "gAlbedo", "gSpecular", "gMetallic", "gRoughness", "gAo", "gAmbient"};
     for (int i = 0; i < 8; ++i)
@@ -445,6 +445,7 @@ void Renderer::RenderDeferred()
     glDepthFunc(GL_LESS);
     glCullFace(GL_BACK);
     glEnable(GL_CULL_FACE);
+    glEnable(GL_DEPTH_TEST);
 
     if (iblEnabled)
     {
