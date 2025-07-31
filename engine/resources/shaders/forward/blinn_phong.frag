@@ -1,17 +1,14 @@
 #version 460 core
 
 struct Material {
-    vec3 ambient;
     vec3 diffuse;
     vec3 specular;
     float shininess;
     
-    sampler2D ambientMap;
     sampler2D diffuseMap;
     sampler2D specularMap;
     sampler2D normalMap;
     
-    bool useAmbientMap;
     bool useDiffuseMap;
     bool useSpecularMap;
     bool useNormalMap;
@@ -132,16 +129,12 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir) {
     
     // 组合结果
     vec3 ambient, diffuse, specular;
-    
-    if (material.useAmbientMap) {
-        ambient = light.ambient * vec3(texture(material.ambientMap, TexCoords));
-    } else {
-        ambient = light.ambient * material.ambient;
-    }
 
     if (material.useDiffuseMap) {
+        ambient = light.ambient * vec3(texture(material.diffuseMap, TexCoords));
         diffuse = light.diffuse * diff * vec3(texture(material.diffuseMap, TexCoords));
     } else {
+        ambient = light.ambient * material.diffuse;
         diffuse = light.diffuse * diff * material.diffuse;
     }
     
@@ -171,16 +164,12 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     
     // 组合结果
     vec3 ambient, diffuse, specular;
-    
-    if (material.useAmbientMap) {
-        ambient = light.ambient * vec3(texture(material.ambientMap, TexCoords));
-    } else {
-        ambient = light.ambient * material.ambient;
-    }
 
     if (material.useDiffuseMap) {
+        ambient = light.ambient * vec3(texture(material.diffuseMap, TexCoords));
         diffuse = light.diffuse * diff * vec3(texture(material.diffuseMap, TexCoords));
     } else {
+        ambient = light.ambient * material.diffuse;
         diffuse = light.diffuse * diff * material.diffuse;
     }
     
@@ -220,15 +209,11 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     // 组合结果
     vec3 ambient, diffuse, specular;
 
-    if (material.useAmbientMap) {
-        ambient = light.ambient * vec3(texture(material.ambientMap, TexCoords));
-    } else {
-        ambient = light.ambient * material.ambient;
-    }
-
     if (material.useDiffuseMap) {
+        ambient = light.ambient * vec3(texture(material.diffuseMap, TexCoords));
         diffuse = light.diffuse * diff * vec3(texture(material.diffuseMap, TexCoords));
     } else {
+        ambient = light.ambient * material.diffuse;
         diffuse = light.diffuse * diff * material.diffuse;
     }
     

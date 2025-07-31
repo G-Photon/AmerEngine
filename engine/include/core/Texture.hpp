@@ -29,6 +29,7 @@ class Texture
         return Path;
     }
     std::string type;
+    bool flipY = true;
 
   private:
     unsigned int ID;

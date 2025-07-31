@@ -10,21 +10,9 @@ void Material::Bind(Shader &shader)
 
     if (type == BLINN_PHONG)
     {
-        shader.SetVec3("material.ambient", ambient);
         shader.SetVec3("material.diffuse", diffuse);
         shader.SetVec3("material.specular", specular);
         shader.SetFloat("material.shininess", shininess);
-
-        if (useAmbientMap)
-        {
-            ambientMap->Bind(0);
-            shader.SetBool("material.useAmbientMap", 1);
-            shader.SetInt("material.ambientMap", 0);
-        }
-        else
-        {
-            shader.SetBool("material.useAmbientMap", 0);
-        }
 
         if (useDiffuseMap)
         {

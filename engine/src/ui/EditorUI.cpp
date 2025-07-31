@@ -543,18 +543,15 @@ void EditorUI::ShowMaterialEditor(Material &material)
 
     if (material.type == BLINN_PHONG)
     {
-        ImGui::ColorEdit3(ConvertToUTF8(L"环境光").c_str(), glm::value_ptr(material.ambient));
         ImGui::ColorEdit3(ConvertToUTF8(L"漫反射").c_str(), glm::value_ptr(material.diffuse));
         ImGui::ColorEdit3(ConvertToUTF8(L"高光").c_str(), glm::value_ptr(material.specular));
         ImGui::DragFloat(ConvertToUTF8(L"高光系数").c_str(), &material.shininess, 1.0f, 1.0f, 256.0f);
 
         // 贴图选择器
-        TextureSelector(ConvertToUTF8(L"环境光贴图").c_str(), material.ambientMap, "ambient");
         TextureSelector(ConvertToUTF8(L"漫反射贴图").c_str(), material.diffuseMap, "diffuse");
         TextureSelector(ConvertToUTF8(L"高光贴图").c_str(), material.specularMap, "specular");
         TextureSelector(ConvertToUTF8(L"法线贴图").c_str(), material.normalMap, "normal");
 
-        material.useAmbientMap = material.ambientMap != nullptr;
         material.useDiffuseMap = material.diffuseMap != nullptr;
         material.useSpecularMap = material.specularMap != nullptr;
         material.useNormalMap = material.normalMap != nullptr;
@@ -605,29 +602,37 @@ void EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture
 {
     ImGui::Text("%s", label.c_str());
 
-    if (texture)
+    /* ---------- 新增：翻转开关 ---------- */
+    bool flip = texture ? texture->flipY : true; // 默认 true 与旧行为一致
+    std::string flipId = ConvertToUTF8(L"翻转Y##") + label + idSuffix;
+    if (ImGui::Checkbox(flipId.c_str(), &flip))
     {
-        ImGui::Text("%s: %s", ConvertToUTF8(L"当前").c_str(), std::to_string(texture->GetID()).c_str());
+        if (texture)
+        {
+            texture->flipY = flip;      // 记录到纹理
+            if (!texture->GetPath().empty()) // 如果已有路径，立即重载
+                texture->LoadFromFile(texture->GetPath());
+        }
     }
-    else
-    {
-        ImGui::Text("%s: None", ConvertToUTF8(L"当前").c_str());
-    }
+    /* ---------------------------------- */
 
-    // 使用唯一ID创建按钮
-    std::string buttonLabel = ConvertToUTF8(L"选择").c_str();
-    buttonLabel += "##" + label + idSuffix;
+    if (texture)
+        ImGui::Text("%s: %s", ConvertToUTF8(L"当前").c_str(), std::to_string(texture->GetID()).c_str());
+    else
+        ImGui::Text("%s: None", ConvertToUTF8(L"当前").c_str());
+
+    /* 选择按钮 */
+    std::string buttonLabel = ConvertToUTF8(L"选择##") + label + idSuffix;
     if (ImGui::Button(buttonLabel.c_str()))
     {
         std::string path = FileDialog::OpenFile(ConvertToUTF8(L"选择贴图").c_str(),
                                                 "Image Files\0*.jpg;*.png;*.tga;*.bmp\0All Files\0*.*\0");
         if (!path.empty())
         {
-            texture = std::make_shared<Texture>();
-            if (texture->LoadFromFile(path))
-            {
-            }
-            else
+            if (!texture)
+                texture = std::make_shared<Texture>();
+            texture->flipY = flip; // 把当前 UI 的 flip 值同步给纹理
+            if (!texture->LoadFromFile(path))
             {
                 texture.reset();
                 ImGui::Text("%s: %s", ConvertToUTF8(L"贴图加载失败").c_str(), path.c_str());
@@ -635,13 +640,10 @@ void EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture
         }
     }
 
-    // 添加清除按钮
-    std::string clearLabel = ConvertToUTF8(L"清除").c_str();
-    clearLabel += "##" + label + idSuffix;
+    /* 清除按钮 */
+    std::string clearLabel = ConvertToUTF8(L"清除##") + label + idSuffix;
     if (ImGui::Button(clearLabel.c_str()))
-    {
         texture.reset();
-    }
 
     ImGui::Separator();
 }

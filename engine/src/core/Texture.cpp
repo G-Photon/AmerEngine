@@ -43,23 +43,16 @@ void Texture::Bind(unsigned int unit) const
 
 bool Texture::LoadFromFile(const std::string &path)
 {
-    // 如果是模型 就不翻转，如果是普通读取材质，就翻转
     if (path.empty())
     {
         std::cerr << "Texture path is empty!" << std::endl;
         return false;
     }
-    std::string filepath=path;
-    if (path.ends_with(".model")){
-        stbi_set_flip_vertically_on_load(false); // 模型贴图不翻转
-        filepath = filepath.substr(0, filepath.find_last_of('.')); // 去掉后缀
-    } else {
-        stbi_set_flip_vertically_on_load(true); // 普通贴图翻转
-    }
+    stbi_set_flip_vertically_on_load(flipY); // 普通贴图翻转
     // 中文读取，防止乱码
     setlocale(LC_ALL, "zh_CN.UTF-8");
 
-    unsigned char *data = stbi_load(filepath.c_str(), &Width, &Height, &nrComponents, 0);
+    unsigned char *data = stbi_load(path.c_str(), &Width, &Height, &nrComponents, 0);
     if (data)
     {
         if (nrComponents == 1)
@@ -80,11 +73,11 @@ bool Texture::LoadFromFile(const std::string &path)
 
         Generate(Width, Height, data);
         stbi_image_free(data);
-        Path = filepath;
+        Path = path;
         return true;
     }
 
-    std::cerr << "Texture failed to load at path: " << filepath << std::endl;
+    std::cerr << "Texture failed to load at path: " << path << std::endl;
     stbi_image_free(data);
     return false;
 }

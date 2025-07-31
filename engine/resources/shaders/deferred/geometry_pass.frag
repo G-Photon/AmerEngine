@@ -22,7 +22,6 @@ struct Material {
     float roughness; // 粗糙度
     float shininess;
     
-    sampler2D ambientMap;
     sampler2D diffuseMap;
     sampler2D specularMap;
     sampler2D normalMap;
@@ -30,7 +29,6 @@ struct Material {
     sampler2D roughnessMap;
     sampler2D aoMap;
 
-    bool useAmbientMap;
     bool useDiffuseMap;
     bool useSpecularMap;
     bool useNormalMap;
@@ -73,6 +71,6 @@ void main() {
         texture(material.roughnessMap, TexCoords).r : material.roughness, 0.0, 0.0, 1.0);
     gAo = vec4(material.useAoMap ?
         texture(material.aoMap, TexCoords).r : 1.0, 0.0, 0.0, 1.0);
-    gAmbient = vec4(material.useAmbientMap ?
-        texture(material.ambientMap, TexCoords).rgb : material.ambient, 1.0);
+    gAmbient = vec4(material.useDiffuseMap ?
+        texture(material.diffuseMap, TexCoords).rgb : material.diffuse, 1.0);
 }

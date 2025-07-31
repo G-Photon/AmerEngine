@@ -261,8 +261,8 @@ std::vector<std::shared_ptr<Texture>> Model::LoadMaterialTextures(aiMaterial *ma
         if (!skip)
         {
             auto texture = std::make_shared<Texture>();
-            // 作为模型读取材质，添加标识符示意不用翻转
-            filename += ".model";
+
+            texture->flipY = false; // 模型贴图不翻转
             if (texture->LoadFromFile(filename))
             {
                 texture->type = typeName;

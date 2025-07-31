@@ -806,6 +806,7 @@ void Renderer::RenderPostProcessing()
         bloomBlurBuffers[false]->BindTexture(0, 1);
     if (ssaoEnabled && currentMode == DEFERRED)
         ssaoBuffer->BindTexture(0, 2);
+
     RenderQuad();
 }
 // 其他方法实现...

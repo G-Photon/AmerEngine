@@ -20,7 +20,6 @@ class Material
     void Bind(Shader &shader);
 
     // Blinn-Phong 参数
-    glm::vec3 ambient = glm::vec3(0.1f);
     glm::vec3 diffuse = glm::vec3(0.8f);
     glm::vec3 specular = glm::vec3(0.5f);
     float shininess = 32.0f;
@@ -32,12 +31,10 @@ class Material
     float ao = 1.0f;
 
     // 贴图
-    std::shared_ptr<Texture> ambientMap;
     std::shared_ptr<Texture> diffuseMap;
     std::shared_ptr<Texture> specularMap;
     std::shared_ptr<Texture> normalMap;
 
-    bool useAmbientMap = false;
     bool useDiffuseMap = false;
     bool useSpecularMap = false;
     bool useNormalMap = false;
