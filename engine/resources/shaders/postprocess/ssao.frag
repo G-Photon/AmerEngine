@@ -43,15 +43,16 @@ void main() {
         offset.xyz /= offset.w; // 透视除法
         offset.xyz = offset.xyz * 0.5 + 0.5; // 变换到0.0-1.0
         
-        // 获取实际场景深度（线性）
-        float sceneDepth = texture(gPosition, offset.xy).w;
-        float sampleDepth = -samplePos.z; // 视图空间深度
+        // 获取样本深度
+        float sampleDepth = -texture(gPosition, offset.xy).w;
         
-        // 深度比较 + 范围检查
-        float rangeCheck = abs(fragPos.z - sceneDepth) < radius ? 1.0 : 0.0;
-        occlusion += (sceneDepth < sampleDepth + bias) ? rangeCheck : 0.0;
+        // 范围检查
+        float rangeCheck = smoothstep(0.0, 1.0, radius / abs(fragPos.z - sampleDepth));
+        
+        // 累计遮蔽
+        occlusion += (sampleDepth >= samplePos.z ? 1.0 : 0.0) * rangeCheck;
     }
     
     occlusion = 1.0 - (occlusion / kernelSize);
-    FragColor = pow(occlusion, power);
+    FragColor = occlusion;
 }
