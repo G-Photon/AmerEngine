@@ -38,10 +38,17 @@ struct Material {
 };
 
 uniform Material material;
+uniform float NEAR= 0.1;
+uniform float FAR= 100.0;
+float LinearizeDepth(float depth)
+{
+    float z = depth * 2.0 - 1.0; // 回到NDC
+    return (2.0 * NEAR * FAR) / (FAR + NEAR - z * (FAR - NEAR));    
+}
 
 void main() {
     // 存储片段位置向量和深度
-    gPosition = vec4(FragPos, gl_FragCoord.z);
+    gPosition = vec4(FragPos,  LinearizeDepth(gl_FragCoord.z));
     
     // 存储法线向量
     vec3 N = normalize(Normal);

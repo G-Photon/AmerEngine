@@ -155,7 +155,8 @@ class Renderer
 
     void DeleteObject(int index)
     {
-        if (index < 0 || index >= models.size() + primitives.size()+ pointLights.size() + directionalLights.size() + spotLights.size())
+        if (index < 0 || index >= models.size() + primitives.size() + pointLights.size() + directionalLights.size() +
+                                      spotLights.size())
             return;
 
         if (index < models.size())
@@ -168,7 +169,8 @@ class Renderer
             index -= models.size();
             primitives.erase(primitives.begin() + index);
         }
-        else if (index < models.size() + primitives.size() + pointLights.size() + directionalLights.size() + spotLights.size())
+        else if (index <
+                 models.size() + primitives.size() + pointLights.size() + directionalLights.size() + spotLights.size())
         {
             // 删除光源
             index -= (models.size() + primitives.size());
@@ -207,7 +209,7 @@ class Renderer
         }
         return allMaterials;
     }
-    
+
   private:
     void RenderForward();
     void RenderDeferred();
@@ -223,8 +225,12 @@ class Renderer
     void SetupSSAOBuffer();
     void SetupSkybox();
 
+    void GenerateSSAOKernel();
+    void GenerateSSAONoiseTexture();
+
     void RenderSkybox();
     void RenderShadows();
+    void RenderSSAO();
 
     int width, height;
 
@@ -237,10 +243,11 @@ class Renderer
     std::unique_ptr<Framebuffer> bloomPrefilterBuffer;
     std::unique_ptr<Framebuffer> bloomBlurBuffers[2];
     std::unique_ptr<Framebuffer> ssaoBuffer;
+    std::unique_ptr<Framebuffer> ssaoBlurBuffer;
 
     std::unique_ptr<Framebuffer> hdrBufferMS;
 
-        // 着色器
+    // 着色器
     std::unique_ptr<Shader> forwardShader;
     std::unique_ptr<Shader> deferredGeometryShader;
     std::unique_ptr<Shader> deferredLightingShader;
@@ -250,6 +257,7 @@ class Renderer
     std::unique_ptr<Shader> bloomPreShader;
     std::unique_ptr<Shader> bloomBlurShader;
     std::unique_ptr<Shader> ssaoShader;
+    std::unique_ptr<Shader> ssaoBlurShader;
     std::unique_ptr<Shader> lightsShader;
     std::unique_ptr<Shader> postProcessShader;
     std::unique_ptr<Shader> postShaderMS; // 采样 sampler2DMS
@@ -269,6 +277,11 @@ class Renderer
 
     // 相机
     std::shared_ptr<Camera> mainCamera;
+
+    std::vector<glm::vec3> ssaoKernel; // SSAO采样核心
+    GLuint ssaoNoiseTexture;           // SSAO旋转噪声纹理
+    unsigned int ssaoKernelSize = 64;  // SSAO采样核心大小
+    unsigned int ssaoNoiseSize = 4;    // SSAO噪声纹理尺寸
 
     // 特效状态
     bool gammaCorrection = false;

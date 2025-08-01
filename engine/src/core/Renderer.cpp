@@ -7,6 +7,7 @@
 #include "core/Texture.hpp"
 #include "utils/FileSystem.hpp"
 #include <iostream>
+#include <random>
 
 Renderer::Renderer(int width, int height) : width(width), height(height)
 {
@@ -17,6 +18,7 @@ Renderer::~Renderer()
     // 清理资源
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVBO);
+    glDeleteTextures(1, &ssaoNoiseTexture);
     for (auto &model : models)
     {
         model.reset();
@@ -122,11 +124,13 @@ void Renderer::Initialize()
 
     ssaoShader =
         std::make_unique<Shader>("resources/shaders/postprocess/quad.vert", "resources/shaders/postprocess/ssao.frag");
+    ssaoBlurShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
+                                              FileSystem::GetPath("resources/shaders/postprocess/ssao_blur.frag"));
+    
     bloomPreShader = std::make_unique<Shader>("resources/shaders/postprocess/quad.vert",
                                               "resources/shaders/postprocess/bloom_prefilter.frag");
     bloomBlurShader = std::make_unique<Shader>("resources/shaders/postprocess/quad.vert",
                                                "resources/shaders/postprocess/bloom_blur.frag");
-
     // 初始化帧缓冲
     SetupShadowBuffer();
     SetupGBuffer();
@@ -134,6 +138,9 @@ void Renderer::Initialize()
     SetupHDRBufferMS();
     SetupBloomBuffer();
     SetupSSAOBuffer();
+
+    GenerateSSAOKernel();
+    GenerateSSAONoiseTexture();
 
     // 加载默认纹理
     auto whiteTexture = std::make_shared<Texture>();
@@ -216,9 +223,15 @@ void Renderer::SetupBloomBuffer()
 
 void Renderer::SetupSSAOBuffer()
 {
+    // 主SSAO缓冲
     ssaoBuffer = std::make_unique<Framebuffer>(width, height);
-    ssaoBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
+    ssaoBuffer->AddColorTexture(GL_RED, GL_RED, GL_FLOAT); // 单通道浮点纹理
     ssaoBuffer->CheckComplete();
+
+    // SSAO模糊缓冲
+    ssaoBlurBuffer = std::make_unique<Framebuffer>(width, height);
+    ssaoBlurBuffer->AddColorTexture(GL_RED, GL_RED, GL_FLOAT);
+    ssaoBlurBuffer->CheckComplete();
 }
 
 void Renderer::SetupSkybox()
@@ -361,6 +374,11 @@ void Renderer::RenderDeferred()
         primitive.mesh->Draw(*deferredGeometryShader);
     }
 
+    if (ssaoEnabled)
+    {
+        RenderSSAO();
+    }
+
     // 光照处理阶段
     GLuint targetFBO = msaaEnabled ? hdrBufferMS->GetID() : hdrBuffer->GetID();
     glBindFramebuffer(GL_FRAMEBUFFER, targetFBO);
@@ -391,6 +409,12 @@ void Renderer::RenderDeferred()
     {
         deferredLightingShader->SetInt(texNames[i], texSlots[i]);
         gBuffer->BindTexture(i, texSlots[i]);
+    }
+    deferredLightingShader->SetBool("ssaoEnabled", ssaoEnabled);
+    if (ssaoEnabled)
+    {
+        ssaoBlurBuffer->BindTexture(0, 8); // 将模糊后的SSAO纹理绑定到槽8
+        deferredLightingShader->SetInt("ssao", 8);
     }
 
     for (const auto &light : GetLights())
@@ -505,6 +529,57 @@ void Renderer::RenderSkybox()
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);
+}
+
+void Renderer::RenderSSAO()
+{
+    // 第一步：生成SSAO纹理
+    ssaoBuffer->Bind();
+    glClear(GL_COLOR_BUFFER_BIT);
+    ssaoShader->Use();
+
+    // 绑定GBuffer纹理
+    gBuffer->BindTexture(0, 0); // 位置
+    gBuffer->BindTexture(1, 1); // 法线
+    ssaoShader->SetInt("gPosition", 0);
+    ssaoShader->SetInt("gNormal", 1);
+
+    // 绑定噪声纹理
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, ssaoNoiseTexture);
+    ssaoShader->SetInt("texNoise", 2);
+
+    // 传递采样核心
+    for (unsigned int i = 0; i < ssaoKernelSize; ++i)
+    {
+        ssaoShader->SetVec3("samples[" + std::to_string(i) + "]", ssaoKernel[i]);
+    }
+
+    // 设置矩阵
+    glm::mat4 projection = mainCamera->GetProjectionMatrix(static_cast<float>(width) / height);
+    ssaoShader->SetMat4("projection", projection);
+    ssaoShader->SetMat4("view", mainCamera->GetViewMatrix());
+
+    // 设置参数
+    ssaoShader->SetVec2("noiseScale", glm::vec2(width / (float)ssaoNoiseSize, height / (float)ssaoNoiseSize));
+    ssaoShader->SetInt("kernelSize", ssaoKernelSize);
+    ssaoShader->SetFloat("radius", 0.5f);
+    ssaoShader->SetFloat("bias", 0.025f);
+    ssaoShader->SetFloat("power", 1.0f);
+
+    // 渲染全屏四边形
+    RenderQuad();
+
+    // 第二步：模糊SSAO纹理
+    ssaoBlurBuffer->Bind();
+    glClear(GL_COLOR_BUFFER_BIT);
+    ssaoBlurShader->Use();
+    ssaoBlurShader->SetInt("ssaoInput", 0);
+    ssaoBuffer->BindTexture(0, 0);
+    RenderQuad();
+
+    // 解绑帧缓冲
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 void Renderer::RenderLights()
@@ -754,17 +829,6 @@ void Renderer::RenderPostProcessing()
         RenderQuad();
     }
 
-    // 1. SSAO Pass
-    if (ssaoEnabled && currentMode == DEFERRED)
-    {
-        ssaoBuffer->Bind();
-        glClear(GL_COLOR_BUFFER_BIT);
-        ssaoShader->Use();
-        // 绑定 G-Buffer 纹理、投影矩阵、噪声贴图、kernel
-        RenderQuad();
-    }
-
-    // 2. Bloom Prefilter
     if (bloomEnabled)
     {
         bloomPrefilterBuffer->Bind();
@@ -774,7 +838,7 @@ void Renderer::RenderPostProcessing()
         hdrBuffer->BindTexture(0, 0); // scene
         RenderQuad();
 
-        // 3. Bloom Blur (Ping-Pong)
+        // Bloom Blur (Ping-Pong)
         bool horizontal = true;
         for (int i = 0; i < 10; ++i)
         {
@@ -787,7 +851,7 @@ void Renderer::RenderPostProcessing()
         }
     }
 
-    // 4. Final Compose
+    // Final Compose
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClear(GL_COLOR_BUFFER_BIT);
     postProcessShader->Use();
@@ -809,7 +873,7 @@ void Renderer::RenderPostProcessing()
 
     RenderQuad();
 }
-// 其他方法实现...
+
 std::shared_ptr<Model> Renderer::LoadModel(const std::string &path)
 {
     auto model = std::make_shared<Model>(path);
@@ -907,5 +971,55 @@ void Renderer::Resize(int newWidth, int newHeight)
     bloomBlurBuffers[1]->Resize(newWidth, newHeight);
     bloomPrefilterBuffer->Resize(newWidth, newHeight);
     ssaoBuffer->Resize(newWidth, newHeight);
+    ssaoBlurBuffer->Resize(newWidth, newHeight);
     shadowBuffer->Resize(2048, 2048); // 阴影缓冲大小固定
+}
+
+// Renderer.cpp
+void Renderer::GenerateSSAOKernel()
+{
+    std::uniform_real_distribution<float> randomFloats(0.0, 1.0);
+    std::default_random_engine generator;
+
+    ssaoKernel.clear();
+    for (unsigned int i = 0; i < ssaoKernelSize; ++i)
+    {
+        glm::vec3 sample(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0,
+                         randomFloats(generator) // 在半球内采样
+        );
+
+        // 标准化并缩放到0.0-1.0范围
+        sample = glm::normalize(sample);
+        sample *= randomFloats(generator);
+
+        // 使样本分布更接近原点
+        float scale = static_cast<float>(i) / ssaoKernelSize;
+        scale = 0.1f + 0.9f * scale * scale;
+        sample *= scale;
+
+        ssaoKernel.push_back(sample);
+    }
+}
+
+void Renderer::GenerateSSAONoiseTexture()
+{
+    std::uniform_real_distribution<float> randomFloats(0.0, 1.0);
+    std::default_random_engine generator;
+
+    std::vector<glm::vec3> ssaoNoise;
+    for (unsigned int i = 0; i < ssaoNoiseSize * ssaoNoiseSize; i++)
+    {
+        glm::vec3 noise(randomFloats(generator) * 2.0 - 1.0, randomFloats(generator) * 2.0 - 1.0,
+                        0.0f // 旋转在xy平面
+        );
+        ssaoNoise.push_back(noise);
+    }
+
+    glGenTextures(1, &ssaoNoiseTexture);
+    glBindTexture(GL_TEXTURE_2D, ssaoNoiseTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA32F, ssaoNoiseSize, ssaoNoiseSize, 0, GL_RGB, GL_FLOAT, &ssaoNoise[0]);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
 }

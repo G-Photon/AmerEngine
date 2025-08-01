@@ -10,6 +10,8 @@ uniform sampler2D gMetallic;
 uniform sampler2D gRoughness;
 uniform sampler2D gAo;
 uniform sampler2D gAmbient;
+uniform sampler2D ssao;
+uniform int ssaoEnabled; // 是否启用SSAO
 
 // 光源结构体
 struct L {
@@ -57,6 +59,8 @@ void main() {
     float roughness = texture(gRoughness, TexCoords).r;
     float ao = texture(gAo, TexCoords).r;
     vec3 ambient = texture(gAmbient, TexCoords).rgb;
+    float ssaoOcclusion = ssaoEnabled > 0 ? texture(ssao, TexCoords).r : 1.0;
+    ao= ao * ssaoOcclusion; // 应用SSAO遮挡
 
     vec3 result = vec3(0.0);
     
@@ -124,7 +128,6 @@ vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albe
     vec3 specular = light.specular * spec * specularColor;
     // 环境光分量
     vec3 ambient = light.ambient * ambientColor * ao;
-
     // 应用衰减
     ambient *= attenuation;
     diffuse *= attenuation;
