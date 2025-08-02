@@ -23,23 +23,33 @@ Renderer::~Renderer()
     {
         model.reset();
     }
+    models.clear();
+    for (auto &shader : shaders)
+    {
+        shader.second.reset();
+    }
+    shaders.clear();
     for (auto &pointLight : pointLights)
     {
         pointLight.reset();
     }
+    pointLights.clear();
     for (auto &directionalLight : directionalLights)
     {
         directionalLight.reset();
     }
+    directionalLights.clear();
     for (auto &spotLight : spotLights)
     {
         spotLight.reset();
     }
+    spotLights.clear();
     for (auto &primitive : primitives)
     {
         primitive.mesh->SetMaterial(nullptr);
         primitive.mesh.reset();
     }
+    primitives.clear();
     gBuffer.reset();
     shadowBuffer.reset();
     hdrBuffer.reset();
