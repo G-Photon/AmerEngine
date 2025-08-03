@@ -101,6 +101,10 @@ class Renderer
     {
         return msaaEnabled;
     }
+    bool IsFXAAEnabled() const
+    {
+        return fxaaEnabled;
+    }
     bool IsHDREnabled() const
     {
         return hdrEnabled;
@@ -210,6 +214,11 @@ class Renderer
         return allMaterials;
     }
 
+    void SetFXAA(bool enabled)
+    {
+        fxaaEnabled = enabled;
+    }
+
   private:
     void RenderForward();
     void RenderDeferred();
@@ -223,6 +232,7 @@ class Renderer
     void SetupHDRBufferMS();
     void SetupBloomBuffer();
     void SetupSSAOBuffer();
+    void SetupFXAABuffer();
     void SetupSkybox();
 
     void GenerateSSAOKernel();
@@ -244,6 +254,8 @@ class Renderer
     std::unique_ptr<Framebuffer> bloomBlurBuffers[2];
     std::unique_ptr<Framebuffer> ssaoBuffer;
     std::unique_ptr<Framebuffer> ssaoBlurBuffer;
+    std::unique_ptr<Framebuffer> fxaaBuffer;
+
 
     std::unique_ptr<Framebuffer> hdrBufferMS;
 
@@ -261,6 +273,7 @@ class Renderer
     std::unique_ptr<Shader> lightsShader;
     std::unique_ptr<Shader> postProcessShader;
     std::unique_ptr<Shader> postShaderMS; // 采样 sampler2DMS
+    std::unique_ptr<Shader> fxaaShader;
 
     std::unordered_map<std::string, std::shared_ptr<Shader>> shaders;
 
@@ -293,4 +306,5 @@ class Renderer
     bool pbrEnabled = false;
     bool iblEnabled = false;
     bool showLights = false;
+    bool fxaaEnabled = false;
 };

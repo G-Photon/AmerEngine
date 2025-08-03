@@ -141,6 +141,10 @@ void Renderer::Initialize()
                                               "resources/shaders/postprocess/bloom_prefilter.frag");
     bloomBlurShader = std::make_unique<Shader>("resources/shaders/postprocess/quad.vert",
                                                "resources/shaders/postprocess/bloom_blur.frag");
+    fxaaShader = std::make_unique<Shader>(
+        FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
+        FileSystem::GetPath("resources/shaders/postprocess/fxaa.frag"));
+    
     // 初始化帧缓冲
     SetupShadowBuffer();
     SetupGBuffer();
@@ -148,6 +152,7 @@ void Renderer::Initialize()
     SetupHDRBufferMS();
     SetupBloomBuffer();
     SetupSSAOBuffer();
+    SetupFXAABuffer();
 
     GenerateSSAOKernel();
     GenerateSSAONoiseTexture();
@@ -242,6 +247,13 @@ void Renderer::SetupSSAOBuffer()
     ssaoBlurBuffer = std::make_unique<Framebuffer>(width, height);
     ssaoBlurBuffer->AddColorTexture(GL_RED, GL_RED, GL_FLOAT);
     ssaoBlurBuffer->CheckComplete();
+}
+
+void Renderer::SetupFXAABuffer()
+{
+    fxaaBuffer = std::make_unique<Framebuffer>(width, height);
+    fxaaBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
+    fxaaBuffer->CheckComplete();
 }
 
 void Renderer::SetupSkybox()
@@ -861,25 +873,33 @@ void Renderer::RenderPostProcessing()
         }
     }
 
+    if (fxaaEnabled)
+    {
+        fxaaBuffer->Bind();
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        fxaaShader->Use();
+        hdrBuffer->BindTexture(0, 0);
+        RenderQuad();
+    }
+
     // Final Compose
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
     glClear(GL_COLOR_BUFFER_BIT);
     postProcessShader->Use();
     postProcessShader->SetBool("hdrEnabled", hdrEnabled);
     postProcessShader->SetBool("bloomEnabled", bloomEnabled);
-    postProcessShader->SetBool("ssaoEnabled", ssaoEnabled && currentMode == DEFERRED);
     postProcessShader->SetBool("gammaEnabled", gammaCorrection);
     postProcessShader->SetFloat("exposure", 1.0f);
 
     // 绑定 HDR、Bloom、SSAO 纹理
     postProcessShader->SetInt("scene", 0);
     postProcessShader->SetInt("bloom", 1);
-    postProcessShader->SetInt("ssao", 2);
-    hdrBuffer->BindTexture(0, 0);
+    if (fxaaEnabled)
+        fxaaBuffer->BindTexture(0, 0);
+    else
+        hdrBuffer->BindTexture(0, 0);
     if (bloomEnabled)
         bloomBlurBuffers[false]->BindTexture(0, 1);
-    if (ssaoEnabled && currentMode == DEFERRED)
-        ssaoBuffer->BindTexture(0, 2);
 
     RenderQuad();
 }
@@ -983,6 +1003,7 @@ void Renderer::Resize(int newWidth, int newHeight)
     ssaoBuffer->Resize(newWidth, newHeight);
     ssaoBlurBuffer->Resize(newWidth, newHeight);
     shadowBuffer->Resize(2048, 2048); // 阴影缓冲大小固定
+    fxaaBuffer->Resize(newWidth, newHeight);
 }
 
 // Renderer.cpp

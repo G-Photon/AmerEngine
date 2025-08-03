@@ -673,6 +673,12 @@ void EditorUI::ShowRendererSettings()
         renderer->SetMSAA(msaa);
     }
 
+    bool fxaa = renderer->IsFXAAEnabled();
+    if (ImGui::Checkbox("FXAA", &fxaa))
+    {
+        renderer->SetFXAA(fxaa);
+    }
+
     bool hdr = renderer->IsHDREnabled();
     if (ImGui::Checkbox("HDR", &hdr))
     {
