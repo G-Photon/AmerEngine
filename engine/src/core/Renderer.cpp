@@ -878,6 +878,8 @@ void Renderer::RenderPostProcessing()
         fxaaBuffer->Bind();
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         fxaaShader->Use();
+        fxaaShader->SetInt("screenTexture", 0);
+        fxaaShader->SetVec2("resolution", glm::vec2(width, height));
         hdrBuffer->BindTexture(0, 0);
         RenderQuad();
     }
