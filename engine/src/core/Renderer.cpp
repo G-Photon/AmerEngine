@@ -8,6 +8,7 @@
 #include "utils/FileSystem.hpp"
 #include <iostream>
 #include <random>
+#include <glm/gtc/matrix_transform.hpp>
 
 Renderer::Renderer(int width, int height) : width(width), height(height)
 {
@@ -19,6 +20,10 @@ Renderer::~Renderer()
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVBO);
     glDeleteTextures(1, &ssaoNoiseTexture);
+    
+    // 清理多光源阴影缓冲区
+    ClearLightShadowBuffers();
+    
     for (auto &model : models)
     {
         model.reset();
@@ -126,6 +131,9 @@ void Renderer::Initialize()
 
     lightsShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/utility/light.vert"),
                                             FileSystem::GetPath("resources/shaders/utility/light.frag"));
+
+    shadowDepthShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/utility/shadow_depth.vert"),
+                                                 FileSystem::GetPath("resources/shaders/utility/shadow_depth.frag"));
 
     postProcessShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
                                                  FileSystem::GetPath("resources/shaders/postprocess/post.frag"));
@@ -342,17 +350,27 @@ void Renderer::RenderForward()
     forwardShader->SetInt("numLights[0]", directionalLights.size()); // 方向光数量
     forwardShader->SetInt("numLights[1]", pointLights.size());       // 点光
     forwardShader->SetInt("numLights[2]", spotLights.size());        // 聚光灯数量
+    
+    // 启用阴影
+    if (shadowEnabled)
+    {
+        forwardShader->SetBool("shadowEnabled", true);
+    }
+    else
+    {
+        forwardShader->SetBool("shadowEnabled", false);
+    }
     for (size_t i = 0; i < pointLights.size(); ++i)
     {
-        pointLights[i]->SetupShader(*forwardShader, i);
+        pointLights[i]->SetupShader(*forwardShader, i, shadowEnabled);
     }
     for (size_t i = 0; i < directionalLights.size(); ++i)
     {
-        directionalLights[i]->SetupShader(*forwardShader, i);
+        directionalLights[i]->SetupShader(*forwardShader, i, shadowEnabled);
     }
     for (size_t i = 0; i < spotLights.size(); ++i)
     {
-        spotLights[i]->SetupShader(*forwardShader, i);
+        spotLights[i]->SetupShader(*forwardShader, i, shadowEnabled);
     }
     // 渲染所有模型和几何体
     for (auto &model : models)
@@ -501,25 +519,201 @@ void Renderer::RenderDeferred()
 
 void Renderer::RenderShadows()
 {
-    shadowBuffer->Bind();
-    glViewport(0, 0, shadowBuffer->GetWidth(), shadowBuffer->GetHeight());
-    glClear(GL_DEPTH_BUFFER_BIT);
+    if (!shadowEnabled) return;
+
+    // 保存当前OpenGL状态
+    GLint prevViewport[4];
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+    GLint prevFramebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFramebuffer);
 
     shadowDepthShader->Use();
-    // 设置光源VP矩阵
 
-    for (auto &model : models)
+    // 渲染定向光阴影
+    for (size_t i = 0; i < directionalLights.size(); ++i)
     {
-        model->Draw(*shadowDepthShader);
+        auto &dirLight = directionalLights[i];
+        if (dirLight->HasShadows())
+        {
+            // 为每个光源创建独立的阴影缓冲区
+            std::unique_ptr<Framebuffer> lightShadowBuffer = std::make_unique<Framebuffer>(2048, 2048);
+            lightShadowBuffer->AddDepthTexture();
+            lightShadowBuffer->CheckComplete();
+            
+            lightShadowBuffer->Bind();
+            glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
+            glClear(GL_DEPTH_BUFFER_BIT);
+
+            // 设置光源空间矩阵
+            glm::mat4 lightSpaceMatrix = dirLight->GetLightSpaceMatrix();
+            shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
+
+            // 渲染所有模型和几何体
+            for (auto &model : models)
+            {
+                // 构建模型矩阵
+                glm::mat4 modelMatrix = glm::mat4(1.0f);
+                modelMatrix = glm::translate(modelMatrix, model->GetPosition());
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
+                modelMatrix = glm::scale(modelMatrix, model->GetScale());
+                
+                shadowDepthShader->SetMat4("model", modelMatrix);
+                model->Draw(*shadowDepthShader);
+            }
+
+            for (auto &primitive : primitives)
+            {
+                // 构建几何体矩阵
+                glm::mat4 modelMatrix = glm::mat4(1.0f);
+                modelMatrix = glm::translate(modelMatrix, primitive.position);
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+                modelMatrix = glm::scale(modelMatrix, primitive.scale);
+                
+                shadowDepthShader->SetMat4("model", modelMatrix);
+                primitive.mesh->Draw(*shadowDepthShader);
+            }
+
+            // 将阴影贴图绑定到光源
+            unsigned int shadowMap = lightShadowBuffer->GetDepthTexture();
+            dirLight->SetShadowMap(shadowMap);
+            
+            // 将缓冲区保存到管理容器中（临时方案）
+            if (lightShadowBuffers.size() <= i) {
+                lightShadowBuffers.resize(i + 1);
+            }
+            lightShadowBuffers[i] = std::move(lightShadowBuffer);
+        }
     }
 
-    for (auto &primitive : primitives)
+    // 渲染点光源阴影
+    for (size_t i = 0; i < pointLights.size(); ++i)
     {
-        primitive.mesh->Draw(*shadowDepthShader);
+        auto &pointLight = pointLights[i];
+        if (pointLight->HasShadows())
+        {
+            // 为每个点光源创建独立的阴影缓冲区
+            std::unique_ptr<Framebuffer> lightShadowBuffer = std::make_unique<Framebuffer>(1024, 1024);
+            lightShadowBuffer->AddDepthTexture();
+            lightShadowBuffer->CheckComplete();
+
+            lightShadowBuffer->Bind();
+            glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
+            glClear(GL_DEPTH_BUFFER_BIT);
+
+            // 设置光源空间矩阵（使用透视投影）
+            glm::mat4 lightSpaceMatrix = pointLight->GetLightSpaceMatrix();
+            shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
+
+            // 渲染所有模型和几何体
+            for (auto &model : models)
+            {
+                // 构建模型矩阵
+                glm::mat4 modelMatrix = glm::mat4(1.0f);
+                modelMatrix = glm::translate(modelMatrix, model->GetPosition());
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
+                modelMatrix = glm::scale(modelMatrix, model->GetScale());
+                
+                shadowDepthShader->SetMat4("model", modelMatrix);
+                model->Draw(*shadowDepthShader);
+            }
+
+            for (auto &primitive : primitives)
+            {
+                // 构建几何体矩阵
+                glm::mat4 modelMatrix = glm::mat4(1.0f);
+                modelMatrix = glm::translate(modelMatrix, primitive.position);
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+                modelMatrix = glm::scale(modelMatrix, primitive.scale);
+                
+                shadowDepthShader->SetMat4("model", modelMatrix);
+                primitive.mesh->Draw(*shadowDepthShader);
+            }
+
+            // 将阴影贴图绑定到光源
+            unsigned int shadowMap = lightShadowBuffer->GetDepthTexture();
+            pointLight->SetShadowMap(shadowMap);
+            
+            // 保存缓冲区，使用偏移索引以避免与定向光冲突
+            size_t bufferIndex = directionalLights.size() + i;
+            if (lightShadowBuffers.size() <= bufferIndex) {
+                lightShadowBuffers.resize(bufferIndex + 1);
+            }
+            lightShadowBuffers[bufferIndex] = std::move(lightShadowBuffer);
+        }
     }
 
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
-    glViewport(0, 0, width, height);
+    // 渲染聚光灯阴影
+    for (size_t i = 0; i < spotLights.size(); ++i)
+    {
+        auto &spotLight = spotLights[i];
+        if (spotLight->HasShadows())
+        {
+            // 为每个聚光灯创建独立的阴影缓冲区
+            std::unique_ptr<Framebuffer> lightShadowBuffer = std::make_unique<Framebuffer>(1024, 1024);
+            lightShadowBuffer->AddDepthTexture();
+            lightShadowBuffer->CheckComplete();
+
+            lightShadowBuffer->Bind();
+            glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
+            glClear(GL_DEPTH_BUFFER_BIT);
+
+            // 设置光源空间矩阵
+            glm::mat4 lightSpaceMatrix = spotLight->GetLightSpaceMatrix();
+            shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
+
+            // 渲染所有模型和几何体
+            for (auto &model : models)
+            {
+                // 构建模型矩阵
+                glm::mat4 modelMatrix = glm::mat4(1.0f);
+                modelMatrix = glm::translate(modelMatrix, model->GetPosition());
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
+                modelMatrix = glm::scale(modelMatrix, model->GetScale());
+                
+                shadowDepthShader->SetMat4("model", modelMatrix);
+                model->Draw(*shadowDepthShader);
+            }
+
+            for (auto &primitive : primitives)
+            {
+                // 构建几何体矩阵
+                glm::mat4 modelMatrix = glm::mat4(1.0f);
+                modelMatrix = glm::translate(modelMatrix, primitive.position);
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+                modelMatrix = glm::scale(modelMatrix, primitive.scale);
+                
+                shadowDepthShader->SetMat4("model", modelMatrix);
+                primitive.mesh->Draw(*shadowDepthShader);
+            }
+
+            // 将阴影贴图绑定到光源
+            unsigned int shadowMap = lightShadowBuffer->GetDepthTexture();
+            spotLight->SetShadowMap(shadowMap);
+            
+            // 保存缓冲区，使用偏移索引
+            size_t bufferIndex = directionalLights.size() + pointLights.size() + i;
+            if (lightShadowBuffers.size() <= bufferIndex) {
+                lightShadowBuffers.resize(bufferIndex + 1);
+            }
+            lightShadowBuffers[bufferIndex] = std::move(lightShadowBuffer);
+        }
+    }
+
+    // 恢复OpenGL状态
+    glBindFramebuffer(GL_FRAMEBUFFER, prevFramebuffer);
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
 }
 
 void Renderer::RenderSkybox()
@@ -971,6 +1165,32 @@ void Renderer::SetShadow(bool enabled)
 void Renderer::SetPBR(bool enabled)
 {
     pbrEnabled = enabled;
+}
+
+// 多光源阴影管理函数实现
+void Renderer::ClearLightShadowBuffers()
+{
+    lightShadowBuffers.clear();
+    lightToShadowMap.clear();
+}
+
+void Renderer::CreateShadowBufferForLight(Light* light)
+{
+    // 实现为每个光源创建独立的阴影缓冲区
+    // 这个函数可以根据需要进行扩展
+}
+
+void Renderer::RemoveShadowBufferForLight(Light* light)
+{
+    // 实现移除特定光源的阴影缓冲区
+    // 这个函数可以根据需要进行扩展
+}
+
+unsigned int Renderer::GetShadowBufferIndexForLight(Light* light)
+{
+    // 实现获取光源对应的阴影缓冲区索引
+    // 这个函数可以根据需要进行扩展
+    return 0;
 }
 
 void Renderer::SetIBL(bool enabled)

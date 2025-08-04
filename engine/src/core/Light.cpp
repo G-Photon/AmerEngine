@@ -37,7 +37,7 @@ PointLight::PointLight(const glm::vec3 &position, const glm::vec3 &ambient, cons
     number = count++;
 }
 
-void PointLight::SetupShader(Shader &shader, int index) const
+void PointLight::SetupShader(Shader &shader, int index, bool globalShadowEnabled) const
 {
     std::string prefix = "pointLights[" + std::to_string(index) + "].";
     shader.SetVec3(prefix + "position", position);
@@ -47,6 +47,35 @@ void PointLight::SetupShader(Shader &shader, int index) const
     shader.SetFloat(prefix + "constant", constant);
     shader.SetFloat(prefix + "linear", linear);
     shader.SetFloat(prefix + "quadratic", quadratic);
+    
+    // 设置阴影相关参数
+    bool finalShadowEnabled = shadowEnabled && globalShadowEnabled;
+    shader.SetBool(prefix + "hasShadows", finalShadowEnabled);
+    if (finalShadowEnabled && shadowMap != 0)
+    {
+        // 使用基于光源类型和索引的纹理单元分配策略
+        // 点光源从 15 开始，避免与其他光源冲突
+        int textureUnit = 15 + index;
+        shader.SetInt(prefix + "shadowMap", textureUnit);
+        shader.SetMat4(prefix + "lightSpaceMatrix", GetLightSpaceMatrix());
+        
+        // 绑定阴影贴图
+        glActiveTexture(GL_TEXTURE0 + textureUnit);
+        glBindTexture(GL_TEXTURE_2D, shadowMap);
+        
+        // 设置纹理参数
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float border[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    }
+    else
+    {
+        shader.SetBool(prefix + "hasShadows", false);
+        shader.SetInt(prefix + "shadowMap", 0);
+    }
 }
 
 void PointLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
@@ -118,13 +147,41 @@ DirectionalLight::DirectionalLight(const glm::vec3 &direction, const glm::vec3 &
     number = count++;
 }
 
-void DirectionalLight::SetupShader(Shader &shader, int index) const
+void DirectionalLight::SetupShader(Shader &shader, int index, bool globalShadowEnabled) const
 {
     std::string prefix = "dirLight[" + std::to_string(index) + "].";
     shader.SetVec3(prefix + "direction", direction);
     shader.SetVec3(prefix + "ambient", ambient * intensity);
     shader.SetVec3(prefix + "diffuse", diffuse * intensity);
     shader.SetVec3(prefix + "specular", specular * intensity);
+    
+    // 设置阴影相关参数
+    bool finalShadowEnabled = shadowEnabled && globalShadowEnabled;
+    shader.SetBool(prefix + "hasShadows", finalShadowEnabled);
+    if (finalShadowEnabled && shadowMap != 0)
+    {
+        // 定向光从纹理单元 10 开始
+        int textureUnit = 10 + index;
+        shader.SetInt(prefix + "shadowMap", textureUnit);
+        shader.SetMat4(prefix + "lightSpaceMatrix", GetLightSpaceMatrix());
+        
+        // 绑定阴影贴图
+        glActiveTexture(GL_TEXTURE0 + textureUnit);
+        glBindTexture(GL_TEXTURE_2D, shadowMap);
+        
+        // 设置纹理参数
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float border[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    }
+    else
+    {
+        shader.SetBool(prefix + "hasShadows", false);
+        shader.SetInt(prefix + "shadowMap", 0);
+    }
 }
 
 void DirectionalLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
@@ -157,7 +214,7 @@ SpotLight::SpotLight(const glm::vec3 &position, const glm::vec3 &direction, cons
     number = count++;
 }
 
-void SpotLight::SetupShader(Shader &shader, int index) const
+void SpotLight::SetupShader(Shader &shader, int index, bool globalShadowEnabled) const
 {
     std::string prefix = "spotLights[" + std::to_string(index) + "].";
     shader.SetVec3(prefix + "position", position);
@@ -170,6 +227,34 @@ void SpotLight::SetupShader(Shader &shader, int index) const
     shader.SetFloat(prefix + "constant", constant);
     shader.SetFloat(prefix + "linear", linear);
     shader.SetFloat(prefix + "quadratic", quadratic);
+    
+    // 设置阴影相关参数
+    bool finalShadowEnabled = shadowEnabled && globalShadowEnabled;
+    shader.SetBool(prefix + "hasShadows", finalShadowEnabled);
+    if (finalShadowEnabled && shadowMap != 0)
+    {
+        // 聚光灯从纹理单元 20 开始，避免与其他光源冲突
+        int textureUnit = 20 + index;
+        shader.SetInt(prefix + "shadowMap", textureUnit);
+        shader.SetMat4(prefix + "lightSpaceMatrix", GetLightSpaceMatrix());
+        
+        // 绑定阴影贴图
+        glActiveTexture(GL_TEXTURE0 + textureUnit);
+        glBindTexture(GL_TEXTURE_2D, shadowMap);
+        
+        // 设置纹理参数
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float border[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    }
+    else
+    {
+        shader.SetBool(prefix + "hasShadows", false);
+        shader.SetInt(prefix + "shadowMap", 0);
+    }
 }
 
 void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
@@ -245,4 +330,70 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     glBindVertexArray(lightConeVAO);
     glDrawElements(GL_TRIANGLES, ConeindexCount, GL_UNSIGNED_INT, 0); // 绘制圆锥
     glBindVertexArray(0);
+}
+
+// 阴影相关方法实现
+glm::mat4 DirectionalLight::GetLightSpaceMatrix() const
+{
+    // 计算光源位置（在场景中心上方，朝向光源方向的反方向）
+    glm::vec3 lightPos = glm::vec3(0.0f, 10.0f, 0.0f) - glm::normalize(direction) * 10.0f;
+    
+    // 计算光源视图矩阵
+    glm::mat4 lightView = glm::lookAt(
+        lightPos,                    // 光源位置
+        glm::vec3(0.0f, 0.0f, 0.0f), // 看向场景中心
+        glm::vec3(0.0f, 1.0f, 0.0f)  // 上方向
+    );
+    
+    // 正交投影矩阵
+    glm::mat4 lightProjection = glm::ortho(
+        -shadowOrthoSize, shadowOrthoSize,
+        -shadowOrthoSize, shadowOrthoSize,
+        shadowNearPlane, shadowFarPlane
+    );
+    
+    return lightProjection * lightView;
+}
+
+glm::mat4 PointLight::GetLightSpaceMatrix() const
+{
+    // 点光源使用透视投影，朝向Y轴负方向（向下）
+    // 这样可以捕获点光源下方的阴影
+    glm::mat4 lightView = glm::lookAt(
+        position,
+        position + glm::vec3(0.0f, -1.0f, 0.0f), // 向下看
+        glm::vec3(0.0f, 0.0f, -1.0f)             // 上方向
+    );
+    
+    glm::mat4 lightProjection = glm::perspective(
+        glm::radians(90.0f), // 90度视野角
+        1.0f,                 // 宽高比
+        shadowNearPlane,
+        shadowFarPlane
+    );
+    
+    return lightProjection * lightView;
+}
+
+glm::mat4 SpotLight::GetLightSpaceMatrix() const
+{
+    // 聚光灯使用透视投影
+    glm::mat4 lightView = glm::lookAt(
+        position,
+        position + direction,
+        glm::vec3(0.0f, 1.0f, 0.0f)
+    );
+    
+    // 计算正确的视野角度：outerCutOff是余弦值，需要转换为角度
+    float outerAngleRadians = glm::acos(outerCutOff);
+    float outerAngleDegrees = glm::degrees(outerAngleRadians);
+    
+    glm::mat4 lightProjection = glm::perspective(
+        outerAngleRadians * 2.0f, // 使用弧度，并且是整个视野角度（不是半角）
+        1.0f,
+        shadowNearPlane,
+        shadowFarPlane
+    );
+    
+    return lightProjection * lightView;
 }

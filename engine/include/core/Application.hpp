@@ -22,6 +22,7 @@ class Application
     void ProcessInput(float deltaTime);
     void Update(float deltaTime);
     void Render();
+    void CreateTestScene();
 
     GLFWwindow *window;
     int width = 1280;

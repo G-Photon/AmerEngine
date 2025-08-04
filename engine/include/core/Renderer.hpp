@@ -238,6 +238,12 @@ class Renderer
     void GenerateSSAOKernel();
     void GenerateSSAONoiseTexture();
 
+    // 多光源阴影管理
+    void CreateShadowBufferForLight(Light* light);
+    void RemoveShadowBufferForLight(Light* light);
+    unsigned int GetShadowBufferIndexForLight(Light* light);
+    void ClearLightShadowBuffers(); // 清理所有光源阴影缓冲区
+
     void RenderSkybox();
     void RenderShadows();
     void RenderSSAO();
@@ -248,7 +254,7 @@ class Renderer
 
     // 帧缓冲
     std::unique_ptr<Framebuffer> gBuffer;
-    std::unique_ptr<Framebuffer> shadowBuffer;
+    std::unique_ptr<Framebuffer> shadowBuffer;  // 保留兼容性
     std::unique_ptr<Framebuffer> hdrBuffer;
     std::unique_ptr<Framebuffer> bloomPrefilterBuffer;
     std::unique_ptr<Framebuffer> bloomBlurBuffers[2];
@@ -256,6 +262,9 @@ class Renderer
     std::unique_ptr<Framebuffer> ssaoBlurBuffer;
     std::unique_ptr<Framebuffer> fxaaBuffer;
 
+    // 多光源阴影缓冲区管理
+    std::vector<std::unique_ptr<Framebuffer>> lightShadowBuffers;
+    std::unordered_map<Light*, unsigned int> lightToShadowMap;
 
     std::unique_ptr<Framebuffer> hdrBufferMS;
 

@@ -1,4 +1,6 @@
 #include "core/Application.hpp"
+#include "core/Light.hpp"
+#include "core/Material.hpp"
 #include "GLFW/glfw3.h"
 #include "utils/Logger.hpp"
 
@@ -49,6 +51,9 @@ void Application::Initialize()
     // 初始化渲染器
     renderer = std::make_unique<Renderer>(width, height);
     renderer->Initialize();
+
+    // 创建测试场景
+    CreateTestScene();
 
     // 初始化UI
     editorUI = std::make_unique<EditorUI>(window, renderer.get());
@@ -159,6 +164,97 @@ void Application::Render()
     renderer->EndFrame();
     glfwSwapBuffers(window);
     glfwPollEvents();
+}
+
+void Application::CreateTestScene()
+{
+    // 创建地面
+    Material groundMaterial;
+    groundMaterial.diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
+    groundMaterial.specular = glm::vec3(0.1f, 0.1f, 0.1f);
+    groundMaterial.shininess = 32.0f;
+    
+    renderer->CreatePrimitive(Geometry::Type::CUBE, 
+                             glm::vec3(0.0f, -2.0f, 0.0f), 
+                             glm::vec3(10.0f, 0.1f, 10.0f), 
+                             glm::vec3(0.0f, 0.0f, 0.0f), 
+                             groundMaterial);
+
+    // 创建几个不同颜色的立方体
+    Material redCubeMaterial;
+    redCubeMaterial.diffuse = glm::vec3(0.8f, 0.2f, 0.2f);
+    redCubeMaterial.specular = glm::vec3(0.5f, 0.5f, 0.5f);
+    redCubeMaterial.shininess = 64.0f;
+    
+    Material blueCubeMaterial;
+    blueCubeMaterial.diffuse = glm::vec3(0.2f, 0.2f, 0.8f);
+    blueCubeMaterial.specular = glm::vec3(0.5f, 0.5f, 0.5f);
+    blueCubeMaterial.shininess = 64.0f;
+    
+    Material greenCubeMaterial;
+    greenCubeMaterial.diffuse = glm::vec3(0.2f, 0.8f, 0.2f);
+    greenCubeMaterial.specular = glm::vec3(0.5f, 0.5f, 0.5f);
+    greenCubeMaterial.shininess = 64.0f;
+    
+    renderer->CreatePrimitive(Geometry::Type::CUBE, 
+                             glm::vec3(-2.0f, 0.0f, 0.0f), 
+                             glm::vec3(1.0f, 2.0f, 1.0f), 
+                             glm::vec3(0.0f, 0.0f, 0.0f), 
+                             redCubeMaterial);
+
+    renderer->CreatePrimitive(Geometry::Type::CUBE, 
+                             glm::vec3(2.0f, 0.0f, 0.0f), 
+                             glm::vec3(1.0f, 2.0f, 1.0f), 
+                             glm::vec3(0.0f, 0.0f, 0.0f), 
+                             blueCubeMaterial);
+
+    renderer->CreatePrimitive(Geometry::Type::CUBE, 
+                             glm::vec3(0.0f, 0.0f, -2.0f), 
+                             glm::vec3(1.0f, 2.0f, 1.0f), 
+                             glm::vec3(0.0f, 0.0f, 0.0f), 
+                             greenCubeMaterial);
+
+    // 创建一个小球
+    Material sphereMaterial;
+    sphereMaterial.diffuse = glm::vec3(0.8f, 0.8f, 0.2f);
+    sphereMaterial.specular = glm::vec3(0.8f, 0.8f, 0.8f);
+    sphereMaterial.shininess = 128.0f;
+    
+    renderer->CreatePrimitive(Geometry::Type::SPHERE, 
+                             glm::vec3(0.0f, 1.0f, 0.0f), 
+                             glm::vec3(0.5f, 0.5f, 0.5f), 
+                             glm::vec3(0.0f, 0.0f, 0.0f), 
+                             sphereMaterial);
+
+    // 创建定向光源并启用阴影
+    auto directionalLight = std::make_shared<DirectionalLight>(
+        glm::vec3(-0.5f, -1.0f, -0.5f),  // 方向
+        glm::vec3(0.2f, 0.2f, 0.2f),     // 环境光
+        glm::vec3(1.0f, 1.0f, 1.0f),     // 漫反射
+        glm::vec3(1.0f, 1.0f, 1.0f),     // 镜面反射
+        1.0f                             // 强度
+    );
+    directionalLight->SetShadowEnabled(true);
+    directionalLight->shadowOrthoSize = 15.0f; // 调整阴影范围
+    directionalLight->shadowNearPlane = 0.1f;
+    directionalLight->shadowFarPlane = 50.0f;
+    renderer->AddLight(directionalLight);
+
+    // 创建一个点光源并启用阴影
+    auto pointLight = std::make_shared<PointLight>(
+        glm::vec3(0.0f, 3.0f, 0.0f),     // 位置
+        glm::vec3(0.1f, 0.1f, 0.1f),     // 环境光
+        glm::vec3(0.5f, 0.5f, 1.0f),     // 漫反射
+        glm::vec3(1.0f, 1.0f, 1.0f),     // 镜面反射
+        0.5f                             // 强度
+    );
+    pointLight->SetShadowEnabled(true);
+    pointLight->shadowNearPlane = 0.1f;
+    pointLight->shadowFarPlane = 25.0f;
+    renderer->AddLight(pointLight);
+
+    // 启用阴影
+    renderer->SetShadow(true);
 }
 
 void Application::Shutdown()

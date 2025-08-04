@@ -204,6 +204,9 @@ void EditorUI::ShowLightSelectionDialog()
         ImGui::RadioButton(ConvertToUTF8(L"方向光源").c_str(), &lightType, 1);
         ImGui::RadioButton(ConvertToUTF8(L"聚光灯").c_str(), &lightType, 2);
 
+        static bool enableShadows = false;
+        ImGui::Checkbox(ConvertToUTF8(L"启用阴影").c_str(), &enableShadows);
+        
         if (ImGui::Button(ConvertToUTF8(L"创建").c_str()))
         {
             // 创建光源逻辑
@@ -220,6 +223,13 @@ void EditorUI::ShowLightSelectionDialog()
             {
                 light = std::make_shared<SpotLight>();
             }
+            
+            // 启用阴影
+            if (enableShadows)
+            {
+                light->SetShadowEnabled(true);
+            }
+            
             renderer->AddLight(light);
             ImGui::CloseCurrentPopup();
         }
@@ -744,6 +754,19 @@ void EditorUI::OnLightInspectorGUI(Light &light)
         ImGui::SliderFloat(ConvertToUTF8(L"常数项").c_str(), &pointLight.constant, 0.0f, 1.0f);
         ImGui::SliderFloat(ConvertToUTF8(L"线性项").c_str(), &pointLight.linear, 0.0f, 1.0f);
         ImGui::SliderFloat(ConvertToUTF8(L"二次项").c_str(), &pointLight.quadratic, 0.0f, 1.0f);
+        
+        // 阴影设置
+        bool shadowEnabled = pointLight.IsShadowEnabled();
+        if (ImGui::Checkbox(ConvertToUTF8(L"启用阴影").c_str(), &shadowEnabled))
+        {
+            pointLight.SetShadowEnabled(shadowEnabled);
+        }
+        
+        if (shadowEnabled)
+        {
+            ImGui::DragFloat(ConvertToUTF8(L"阴影近平面").c_str(), &pointLight.shadowNearPlane, 0.1f, 0.1f, 10.0f);
+            ImGui::DragFloat(ConvertToUTF8(L"阴影远平面").c_str(), &pointLight.shadowFarPlane, 1.0f, 10.0f, 1000.0f);
+        }
     }
     else if (light.getType() == 1)
     {
@@ -756,6 +779,20 @@ void EditorUI::OnLightInspectorGUI(Light &light)
         ImGui::ColorEdit3(ConvertToUTF8(L"漫反射").c_str(), glm::value_ptr(directionalLight.diffuse));
         ImGui::ColorEdit3(ConvertToUTF8(L"高光").c_str(), glm::value_ptr(directionalLight.specular));
         ImGui::SliderFloat(ConvertToUTF8(L"强度").c_str(), &directionalLight.intensity, 0.0f, 1.0f);
+        
+        // 阴影设置
+        bool shadowEnabled = directionalLight.IsShadowEnabled();
+        if (ImGui::Checkbox(ConvertToUTF8(L"启用阴影").c_str(), &shadowEnabled))
+        {
+            directionalLight.SetShadowEnabled(shadowEnabled);
+        }
+        
+        if (shadowEnabled)
+        {
+            ImGui::DragFloat(ConvertToUTF8(L"阴影近平面").c_str(), &directionalLight.shadowNearPlane, 0.1f, 0.1f, 10.0f);
+            ImGui::DragFloat(ConvertToUTF8(L"阴影远平面").c_str(), &directionalLight.shadowFarPlane, 1.0f, 10.0f, 1000.0f);
+            ImGui::DragFloat(ConvertToUTF8(L"阴影正交大小").c_str(), &directionalLight.shadowOrthoSize, 1.0f, 5.0f, 100.0f);
+        }
     }
     else if (light.getType() == 2)
     {
@@ -787,5 +824,18 @@ void EditorUI::OnLightInspectorGUI(Light &light)
         ImGui::DragFloat(ConvertToUTF8(L"常数项").c_str(), &spotLight.constant, 0.01f, 0.0f, 1.0f);
         ImGui::DragFloat(ConvertToUTF8(L"线性项").c_str(), &spotLight.linear, 0.001f, 0.0f, 1.0f);
         ImGui::DragFloat(ConvertToUTF8(L"二次项").c_str(), &spotLight.quadratic, 0.0001f, 0.0f, 1.0f);
+        
+        // 阴影设置
+        bool shadowEnabled = spotLight.IsShadowEnabled();
+        if (ImGui::Checkbox(ConvertToUTF8(L"启用阴影").c_str(), &shadowEnabled))
+        {
+            spotLight.SetShadowEnabled(shadowEnabled);
+        }
+        
+        if (shadowEnabled)
+        {
+            ImGui::DragFloat(ConvertToUTF8(L"阴影近平面").c_str(), &spotLight.shadowNearPlane, 0.1f, 0.1f, 10.0f);
+            ImGui::DragFloat(ConvertToUTF8(L"阴影远平面").c_str(), &spotLight.shadowFarPlane, 1.0f, 10.0f, 1000.0f);
+        }
     }
 }

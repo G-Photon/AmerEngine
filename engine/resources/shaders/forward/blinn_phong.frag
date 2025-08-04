@@ -19,6 +19,9 @@ struct DirLight {
     vec3 ambient;
     vec3 diffuse;
     vec3 specular;
+    bool hasShadows;
+    sampler2D shadowMap;
+    mat4 lightSpaceMatrix;
 };
 
 struct PointLight {
@@ -31,6 +34,10 @@ struct PointLight {
     vec3 ambient;
     vec3 diffuse;
     vec3 specular;
+    
+    bool hasShadows;
+    sampler2D shadowMap;
+    mat4 lightSpaceMatrix;
 };
 
 struct SpotLight {
@@ -61,15 +68,19 @@ out vec4 FragColor;
 uniform vec3 viewPos;
 uniform Material material;
 uniform int numLights[3]; // [0]: DirLight, [1]: PointLight, [2]: SpotLight
+uniform bool shadowEnabled;
 uniform DirLight dirLight[NR_POINT_LIGHTS];
 uniform PointLight pointLights[NR_POINT_LIGHTS];
 uniform SpotLight spotLights[NR_POINT_LIGHTS];
 uniform bool useNormalMapping;
 
 // 函数声明
-vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir);
+vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 fragPos);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
+
+// 阴影计算函数
+float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap);
 
 void main() {
     // 属性
@@ -100,7 +111,7 @@ void main() {
     vec3 result = vec3(0.0);
     //定向光贡献
     for(int i = 0; i < numLights[0]; i++) {
-        result += CalcDirLight(dirLight[i], norm, viewDir);
+        result += CalcDirLight(dirLight[i], norm, viewDir, FragPos);
     }
     
     // 点光源贡献
@@ -117,7 +128,7 @@ void main() {
 }
 
 // 计算方向光
-vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir) {
+vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 fragPos) {
     vec3 lightDir = normalize(-light.direction);
     
     // 漫反射
@@ -126,6 +137,13 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir) {
     // 镜面反射
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
+    
+    // 阴影计算
+    float shadow = 0.0;
+    if (light.hasShadows) {
+        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+        shadow = ShadowCalculation(fragPosLightSpace, light.shadowMap);
+    }
     
     // 组合结果
     vec3 ambient, diffuse, specular;
@@ -143,6 +161,10 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir) {
     } else {
         specular = light.specular * spec * material.specular;
     }
+    
+    // 应用阴影
+    diffuse *= (1.0 - shadow);
+    specular *= (1.0 - shadow);
     
     return (ambient + diffuse + specular);
 }
@@ -162,6 +184,13 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + light.quadratic * (distance * distance));
     
+    // 阴影计算
+    float shadow = 0.0;
+    if (light.hasShadows) {
+        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+        shadow = ShadowCalculation(fragPosLightSpace, light.shadowMap);
+    }
+    
     // 组合结果
     vec3 ambient, diffuse, specular;
 
@@ -180,8 +209,8 @@ vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     }
     
     ambient *= attenuation;
-    diffuse *= attenuation;
-    specular *= attenuation;
+    diffuse *= attenuation * (1.0 - shadow);
+    specular *= attenuation * (1.0 - shadow);
     
     return (ambient + diffuse + specular);
 }
@@ -228,4 +257,43 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir) {
     specular *= attenuation * intensity;
     
     return (ambient + diffuse + specular);
+}
+
+// 阴影计算函数
+float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap)
+{
+    // 执行透视除法
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    
+    // 变换到[0,1]范围
+    projCoords = projCoords * 0.5 + 0.5;
+    
+    // 检查是否在阴影贴图范围内
+    if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+    
+    // 获取当前片段在光源视角下的深度
+    float currentDepth = projCoords.z;
+    
+    // 检查当前片段是否在阴影中
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    
+    // PCF软阴影
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+    
+    // 调试：如果阴影值大于0，输出一些信息
+    if(shadow > 0.0) {
+        // 这里可以添加调试输出
+    }
+    
+    return shadow;
 }
