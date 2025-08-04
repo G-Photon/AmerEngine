@@ -5,6 +5,9 @@
 #include "utils/FileSystem.hpp"
 #include <cstdio>
 #include <functional>
+#include <algorithm>
+#include <filesystem>
+
 EditorUI::EditorUI(GLFWwindow *window, Renderer *renderer) : window(window), renderer(renderer)
 {
 }
@@ -21,70 +24,115 @@ void EditorUI::Initialize()
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
+    
+    // 加载中文字体
     io.Fonts->AddFontFromFileTTF(FileSystem::GetPath("resources/fonts/HarmonyOS_Sans_SC_Medium.ttf").c_str(), 16.0f,
                                  NULL, io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
-    io.ConfigFlags |= ImGuiConfigFlags_None;
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard; // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;  // Enable Gamepad Controls
-    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;     // Enable Docking
-    // io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable; // Enable Multi-Viewport / Platform Windows
-
-    // 1. 先加载 Dark 作为基底
-    ImGui::StyleColorsDark();
-
-    // 2. 拿到当前 style 的指针
-    ImGuiStyle &style = ImGui::GetStyle();
-    ImVec4 *colors = style.Colors;
-
-    // 3. 把关键颜色改成黑红
-    colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);             // 文字纯白
-    colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);     // 禁用文字
-    colors[ImGuiCol_WindowBg] = ImVec4(0.06f, 0.06f, 0.06f, 0.94f);         // 窗口背景—深黑
-    colors[ImGuiCol_ChildBg] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);          // 子窗口背景
-    colors[ImGuiCol_PopupBg] = ImVec4(0.08f, 0.08f, 0.08f, 0.94f);          // 弹出背景
-    colors[ImGuiCol_Border] = ImVec4(0.43f, 0.00f, 0.00f, 0.50f);           // 边框暗红
-    colors[ImGuiCol_BorderShadow] = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);     // 无边框阴影
-    colors[ImGuiCol_FrameBg] = ImVec4(0.20f, 0.00f, 0.00f, 0.54f);          // 输入框背景红
-    colors[ImGuiCol_FrameBgHovered] = ImVec4(0.40f, 0.00f, 0.00f, 0.54f);   // 悬停更亮
-    colors[ImGuiCol_FrameBgActive] = ImVec4(0.60f, 0.00f, 0.00f, 0.67f);    // 激活最亮
-    colors[ImGuiCol_TitleBg] = ImVec4(0.27f, 0.00f, 0.00f, 1.00f);          // 标题栏红
-    colors[ImGuiCol_TitleBgActive] = ImVec4(0.32f, 0.00f, 0.00f, 1.00f);    // 激活标题栏
-    colors[ImGuiCol_TitleBgCollapsed] = ImVec4(0.27f, 0.00f, 0.00f, 0.51f); // 折叠标题栏
-    colors[ImGuiCol_MenuBarBg] = ImVec4(0.14f, 0.00f, 0.00f, 1.00f);        // 菜单栏红色
-    colors[ImGuiCol_ScrollbarBg] = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);      // 滚动条背景黑
-    colors[ImGuiCol_ScrollbarGrab] = ImVec4(0.31f, 0.00f, 0.00f, 1.00f);    // 滚动条滑块红
-    colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4(0.41f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_ScrollbarGrabActive] = ImVec4(0.51f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_CheckMark] = ImVec4(0.90f, 0.00f, 0.00f, 1.00f); // 勾选红色
-    colors[ImGuiCol_SliderGrab] = ImVec4(0.60f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_SliderGrabActive] = ImVec4(0.80f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_Button] = ImVec4(0.63f, 0.00f, 0.00f, 0.40f); // 按钮红
-    colors[ImGuiCol_ButtonHovered] = ImVec4(0.83f, 0.00f, 0.00f, 0.60f);
-    colors[ImGuiCol_ButtonActive] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_Header] = ImVec4(0.63f, 0.00f, 0.00f, 0.31f); // 折叠栏
-    colors[ImGuiCol_HeaderHovered] = ImVec4(0.83f, 0.00f, 0.00f, 0.80f);
-    colors[ImGuiCol_HeaderActive] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_Separator] = ImVec4(0.43f, 0.00f, 0.00f, 0.50f);
-    colors[ImGuiCol_ResizeGrip] = ImVec4(0.26f, 0.59f, 0.98f, 0.25f); // 可忽略
-    colors[ImGuiCol_Tab] = ImVec4(0.18f, 0.00f, 0.00f, 0.86f);        // Tab 红
-    colors[ImGuiCol_TabHovered] = ImVec4(0.36f, 0.00f, 0.00f, 0.80f);
-    colors[ImGuiCol_TabActive] = ImVec4(0.54f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_TabUnfocused] = ImVec4(0.07f, 0.10f, 0.15f, 0.97f);
-    colors[ImGuiCol_TabUnfocusedActive] = ImVec4(0.14f, 0.26f, 0.42f, 1.00f);
-    colors[ImGuiCol_DockingPreview] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
-    colors[ImGuiCol_DockingEmptyBg] = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
-    colors[ImGuiCol_PlotLines] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f); // 折线红色
-    colors[ImGuiCol_PlotLinesHovered] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_PlotHistogram] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f); // 柱状图红色
-    colors[ImGuiCol_PlotHistogramHovered] = ImVec4(1.00f, 0.20f, 0.20f, 1.00f);
-    colors[ImGuiCol_TextSelectedBg] = ImVec4(0.25f, 0.00f, 0.00f, 0.35f);
-    colors[ImGuiCol_DragDropTarget] = ImVec4(1.00f, 0.00f, 0.00f, 0.90f);
-    colors[ImGuiCol_NavHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 1.00f);
-    colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
-    colors[ImGuiCol_NavWindowingDimBg] = ImVec4(0.80f, 0.00f, 0.00f, 0.20f);
-    colors[ImGuiCol_ModalWindowDimBg] = ImVec4(0.80f, 0.00f, 0.00f, 0.35f);
+    
+    // 启用停靠和多视口
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+    io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
+    
+    // 设置现代化样式
+    SetupModernStyle();
+    
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
+    
+    // 刷新资源列表
+    RefreshAssetList();
+}
+
+void EditorUI::SetupModernStyle()
+{
+    ImGui::StyleColorsDark();
+    
+    ImGuiStyle& style = ImGui::GetStyle();
+    
+    // 圆角和间距
+    style.WindowRounding = 6.0f;
+    style.ChildRounding = 6.0f;
+    style.FrameRounding = 4.0f;
+    style.PopupRounding = 4.0f;
+    style.ScrollbarRounding = 4.0f;
+    style.GrabRounding = 4.0f;
+    style.TabRounding = 4.0f;
+    
+    style.WindowPadding = ImVec2(12.0f, 12.0f);
+    style.FramePadding = ImVec2(8.0f, 6.0f);
+    style.ItemSpacing = ImVec2(8.0f, 6.0f);
+    style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
+    style.IndentSpacing = 20.0f;
+    style.ScrollbarSize = 16.0f;
+    style.GrabMinSize = 12.0f;
+    
+    // 边框
+    style.WindowBorderSize = 1.0f;
+    style.ChildBorderSize = 1.0f;
+    style.PopupBorderSize = 1.0f;
+    style.FrameBorderSize = 0.0f;
+    style.TabBorderSize = 0.0f;
+    
+    SetupColors();
+}
+
+void EditorUI::SetupColors()
+{
+    ImVec4* colors = ImGui::GetStyle().Colors;
+    
+    // 主色调：深蓝灰
+    colors[ImGuiCol_Text]                   = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
+    colors[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+    colors[ImGuiCol_WindowBg]               = ImVec4(0.06f, 0.06f, 0.10f, 1.00f);
+    colors[ImGuiCol_ChildBg]                = ImVec4(0.08f, 0.08f, 0.12f, 1.00f);
+    colors[ImGuiCol_PopupBg]                = ImVec4(0.08f, 0.08f, 0.12f, 0.94f);
+    colors[ImGuiCol_Border]                 = ImVec4(0.20f, 0.25f, 0.35f, 1.00f);
+    colors[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+    colors[ImGuiCol_FrameBg]                = ImVec4(0.12f, 0.15f, 0.20f, 1.00f);
+    colors[ImGuiCol_FrameBgHovered]         = ImVec4(0.20f, 0.25f, 0.35f, 1.00f);
+    colors[ImGuiCol_FrameBgActive]          = ImVec4(0.25f, 0.35f, 0.50f, 1.00f);
+    colors[ImGuiCol_TitleBg]                = ImVec4(0.04f, 0.04f, 0.08f, 1.00f);
+    colors[ImGuiCol_TitleBgActive]          = ImVec4(0.08f, 0.10f, 0.15f, 1.00f);
+    colors[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.04f, 0.04f, 0.08f, 0.75f);
+    colors[ImGuiCol_MenuBarBg]              = ImVec4(0.04f, 0.04f, 0.08f, 1.00f);
+    colors[ImGuiCol_ScrollbarBg]            = ImVec4(0.02f, 0.02f, 0.02f, 0.53f);
+    colors[ImGuiCol_ScrollbarGrab]          = ImVec4(0.31f, 0.31f, 0.31f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.41f, 0.41f, 0.41f, 1.00f);
+    colors[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.51f, 0.51f, 0.51f, 1.00f);
+    colors[ImGuiCol_CheckMark]              = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_SliderGrab]             = ImVec4(0.24f, 0.52f, 0.88f, 1.00f);
+    colors[ImGuiCol_SliderGrabActive]       = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_Button]                 = ImVec4(0.26f, 0.59f, 0.98f, 0.40f);
+    colors[ImGuiCol_ButtonHovered]          = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_ButtonActive]           = ImVec4(0.06f, 0.53f, 0.98f, 1.00f);
+    colors[ImGuiCol_Header]                 = ImVec4(0.26f, 0.59f, 0.98f, 0.31f);
+    colors[ImGuiCol_HeaderHovered]          = ImVec4(0.26f, 0.59f, 0.98f, 0.80f);
+    colors[ImGuiCol_HeaderActive]           = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_Separator]              = colors[ImGuiCol_Border];
+    colors[ImGuiCol_SeparatorHovered]       = ImVec4(0.10f, 0.40f, 0.75f, 0.78f);
+    colors[ImGuiCol_SeparatorActive]        = ImVec4(0.10f, 0.40f, 0.75f, 1.00f);
+    colors[ImGuiCol_ResizeGrip]             = ImVec4(0.26f, 0.59f, 0.98f, 0.20f);
+    colors[ImGuiCol_ResizeGripHovered]      = ImVec4(0.26f, 0.59f, 0.98f, 0.67f);
+    colors[ImGuiCol_ResizeGripActive]       = ImVec4(0.26f, 0.59f, 0.98f, 0.95f);
+    colors[ImGuiCol_Tab]                    = ImVec4(0.18f, 0.35f, 0.58f, 0.86f);
+    colors[ImGuiCol_TabHovered]             = colors[ImGuiCol_HeaderHovered];
+    colors[ImGuiCol_TabActive]              = ImVec4(0.20f, 0.41f, 0.68f, 1.00f);
+    colors[ImGuiCol_TabUnfocused]           = ImVec4(0.07f, 0.10f, 0.15f, 0.97f);
+    colors[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.14f, 0.26f, 0.42f, 1.00f);
+    colors[ImGuiCol_DockingPreview]         = ImVec4(0.26f, 0.59f, 0.98f, 0.70f);
+    colors[ImGuiCol_DockingEmptyBg]         = ImVec4(0.20f, 0.20f, 0.20f, 1.00f);
+    colors[ImGuiCol_PlotLines]              = ImVec4(0.61f, 0.61f, 0.61f, 1.00f);
+    colors[ImGuiCol_PlotLinesHovered]       = ImVec4(1.00f, 0.43f, 0.35f, 1.00f);
+    colors[ImGuiCol_PlotHistogram]          = ImVec4(0.90f, 0.70f, 0.00f, 1.00f);
+    colors[ImGuiCol_PlotHistogramHovered]   = ImVec4(1.00f, 0.60f, 0.00f, 1.00f);
+    colors[ImGuiCol_TextSelectedBg]         = ImVec4(0.26f, 0.59f, 0.98f, 0.35f);
+    colors[ImGuiCol_DragDropTarget]         = ImVec4(1.00f, 1.00f, 0.00f, 0.90f);
+    colors[ImGuiCol_NavHighlight]           = ImVec4(0.26f, 0.59f, 0.98f, 1.00f);
+    colors[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+    colors[ImGuiCol_NavWindowingDimBg]      = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+    colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 }
 
 void EditorUI::Render()
@@ -93,21 +141,329 @@ void EditorUI::Render()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    // #ifdef IMGUI_HAS_DOCK
-    //     ImGui::DockSpaceOverViewport(ImGui::GetMainViewport());
-    // #endif
-
+    ShowDockSpace();
     ShowMainMenuBar();
+    
     if (showSceneHierarchy)
         ShowSceneHierarchy();
     if (showInspector)
         ShowInspector();
+    if (showAssetsPanel)
+        ShowAssetsPanel();
+    if (showViewport)
+        ShowViewport();
     if (showRendererSettings)
         ShowRendererSettings();
     if (showMaterialEditor)
         ShowMaterialEditor();
+    if (showConsole)
+        ShowConsole();
+        
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
+    
+    // 多视口支持
+    if (ImGui::GetIO().ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+    {
+        GLFWwindow* backup_current_context = glfwGetCurrentContext();
+        ImGui::UpdatePlatformWindows();
+        ImGui::RenderPlatformWindowsDefault();
+        glfwMakeContextCurrent(backup_current_context);
+    }
+}
+
+void EditorUI::ShowDockSpace()
+{
+    static bool opt_fullscreen = true;
+    static bool opt_padding = false;
+    static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
+
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+    if (opt_fullscreen)
+    {
+        const ImGuiViewport* viewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(viewport->WorkPos);
+        ImGui::SetNextWindowSize(viewport->WorkSize);
+        ImGui::SetNextWindowViewport(viewport->ID);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 0.0f);
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 0.0f);
+        window_flags |= ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoCollapse | ImGuiWindowFlags_NoResize | ImGuiWindowFlags_NoMove;
+        window_flags |= ImGuiWindowFlags_NoBringToFrontOnFocus | ImGuiWindowFlags_NoNavFocus;
+    }
+
+    if (dockspace_flags & ImGuiDockNodeFlags_PassthruCentralNode)
+        window_flags |= ImGuiWindowFlags_NoBackground;
+
+    if (!opt_padding)
+        ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
+    
+    ImGui::Begin("DockSpace Demo", nullptr, window_flags);
+    
+    if (!opt_padding)
+        ImGui::PopStyleVar();
+
+    if (opt_fullscreen)
+        ImGui::PopStyleVar(2);
+
+    // Submit the DockSpace
+    ImGuiIO& io = ImGui::GetIO();
+    if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
+    {
+        ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+        ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
+        
+        // 首次设置默认布局
+        if (!isDockingSetup)
+        {
+            CreateDefaultLayout();
+            isDockingSetup = true;
+        }
+    }
+
+    ImGui::End();
+}
+
+void EditorUI::CreateDefaultLayout()
+{
+    // 这里可以设置默认的停靠布局
+    // 由于ImGui的限制，我们暂时让用户手动布局
+}
+
+void EditorUI::ShowAssetsPanel()
+{
+    ImGui::Begin(ConvertToUTF8(L"资源管理").c_str(), &showAssetsPanel);
+    
+    // 顶部工具栏
+    if (ImGui::Button(ConvertToUTF8(L"刷新").c_str()))
+    {
+        RefreshAssetList();
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(ConvertToUTF8(L"导入").c_str()))
+    {
+        // 导入资源对话框
+    }
+    ImGui::SameLine();
+    ImGui::Text(ConvertToUTF8(L"路径: %s").c_str(), currentAssetPath.c_str());
+    
+    ImGui::Separator();
+    
+    // 资源过滤器
+    static char filter[256] = "";
+    ImGui::InputText(ConvertToUTF8(L"过滤器").c_str(), filter, sizeof(filter));
+    
+    ImGui::Separator();
+    
+    // 资源列表
+    ImGui::BeginChild("AssetList", ImVec2(0, 0), true);
+    
+    for (size_t i = 0; i < assetItems.size(); ++i)
+    {
+        const auto& asset = assetItems[i];
+        
+        // 应用过滤器
+        if (strlen(filter) > 0 && asset.name.find(filter) == std::string::npos)
+            continue;
+            
+        ImGui::PushID((int)i);
+        
+        // 资源图标
+        const char* icon = "[FILE]";
+        switch (asset.type)
+        {
+            case AssetType::TEXTURE: icon = "[IMG]"; break;
+            case AssetType::MODEL: icon = "[3D]"; break;
+            case AssetType::MATERIAL: icon = "[MAT]"; break;
+            case AssetType::SHADER: icon = "[SHD]"; break;
+            case AssetType::AUDIO: icon = "[AUD]"; break;
+            default: icon = "[FILE]"; break;
+        }
+        
+        bool isSelected = (selectedAssetIndex == (int)i);
+        if (ImGui::Selectable((std::string(icon) + " " + asset.name).c_str(), isSelected))
+        {
+            selectedAssetIndex = (int)i;
+        }
+        
+        // 右键菜单
+        if (ImGui::BeginPopupContextItem())
+        {
+            ShowAssetContextMenu(const_cast<AssetItem&>(asset));
+            ImGui::EndPopup();
+        }
+        
+        // 拖拽支持
+        if (ImGui::BeginDragDropSource())
+        {
+            ImGui::SetDragDropPayload("ASSET_ITEM", &i, sizeof(size_t));
+            ImGui::Text("%s", asset.name.c_str());
+            ImGui::EndDragDropSource();
+        }
+        
+        ImGui::PopID();
+    }
+    
+    ImGui::EndChild();
+    ImGui::End();
+}
+
+void EditorUI::ShowViewport()
+{
+    ImGui::Begin(ConvertToUTF8(L"视口").c_str(), &showViewport);
+    // 获取可用空间
+    ImVec2 viewportSize = ImGui::GetContentRegionAvail();
+
+    // 检查视口尺寸是否变化
+    static ImVec2 prevSize = viewportSize;
+    if (prevSize.x != viewportSize.x || prevSize.y != viewportSize.y)
+    {
+        if (viewportSize.x > 0 && viewportSize.y > 0)
+        {
+            renderer->Resize(static_cast<int>(viewportSize.x), static_cast<int>(viewportSize.y));
+            prevSize = viewportSize;
+        }
+    }
+
+    // 显示渲染纹理
+    GLuint textureID = renderer->GetViewportTexture();
+    if (textureID != 0)
+    {
+        // 注意：OpenGL纹理坐标原点在左下，ImGui在左上，所以需要翻转Y轴
+        ImGui::Image((void *)(intptr_t)textureID, viewportSize, ImVec2(0, 1), ImVec2(1, 0));
+    }
+    else
+    {
+        ImGui::TextColored(ImVec4(1, 0, 0, 1), "No viewport texture available");
+    }
+
+    ImGui::End();
+}
+
+void EditorUI::ShowConsole()
+{
+    ImGui::Begin(ConvertToUTF8(L"控制台").c_str(), &showConsole);
+    
+    // 控制台工具栏
+    if (ImGui::Button(ConvertToUTF8(L"清除").c_str()))
+    {
+        consoleLog.clear();
+    }
+    ImGui::SameLine();
+    
+    static bool autoscroll = true;
+    ImGui::Checkbox(ConvertToUTF8(L"自动滚动").c_str(), &autoscroll);
+    
+    ImGui::Separator();
+    
+    // 日志区域
+    ImGui::BeginChild("ConsoleLog", ImVec2(0, 0), true);
+    
+    for (const auto& log : consoleLog)
+    {
+        ImGui::TextWrapped("%s", log.c_str());
+    }
+    
+    if (autoscroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
+        ImGui::SetScrollHereY(1.0f);
+    
+    ImGui::EndChild();
+    ImGui::End();
+}
+
+void EditorUI::RefreshAssetList()
+{
+    assetItems.clear();
+    
+    try {
+        if (std::filesystem::exists(currentAssetPath))
+        {
+            for (const auto& entry : std::filesystem::recursive_directory_iterator(currentAssetPath))
+            {
+                if (entry.is_regular_file())
+                {
+                    AssetItem item;
+                    item.path = entry.path();
+                    item.name = entry.path().filename().string();
+                    item.type = DetermineAssetType(entry.path());
+                    item.isLoaded = false;
+                    
+                    assetItems.push_back(item);
+                }
+            }
+        }
+    }
+    catch (const std::exception& e)
+    {
+        consoleLog.push_back(ConvertToUTF8(L"刷新资源列表失败: ") + e.what());
+    }
+}
+
+AssetType EditorUI::DetermineAssetType(const std::filesystem::path& path)
+{
+    std::string extension = path.extension().string();
+    std::transform(extension.begin(), extension.end(), extension.begin(), ::tolower);
+    
+    if (extension == ".png" || extension == ".jpg" || extension == ".jpeg" || 
+        extension == ".tga" || extension == ".bmp" || extension == ".hdr")
+    {
+        return AssetType::TEXTURE;
+    }
+    else if (extension == ".obj" || extension == ".fbx" || extension == ".gltf" || 
+             extension == ".glb" || extension == ".dae" || extension == ".3ds")
+    {
+        return AssetType::MODEL;
+    }
+    else if (extension == ".vert" || extension == ".frag" || extension == ".geom" || 
+             extension == ".comp" || extension == ".glsl")
+    {
+        return AssetType::SHADER;
+    }
+    else if (extension == ".wav" || extension == ".mp3" || extension == ".ogg")
+    {
+        return AssetType::AUDIO;
+    }
+    else if (extension == ".mat")
+    {
+        return AssetType::MATERIAL;
+    }
+    
+    return AssetType::UNKNOWN;
+}
+
+void EditorUI::ShowAssetContextMenu(AssetItem& item)
+{
+    if (ImGui::MenuItem(ConvertToUTF8(L"打开").c_str()))
+    {
+        // 根据资源类型执行相应操作
+        switch (item.type)
+        {
+            case AssetType::MODEL:
+                renderer->LoadModel(item.path.string());
+                break;
+            case AssetType::TEXTURE:
+                // 加载纹理
+                break;
+            default:
+                break;
+        }
+    }
+    
+    if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str()))
+    {
+        // 重命名逻辑
+    }
+    
+    if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str()))
+    {
+        // 删除文件逻辑
+    }
+    
+    ImGui::Separator();
+    
+    if (ImGui::MenuItem(ConvertToUTF8(L"在文件夹中显示").c_str()))
+    {
+        // 在资源管理器中显示
+    }
 }
 
 void EditorUI::ShowMainMenuBar()
@@ -116,15 +472,25 @@ void EditorUI::ShowMainMenuBar()
     {
         if (ImGui::BeginMenu(ConvertToUTF8(L"文件").c_str()))
         {
-            if (ImGui::MenuItem(ConvertToUTF8(L"新建场景").c_str()))
-            {
-            }
-            if (ImGui::MenuItem(ConvertToUTF8(L"打开场景").c_str()))
-            {
-            }
-            if (ImGui::MenuItem(ConvertToUTF8(L"保存场景").c_str()))
-            {
-            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"新建场景").c_str(), "Ctrl+N")) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"打开场景").c_str(), "Ctrl+O")) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"保存场景").c_str(), "Ctrl+S")) {}
+            ImGui::Separator();
+            if (ImGui::MenuItem(ConvertToUTF8(L"导入模型").c_str())) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"导入贴图").c_str())) {}
+            ImGui::Separator();
+            if (ImGui::MenuItem(ConvertToUTF8(L"退出").c_str(), "Alt+F4")) {}
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu(ConvertToUTF8(L"编辑").c_str()))
+        {
+            if (ImGui::MenuItem(ConvertToUTF8(L"撤销").c_str(), "Ctrl+Z")) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"重做").c_str(), "Ctrl+Y")) {}
+            ImGui::Separator();
+            if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str(), "Ctrl+C")) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"粘贴").c_str(), "Ctrl+V")) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str(), "Delete")) {}
             ImGui::EndMenu();
         }
 
@@ -132,8 +498,55 @@ void EditorUI::ShowMainMenuBar()
         {
             ImGui::MenuItem(ConvertToUTF8(L"场景层级").c_str(), NULL, &showSceneHierarchy);
             ImGui::MenuItem(ConvertToUTF8(L"检视器").c_str(), NULL, &showInspector);
+            ImGui::MenuItem(ConvertToUTF8(L"资源管理").c_str(), NULL, &showAssetsPanel);
+            ImGui::MenuItem(ConvertToUTF8(L"视口").c_str(), NULL, &showViewport);
             ImGui::MenuItem(ConvertToUTF8(L"渲染器设置").c_str(), NULL, &showRendererSettings);
             ImGui::MenuItem(ConvertToUTF8(L"材质编辑器").c_str(), NULL, &showMaterialEditor);
+            ImGui::MenuItem(ConvertToUTF8(L"控制台").c_str(), NULL, &showConsole);
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu(ConvertToUTF8(L"创建").c_str()))
+        {
+            if (ImGui::BeginMenu(ConvertToUTF8(L"3D对象").c_str()))
+            {
+                if (ImGui::MenuItem(ConvertToUTF8(L"立方体").c_str())) {
+                    renderer->CreatePrimitive(Geometry::CUBE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"球体").c_str())) {
+                    renderer->CreatePrimitive(Geometry::SPHERE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"圆柱体").c_str())) {
+                    renderer->CreatePrimitive(Geometry::CYLINDER, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"平面").c_str())) {
+                    // 创建平面
+                }
+                ImGui::EndMenu();
+            }
+            
+            if (ImGui::BeginMenu(ConvertToUTF8(L"光源").c_str()))
+            {
+                if (ImGui::MenuItem(ConvertToUTF8(L"方向光").c_str())) {
+                    auto light = std::make_shared<DirectionalLight>();
+                    renderer->AddLight(light);
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"点光源").c_str())) {
+                    auto light = std::make_shared<PointLight>();
+                    renderer->AddLight(light);
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"聚光灯").c_str())) {
+                    auto light = std::make_shared<SpotLight>();
+                    renderer->AddLight(light);
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenu();
+        }
+
+        if (ImGui::BeginMenu(ConvertToUTF8(L"帮助").c_str()))
+        {
+            if (ImGui::MenuItem(ConvertToUTF8(L"关于").c_str())) {}
             ImGui::EndMenu();
         }
 
@@ -239,91 +652,232 @@ void EditorUI::ShowLightSelectionDialog()
 
 void EditorUI::ShowSceneHierarchy()
 {
-    // 能紧贴在应用程序的上下左右和悬空 能够被拖拽移动 窗口
-    ImGui::SetNextWindowPos(ImVec2(0, 0), ImGuiCond_FirstUseEver);      // 设置窗口位置
-    ImGui::SetNextWindowSize(ImVec2(300, 300), ImGuiCond_FirstUseEver); // 设置窗口大小
-    ImGui::SetNextWindowViewport(ImGui::GetMainViewport()->ID);         // 设置窗口视口
-    ImGui::SetNextWindowBgAlpha(0.5f);                                  // 设置背景透明
-    ImGui::Begin(ConvertToUTF8(L"场景层级").c_str());
-    if (ImGui::TreeNode(ConvertToUTF8(L"模型").c_str()))
+    ImGui::Begin(ConvertToUTF8(L"场景层级").c_str(), &showSceneHierarchy);
+    
+    // 顶部工具栏
+    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4, 4));
+    if (DrawButton(ConvertToUTF8(L"+").c_str(), ImVec2(25, 25)))
+    {
+        ImGui::OpenPopup("CreateMenu");
+    }
+    DrawTooltip(ConvertToUTF8(L"创建新对象").c_str());
+    
+    ImGui::SameLine();
+    if (DrawButton(ConvertToUTF8(L"R").c_str(), ImVec2(25, 25)))
+    {
+        // 刷新场景
+    }
+    DrawTooltip(ConvertToUTF8(L"刷新场景").c_str());
+    
+    ImGui::SameLine();
+    if (DrawButton(ConvertToUTF8(L"X").c_str(), ImVec2(25, 25)))
+    {
+        if (selectedObjectIndex >= 0)
+        {
+            renderer->DeleteObject(selectedObjectIndex);
+            selectedObjectIndex = -1;
+        }
+    }
+    DrawTooltip(ConvertToUTF8(L"删除选中对象").c_str());
+    ImGui::PopStyleVar();
+    
+    // 创建菜单弹出窗口
+    if (ImGui::BeginPopup("CreateMenu"))
+    {
+        if (ImGui::BeginMenu(ConvertToUTF8(L"3D对象").c_str()))
+        {
+            if (ImGui::MenuItem(ConvertToUTF8(L"立方体").c_str())) {
+                renderer->CreatePrimitive(Geometry::CUBE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"球体").c_str())) {
+                renderer->CreatePrimitive(Geometry::SPHERE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"圆柱体").c_str())) {
+                renderer->CreatePrimitive(Geometry::CYLINDER, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"圆锥体").c_str())) {
+                renderer->CreatePrimitive(Geometry::CONE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            ImGui::EndMenu();
+        }
+        
+        if (ImGui::BeginMenu(ConvertToUTF8(L"光源").c_str()))
+        {
+            if (ImGui::MenuItem(ConvertToUTF8(L"方向光").c_str())) {
+                auto light = std::make_shared<DirectionalLight>();
+                renderer->AddLight(light);
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"点光源").c_str())) {
+                auto light = std::make_shared<PointLight>();
+                renderer->AddLight(light);
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"聚光灯").c_str())) {
+                auto light = std::make_shared<SpotLight>();
+                renderer->AddLight(light);
+            }
+            ImGui::EndMenu();
+        }
+        
+        if (ImGui::MenuItem(ConvertToUTF8(L"导入模型...").c_str())) {
+            std::string modelPath = FileDialog::OpenFile(
+                ConvertToUTF8(L"选择模型文件").c_str(), 
+                "Model Files\0*.obj;*.fbx;*.gltf;*.glb\0All Files\0*.*\0"
+            );
+            if (!modelPath.empty()) {
+                renderer->LoadModel(modelPath);
+            }
+        }
+        
+        ImGui::EndPopup();
+    }
+    
+    ImGui::Separator();
+    
+    // 搜索过滤器
+    static char searchFilter[256] = "";
+    ImGui::SetNextItemWidth(-1);
+    ImGui::InputTextWithHint("##Search", ConvertToUTF8(L"搜索对象...").c_str(), searchFilter, sizeof(searchFilter));
+    
+    ImGui::Separator();
+    
+    // 场景对象列表
+    ImGui::BeginChild("SceneObjects", ImVec2(0, 0), true);
+    
+    // 模型节点
+    if (ImGui::TreeNodeEx(ConvertToUTF8(L"[模型] 模型").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         for (int i = 0; i < renderer->GetModelCount(); ++i)
         {
-            if (ImGui::Selectable(renderer->GetModel(i)->GetName().c_str(), selectedObjectIndex == i))
+            auto model = renderer->GetModel(i);
+            std::string name = "[3D] " + model->GetName();
+            
+            // 应用搜索过滤器
+            if (strlen(searchFilter) > 0 && name.find(searchFilter) == std::string::npos)
+                continue;
+                
+            ImGui::PushID(i);
+            bool isSelected = (selectedObjectIndex == i);
+            
+            if (ImGui::Selectable(name.c_str(), isSelected))
             {
                 selectedObjectIndex = i;
             }
+            
+            // 右键菜单
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str())) {
+                    renderer->DeleteObject(i);
+                    selectedObjectIndex = -1;
+                }
+                ImGui::EndPopup();
+            }
+            
+            ImGui::PopID();
         }
         ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode(ConvertToUTF8(L"简单几何体").c_str()))
+    // 几何体节点
+    if (ImGui::TreeNodeEx(ConvertToUTF8(L"[几何] 几何体").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         auto &primitives = renderer->GetPrimitives();
-        for (int i = 0; i < primitives.size(); ++i)
+        for (size_t i = 0; i < primitives.size(); ++i)
         {
-            std::string name = ConvertToUTF8(L"几何体 ") + std::to_string(i);
-            if (ImGui::Selectable(name.c_str(), selectedObjectIndex == i + renderer->GetModelCount()))
+            std::string name = "[GEOM] " + ConvertToUTF8(Geometry::name[primitives[i].type]) + " " + std::to_string(i);
+            
+            // 应用搜索过滤器
+            if (strlen(searchFilter) > 0 && name.find(searchFilter) == std::string::npos)
+                continue;
+                
+            ImGui::PushID((int)(i + renderer->GetModelCount()));
+            bool isSelected = (selectedObjectIndex == (int)(i + renderer->GetModelCount()));
+            
+            if (ImGui::Selectable(name.c_str(), isSelected))
             {
-                selectedObjectIndex = i + renderer->GetModelCount();
+                selectedObjectIndex = (int)(i + renderer->GetModelCount());
             }
+            
+            // 右键菜单
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str())) {
+                    renderer->DeleteObject((int)(i + renderer->GetModelCount()));
+                    selectedObjectIndex = -1;
+                }
+                ImGui::EndPopup();
+            }
+            
+            ImGui::PopID();
         }
         ImGui::TreePop();
     }
 
-    if (ImGui::TreeNode(ConvertToUTF8(L"光源").c_str()))
+    // 光源节点
+    if (ImGui::TreeNodeEx(ConvertToUTF8(L"[光照] 光源").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
         const auto &lights = renderer->GetLights();
         auto &primitives = renderer->GetPrimitives();
-        for (int i = 0; i < lights.size(); ++i)
+        
+        for (size_t i = 0; i < lights.size(); ++i)
         {
-            std::string name = ConvertToUTF8(L"光源 ") + std::to_string(i);
-            if (ImGui::Selectable(name.c_str(),
-                                  selectedObjectIndex == i + renderer->GetModelCount() + primitives.size()))
+            auto light = lights[i];
+            std::string icon = "[LIGHT]";
+            std::string typeName = ConvertToUTF8(L"未知光源");
+            
+            // 根据光源类型设置图标和名称
+            switch (light->getType())
             {
-                selectedObjectIndex = i + renderer->GetModelCount() + primitives.size();
+                case 0: // PointLight
+                    icon = "[POINT]";
+                    typeName = ConvertToUTF8(L"点光源");
+                    break;
+                case 1: // DirectionalLight
+                    icon = "[DIR]";
+                    typeName = ConvertToUTF8(L"方向光");
+                    break;
+                case 2: // SpotLight
+                    icon = "[SPOT]";
+                    typeName = ConvertToUTF8(L"聚光灯");
+                    break;
             }
+            
+            std::string name = icon + " " + typeName + " " + std::to_string(i);
+            
+            // 应用搜索过滤器
+            if (strlen(searchFilter) > 0 && name.find(searchFilter) == std::string::npos)
+                continue;
+                
+            ImGui::PushID((int)(i + renderer->GetModelCount() + primitives.size()));
+            bool isSelected = (selectedObjectIndex == (int)(i + renderer->GetModelCount() + primitives.size()));
+            
+            if (ImGui::Selectable(name.c_str(), isSelected))
+            {
+                selectedObjectIndex = (int)(i + renderer->GetModelCount() + primitives.size());
+            }
+            
+            // 右键菜单
+            if (ImGui::BeginPopupContextItem())
+            {
+                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str())) {
+                    renderer->DeleteObject((int)(i + renderer->GetModelCount() + primitives.size()));
+                    selectedObjectIndex = -1;
+                }
+                ImGui::EndPopup();
+            }
+            
+            ImGui::PopID();
         }
         ImGui::TreePop();
     }
-    static bool showModelDialog = false;
-    static bool showPrimitiveDialog = false;
-    static bool showLightDialog = false;
-    if (ImGui::Button(ConvertToUTF8(L"导入模型").c_str()))
-    {
-        showModelDialog = true;
-    }
-    if (ImGui::Button(ConvertToUTF8(L"创建简单几何体").c_str()))
-    {
-        showPrimitiveDialog = true;
-    }
-    if (ImGui::Button(ConvertToUTF8(L"创建光源").c_str()))
-    {
-        showLightDialog = true;
-    }
-
-    // 在同一个函数内处理弹出窗口
-    if (showModelDialog)
-    {
-        ImGui::OpenPopup(ConvertToUTF8(L"导入模型").c_str());
-        showModelDialog = false;
-    }
-    if (showPrimitiveDialog)
-    {
-        ImGui::OpenPopup(ConvertToUTF8(L"创建简单几何体").c_str());
-        showPrimitiveDialog = false;
-    }
-    if (showLightDialog)
-    {
-        ImGui::OpenPopup(ConvertToUTF8(L"创建光源").c_str());
-        showLightDialog = false;
-    }
-
-    // 显示对话框（这些会自己处理BeginPopup/EndPopup）
-    ShowModelCreationDialog();
-    ShowPrimitiveSelectionDialog();
-    ShowLightSelectionDialog();
-
+    
+    ImGui::EndChild();
     ImGui::End();
 }
 
@@ -610,127 +1164,360 @@ void EditorUI::ShowMaterialEditor()
 
 void EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture, const std::string &idSuffix)
 {
-    ImGui::Text("%s", label.c_str());
-
-    /* ---------- 新增：翻转开关 ---------- */
-    bool flip = texture ? texture->flipY : true; // 默认 true 与旧行为一致
-    std::string flipId = ConvertToUTF8(L"翻转Y##") + label + idSuffix;
-    if (ImGui::Checkbox(flipId.c_str(), &flip))
+    ImGui::PushID((label + idSuffix).c_str());
+    
+    // 标题行
+    ImGui::AlignTextToFramePadding();
+    ImGui::TextUnformatted(label.c_str());
+    
+    // 纹理预览区域
+    ImGui::BeginGroup();
     {
-        if (texture)
+        // 预览图像
+        ImVec2 imageSize(64, 64);
+        if (texture && texture->GetID() != 0)
         {
-            texture->flipY = flip;      // 记录到纹理
-            if (!texture->GetPath().empty()) // 如果已有路径，立即重载
-                texture->LoadFromFile(texture->GetPath());
+            ImGui::Image((void*)(intptr_t)texture->GetID(), imageSize);
+            
+            // 纹理信息
+            ImGui::SameLine();
+            ImGui::BeginGroup();
+            ImGui::Text("ID: %u", texture->GetID());
+            if (!texture->GetPath().empty())
+            {
+                std::string filename = std::filesystem::path(texture->GetPath()).filename().string();
+                ImGui::TextWrapped("%s", filename.c_str());
+            }
+            ImGui::EndGroup();
+        }
+        else
+        {
+            // 占位符
+            ImGui::BeginChild("TexturePlaceholder", imageSize, true);
+            ImGui::SetCursorPos(ImVec2(imageSize.x * 0.5f - 10, imageSize.y * 0.5f - 10));
+            ImGui::TextColored(ImVec4(0.5f, 0.5f, 0.5f, 1.0f), "[IMG]");
+            ImGui::EndChild();
+            
+            ImGui::SameLine();
+            ImGui::AlignTextToFramePadding();
+            ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", ConvertToUTF8(L"未分配贴图").c_str());
         }
     }
-    /* ---------------------------------- */
-
-    if (texture)
-        ImGui::Text("%s: %s", ConvertToUTF8(L"当前").c_str(), std::to_string(texture->GetID()).c_str());
-    else
-        ImGui::Text("%s: None", ConvertToUTF8(L"当前").c_str());
-
-    /* 选择按钮 */
-    std::string buttonLabel = ConvertToUTF8(L"选择##") + label + idSuffix;
-    if (ImGui::Button(buttonLabel.c_str()))
+    ImGui::EndGroup();
+    
+    // 控制按钮
+    ImGui::Spacing();
+    
+    // 选择按钮
+    if (DrawButton(ConvertToUTF8(L"[选择]").c_str(), ImVec2(80, 0)))
     {
-        std::string path = FileDialog::OpenFile(ConvertToUTF8(L"选择贴图").c_str(),
-                                                "Image Files\0*.jpg;*.png;*.tga;*.bmp\0All Files\0*.*\0");
+        std::string path = FileDialog::OpenFile(
+            ConvertToUTF8(L"选择贴图").c_str(),
+            "Image Files\0*.jpg;*.jpeg;*.png;*.tga;*.bmp;*.hdr;*.exr\0All Files\0*.*\0"
+        );
         if (!path.empty())
         {
             if (!texture)
                 texture = std::make_shared<Texture>();
-            texture->flipY = flip; // 把当前 UI 的 flip 值同步给纹理
+                
+            // 保持翻转设置
+            bool prevFlip = texture->flipY;
             if (!texture->LoadFromFile(path))
             {
                 texture.reset();
-                ImGui::Text("%s: %s", ConvertToUTF8(L"贴图加载失败").c_str(), path.c_str());
+                consoleLog.push_back(ConvertToUTF8(L"贴图加载失败: ") + path);
+            }
+            else
+            {
+                texture->flipY = prevFlip;
             }
         }
     }
-
-    /* 清除按钮 */
-    std::string clearLabel = ConvertToUTF8(L"清除##") + label + idSuffix;
-    if (ImGui::Button(clearLabel.c_str()))
+    
+    // 清除按钮
+    ImGui::SameLine();
+    if (DrawButton(ConvertToUTF8(L"[清除]").c_str(), ImVec2(80, 0)))
+    {
         texture.reset();
-
-    ImGui::Separator();
+    }
+    
+    // 设置选项
+    if (texture)
+    {
+        ImGui::Spacing();
+        
+        // 翻转Y轴选项
+        bool flip = texture->flipY;
+        if (ImGui::Checkbox(ConvertToUTF8(L"翻转Y轴").c_str(), &flip))
+        {
+            texture->flipY = flip;
+            if (!texture->GetPath().empty())
+            {
+                texture->LoadFromFile(texture->GetPath());
+            }
+        }
+        DrawTooltip(ConvertToUTF8(L"某些贴图可能需要翻转Y轴以正确显示").c_str());
+        
+        // 拖拽支持
+        if (ImGui::BeginDragDropSource())
+        {
+            ImGui::SetDragDropPayload("TEXTURE", &texture, sizeof(std::shared_ptr<Texture>));
+            ImGui::Text("%s", label.c_str());
+            ImGui::EndDragDropSource();
+        }
+    }
+    
+    // 拖拽目标
+    if (ImGui::BeginDragDropTarget())
+    {
+        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_ITEM"))
+        {
+            size_t assetIndex = *(const size_t*)payload->Data;
+            if (assetIndex < assetItems.size())
+            {
+                const auto& asset = assetItems[assetIndex];
+                if (asset.type == AssetType::TEXTURE)
+                {
+                    if (!texture)
+                        texture = std::make_shared<Texture>();
+                    texture->LoadFromFile(asset.path.string());
+                }
+            }
+        }
+        ImGui::EndDragDropTarget();
+    }
+    
+    ImGui::PopID();
+    ImGui::Spacing();
 }
 
 void EditorUI::ShowRendererSettings()
 {
-    ImGui::Begin(ConvertToUTF8(L"渲染器设置").c_str());
+    ImGui::Begin(ConvertToUTF8(L"渲染器设置").c_str(), &showRendererSettings);
 
-    // 渲染模式
-    static const char *renderModes[] = {"Forward", "Deferred"};
-    int currentMode = static_cast<int>(renderer->GetRenderMode());
-    if (ImGui::Combo(ConvertToUTF8(L"渲染模式").c_str(), &currentMode, renderModes, IM_ARRAYSIZE(renderModes)))
+    // 使用折叠树来组织设置
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"基础渲染").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        renderer->SetRenderMode(static_cast<Renderer::RenderMode>(currentMode));
+        // 渲染模式
+        static const char *renderModes[] = {"Forward", "Deferred"};
+        int currentMode = static_cast<int>(renderer->GetRenderMode());
+        if (ImGui::Combo(ConvertToUTF8(L"渲染模式").c_str(), &currentMode, renderModes, IM_ARRAYSIZE(renderModes)))
+        {
+            renderer->SetRenderMode(static_cast<Renderer::RenderMode>(currentMode));
+        }
+        
+        // 伽马校正
+        bool gamma = renderer->IsGammaCorrectionEnabled();
+        if (ImGui::Checkbox(ConvertToUTF8(L"伽马校正").c_str(), &gamma))
+        {
+            renderer->SetGammaCorrection(gamma);
+        }
+        DrawTooltip(ConvertToUTF8(L"启用伽马校正以获得更准确的颜色表现").c_str());
     }
 
-    // 特效开关
-    bool gamma = renderer->IsGammaCorrectionEnabled();
-    if (ImGui::Checkbox(ConvertToUTF8(L"伽马校正").c_str(), &gamma))
+    // 抗锯齿设置
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"抗锯齿").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        renderer->SetGammaCorrection(gamma);
+        ShowAntiAliasingSettings();
     }
 
-    bool msaa = renderer->IsMSAAEnabled();
-    if (ImGui::Checkbox("MSAA", &msaa))
+    // 后处理效果
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"后处理效果").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        renderer->SetMSAA(msaa);
+        ShowPostProcessSettings();
     }
 
-    bool fxaa = renderer->IsFXAAEnabled();
-    if (ImGui::Checkbox("FXAA", &fxaa))
+    // 光照设置
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"光照").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
     {
-        renderer->SetFXAA(fxaa);
+        ShowLightingSettings();
     }
 
+    // 阴影设置
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"阴影").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+    {
+        ShowShadowSettings();
+    }
+
+    ImGui::End();
+}
+
+void EditorUI::ShowAntiAliasingSettings()
+{
+    static std::string noneText = ConvertToUTF8(L"无");
+    static std::string msaa2xText = "MSAA 2x";
+    static std::string msaa4xText = "MSAA 4x";
+    static std::string msaa8xText = "MSAA 8x";
+    static std::string fxaaText = "FXAA";
+    
+    const char* aaOptions[] = {
+        noneText.c_str(),
+        msaa2xText.c_str(),
+        msaa4xText.c_str(),
+        msaa8xText.c_str(),
+        fxaaText.c_str()
+    };
+    
+    int currentAA = static_cast<int>(currentAAType);
+    if (ImGui::Combo(ConvertToUTF8(L"抗锯齿类型").c_str(), &currentAA, aaOptions, IM_ARRAYSIZE(aaOptions)))
+    {
+        currentAAType = static_cast<AntiAliasingType>(currentAA);
+        
+        // 更新渲染器设置
+        switch (currentAAType)
+        {
+            case AntiAliasingType::NONE:
+                renderer->SetMSAA(false);
+                renderer->SetFXAA(false);
+                break;
+            case AntiAliasingType::MSAA_2X:
+                renderer->SetMSAA(true, 2);
+                renderer->SetFXAA(false);
+                msaaSamples = 2;
+                break;
+            case AntiAliasingType::MSAA_4X:
+                renderer->SetMSAA(true, 4);
+                renderer->SetFXAA(false);
+                msaaSamples = 4;
+                break;
+            case AntiAliasingType::MSAA_8X:
+                renderer->SetMSAA(true, 8);
+                renderer->SetFXAA(false);
+                msaaSamples = 8;
+                break;
+            case AntiAliasingType::FXAA:
+                renderer->SetMSAA(false);
+                renderer->SetFXAA(true);
+                break;
+        }
+    }
+    
+    // 显示当前状态
+    ImGui::TextUnformatted(ConvertToUTF8(L"当前状态:").c_str());
+    ImGui::Indent();
+    ImGui::Text("MSAA: %s", renderer->IsMSAAEnabled() ? ConvertToUTF8(L"启用").c_str() : ConvertToUTF8(L"禁用").c_str());
+    if (renderer->IsMSAAEnabled())
+    {
+        ImGui::SameLine();
+        ImGui::Text("(%dx)", msaaSamples);
+    }
+    ImGui::Text("FXAA: %s", renderer->IsFXAAEnabled() ? ConvertToUTF8(L"启用").c_str() : ConvertToUTF8(L"禁用").c_str());
+    ImGui::Unindent();
+    
+    // 性能提示
+    if (currentAAType != AntiAliasingType::NONE)
+    {
+        ImGui::Separator();
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%s", ConvertToUTF8(L"性能提示:").c_str());
+        
+        switch (currentAAType)
+        {
+            case AntiAliasingType::MSAA_2X:
+                ImGui::TextUnformatted(ConvertToUTF8(L"轻微性能影响").c_str());
+                break;
+            case AntiAliasingType::MSAA_4X:
+                ImGui::TextUnformatted(ConvertToUTF8(L"中等性能影响").c_str());
+                break;
+            case AntiAliasingType::MSAA_8X:
+                ImGui::TextUnformatted(ConvertToUTF8(L"较大性能影响").c_str());
+                break;
+            case AntiAliasingType::FXAA:
+                ImGui::TextUnformatted(ConvertToUTF8(L"最小性能影响").c_str());
+                break;
+            default:
+                break;
+        }
+    }
+}
+
+void EditorUI::ShowPostProcessSettings()
+{
     bool hdr = renderer->IsHDREnabled();
     if (ImGui::Checkbox("HDR", &hdr))
     {
         renderer->SetHDR(hdr);
     }
+    DrawTooltip(ConvertToUTF8(L"高动态范围渲染，支持更真实的光照效果").c_str());
 
     bool bloom = renderer->IsBloomEnabled();
     if (ImGui::Checkbox(ConvertToUTF8(L"泛光").c_str(), &bloom))
     {
         renderer->SetBloom(bloom);
     }
+    DrawTooltip(ConvertToUTF8(L"为亮区添加发光效果").c_str());
 
     bool ssao = renderer->IsSSAOEnabled();
     if (ImGui::Checkbox("SSAO", &ssao))
     {
         renderer->SetSSAO(ssao);
     }
+    DrawTooltip(ConvertToUTF8(L"屏幕空间环境光遮蔽，增强深度感").c_str());
+}
 
-    bool shadow = renderer->IsShadowEnabled();
-    if (ImGui::Checkbox(ConvertToUTF8(L"阴影").c_str(), &shadow))
-    {
-        renderer->SetShadow(shadow);
-    }
-
+void EditorUI::ShowLightingSettings()
+{
     bool pbr = renderer->IsPBREnabled();
     if (ImGui::Checkbox("PBR", &pbr))
     {
         renderer->SetPBR(pbr);
     }
+    DrawTooltip(ConvertToUTF8(L"基于物理的渲染，更真实的材质表现").c_str());
 
     bool ibl = renderer->IsIBLEnabled();
     if (ImGui::Checkbox("IBL", &ibl))
     {
         renderer->SetIBL(ibl);
     }
+    DrawTooltip(ConvertToUTF8(L"基于图像的光照，使用环境贴图").c_str());
 
     bool showLights = renderer->IsLightsEnabled();
     if (ImGui::Checkbox(ConvertToUTF8(L"显示光源").c_str(), &showLights))
     {
         renderer->SetLightsEnabled(showLights);
     }
-    ImGui::End();
+    DrawTooltip(ConvertToUTF8(L"在场景中显示光源图标").c_str());
+}
+
+void EditorUI::ShowShadowSettings()
+{
+    bool shadow = renderer->IsShadowEnabled();
+    if (ImGui::Checkbox(ConvertToUTF8(L"阴影").c_str(), &shadow))
+    {
+        renderer->SetShadow(shadow);
+    }
+    DrawTooltip(ConvertToUTF8(L"启用实时阴影渲染").c_str());
+}
+
+// 实用工具函数
+void EditorUI::DrawSeparator()
+{
+    ImGui::Separator();
+}
+
+void EditorUI::DrawTooltip(const char* text)
+{
+    if (ImGui::IsItemHovered())
+    {
+        ImGui::BeginTooltip();
+        ImGui::PushTextWrapPos(ImGui::GetFontSize() * 35.0f);
+        ImGui::TextUnformatted(text);
+        ImGui::PopTextWrapPos();
+        ImGui::EndTooltip();
+    }
+}
+
+bool EditorUI::DrawButton(const char* label, const ImVec2& size)
+{
+    return ImGui::Button(label, size);
+}
+
+void EditorUI::DrawTextCentered(const char* text)
+{
+    float windowWidth = ImGui::GetWindowSize().x;
+    float textWidth = ImGui::CalcTextSize(text).x;
+    
+    ImGui::SetCursorPosX((windowWidth - textWidth) * 0.5f);
+    ImGui::Text("%s", text);
 }
 
 void EditorUI::EndFrame()
@@ -799,8 +1586,17 @@ void EditorUI::OnLightInspectorGUI(Light &light)
         auto &spotLight = static_cast<SpotLight &>(light);
         ImGui::Text("%s", ConvertToUTF8(L"聚光灯").c_str());
         ImGui::DragFloat3(ConvertToUTF8(L"位置").c_str(), glm::value_ptr(spotLight.position), 0.1f);
-        ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(spotLight.direction), 0.01f, -1.0f, 1.0f);
-        //spotLight.direction = glm::normalize(spotLight.direction);
+        
+        // 方向输入，自动归一化
+        if (ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(spotLight.direction), 0.01f, -1.0f, 1.0f)) {
+            // 在方向改变时自动归一化，避免零向量
+            if (glm::length(spotLight.direction) > 0.001f) {
+                spotLight.direction = glm::normalize(spotLight.direction);
+            } else {
+                spotLight.direction = glm::vec3(0.0f, -1.0f, 0.0f); // 默认向下
+            }
+        }
+        
         ImGui::ColorEdit3(ConvertToUTF8(L"环境光").c_str(), glm::value_ptr(spotLight.ambient));
         ImGui::ColorEdit3(ConvertToUTF8(L"漫反射").c_str(), glm::value_ptr(spotLight.diffuse));
         ImGui::ColorEdit3(ConvertToUTF8(L"高光").c_str(), glm::value_ptr(spotLight.specular));

@@ -16,6 +16,37 @@
 
 class Renderer;
 
+// 抗锯齿类型枚举
+enum class AntiAliasingType
+{
+    NONE = 0,
+    MSAA_2X,
+    MSAA_4X,
+    MSAA_8X,
+    FXAA
+};
+
+// 资源类型枚举
+enum class AssetType
+{
+    TEXTURE,
+    MODEL,
+    MATERIAL,
+    SHADER,
+    AUDIO,
+    UNKNOWN
+};
+
+// 资源项结构
+struct AssetItem
+{
+    std::filesystem::path path;
+    AssetType type;
+    std::string name;
+    std::shared_ptr<void> resource; // 通用资源指针
+    bool isLoaded = false;
+};
+
 class EditorUI
 {
 public:
@@ -27,25 +58,51 @@ public:
     void Render();
     void EndFrame();
 
+    // 主界面面板
     void ShowMainMenuBar();
+    void ShowDockSpace();
     void ShowSceneHierarchy();
     void ShowInspector();
-    void ShowAssetsPanel(); // 新增资源面板
-    void ShowViewport();    // 新增视口面板
+    void ShowAssetsPanel();
+    void ShowViewport();
     void ShowRendererSettings();
     void ShowMaterialEditor();
+    void ShowConsole(); // 控制台面板
+
+    // 对话框
     void ShowPrimitiveSelectionDialog();
     void ShowLightSelectionDialog();
     void ShowModelCreationDialog();
+    
+    // 检视器GUI
     void OnLightInspectorGUI(Light &light);
 
 private:
+    // 界面组件
     void ShowMaterialEditor(Material &material);
     void TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture,
                          const std::string &idSuffix = "");
+    void ShowAntiAliasingSettings();
+    void ShowPostProcessSettings();
+    void ShowShadowSettings();
+    void ShowLightingSettings();
     
-    void RefreshAssetList(); // 刷新资源列表
-    void CreateDefaultLayout(); // 创建默认布局
+    // 资源管理
+    void RefreshAssetList();
+    void LoadAssetPreview(AssetItem &item);
+    void ShowAssetContextMenu(AssetItem &item);
+    AssetType DetermineAssetType(const std::filesystem::path &path);
+    void CreateDefaultLayout();
+    
+    // 样式设置
+    void SetupModernStyle();
+    void SetupColors();
+    
+    // 实用工具
+    void DrawSeparator();
+    void DrawTooltip(const char* text);
+    bool DrawButton(const char* label, const ImVec2& size = ImVec2(0, 0));
+    void DrawTextCentered(const char* text);
 
     static std::string ConvertToUTF8(const std::wstring &wstr)
     {
@@ -60,14 +117,36 @@ private:
     bool showDemoWindow = false;
     bool showSceneHierarchy = true;
     bool showInspector = true;
-    bool showAssetsPanel = true; // 新增资源面板状态
-    bool showViewport = true;    // 新增视口面板状态
+    bool showAssetsPanel = true;
+    bool showViewport = true;
     bool showRendererSettings = true;
     bool showMaterialEditor = true;
+    bool showConsole = false;
 
+    // 选择状态
     int selectedObjectIndex = -1;
+    int selectedAssetIndex = -1;
     
-    // 资源管理相关
-    std::vector<std::filesystem::path> assetFiles;
-    std::string currentAssetPath = "assets"; // 默认资源路径
+    // 资源管理
+    std::vector<AssetItem> assetItems;
+    std::string currentAssetPath = "resources"; // 默认资源路径
+    std::vector<std::string> assetPathHistory;
+    
+    // 渲染设置
+    AntiAliasingType currentAAType = AntiAliasingType::NONE;
+    int msaaSamples = 4;
+    
+    // UI状态
+    bool isDockingSetup = false;
+    float leftPanelWidth = 300.0f;
+    float rightPanelWidth = 350.0f;
+    float bottomPanelHeight = 200.0f;
+    
+    // 控制台日志
+    std::vector<std::string> consoleLog;
+    
+    // 样式常量
+    static constexpr float BUTTON_HEIGHT = 25.0f;
+    static constexpr float ITEM_SPACING = 8.0f;
+    static constexpr float PANEL_PADDING = 10.0f;
 };

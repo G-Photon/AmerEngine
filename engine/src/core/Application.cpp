@@ -72,12 +72,15 @@ void Application::Initialize()
         ImGui_ImplGlfw_CursorPosCallback(window, xpos, ypos);
         auto app = static_cast<Application *>(glfwGetWindowUserPointer(window));
         ImGuiIO &io = ImGui::GetIO();
-        if (io.WantCaptureMouse || glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS)
+        
+        // 只有在右键按下时才进行摄像头控制，忽略ImGui的WantCaptureMouse
+        if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS)
         {
-            // 如果不是鼠标右键按下，或者不需要鼠标控制相机，则不处理鼠标移动
+            // 如果不是鼠标右键按下，则不处理鼠标移动
             app->firstMouse = true; // 重置鼠标位置
             return;
         }
+        
         if (app->firstMouse)
         {
             app->lastX = static_cast<float>(xpos);
@@ -252,6 +255,22 @@ void Application::CreateTestScene()
     pointLight->shadowNearPlane = 0.1f;
     pointLight->shadowFarPlane = 25.0f;
     renderer->AddLight(pointLight);
+
+    // 创建一个聚光灯并启用阴影
+    auto spotLight = std::make_shared<SpotLight>(
+        glm::vec3(2.0f, 4.0f, 2.0f),     // 位置
+        glm::normalize(glm::vec3(-0.5f, -1.0f, -0.5f)),  // 方向（归一化，指向场景中心）
+        glm::vec3(0.05f, 0.05f, 0.05f),  // 环境光
+        glm::vec3(1.0f, 0.8f, 0.6f),     // 漫反射（暖色调）
+        glm::vec3(1.0f, 1.0f, 1.0f),     // 镜面反射
+        0.8f,                            // 强度
+        25.0f,                           // 内切角（度）
+        35.0f                            // 外切角（度）
+    );
+    spotLight->SetShadowEnabled(true);
+    spotLight->shadowNearPlane = 0.1f;
+    spotLight->shadowFarPlane = 15.0f;
+    renderer->AddLight(spotLight);
 
     // 启用阴影
     renderer->SetShadow(true);

@@ -219,6 +219,11 @@ class Renderer
         fxaaEnabled = enabled;
     }
 
+    GLuint GetViewportTexture() const
+    {
+        return viewportBuffer->GetColorTexture(0); // 假设你有这个函数
+    }
+
   private:
     void RenderForward();
     void RenderDeferred();
@@ -233,6 +238,7 @@ class Renderer
     void SetupBloomBuffer();
     void SetupSSAOBuffer();
     void SetupFXAABuffer();
+    void SetupViewportBuffer();
     void SetupSkybox();
 
     void GenerateSSAOKernel();
@@ -261,6 +267,7 @@ class Renderer
     std::unique_ptr<Framebuffer> ssaoBuffer;
     std::unique_ptr<Framebuffer> ssaoBlurBuffer;
     std::unique_ptr<Framebuffer> fxaaBuffer;
+    std::unique_ptr<Framebuffer> viewportBuffer; // 用于显示渲染结果
 
     // 多光源阴影缓冲区管理
     std::vector<std::unique_ptr<Framebuffer>> lightShadowBuffers;

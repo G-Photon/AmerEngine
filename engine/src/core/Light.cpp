@@ -1,6 +1,9 @@
 #include "core/Light.hpp"
 #include "core/Geometry.hpp"
 #include "glm/trigonometric.hpp"
+#include "glm/gtc/quaternion.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/quaternion.hpp"
 
 static void RenderQuad()
 {
@@ -324,33 +327,77 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
         ConeindexCount = indices.size(); // 保存索引数量
     }
 
-    /* 1. 根据衰减求有效照射距离（替代缺失的 range） */
-    // 3/256 的亮度阈值
+    /* 1. 根据光源强度计算合理的可视化范围 */
+    // 对于延迟渲染的光体积，使用更保守的范围计算
+    // 避免过大的光体积影响性能和视觉效果
+    
+    // 基于强度的自适应范围 - 调试用：增加范围以确保覆盖
+    float intensityFactor = glm::clamp(intensity, 0.1f, 2.0f);
+    float range = 5.0f + intensityFactor * 8.0f; // 5-21单位的范围，增大以便调试
+    
+    // 可选：仍然基于衰减计算，但限制最大值
     float maxChannel = glm::max(glm::max(diffuse.r, diffuse.g), diffuse.b) * intensity;
-    float threshold = 3.0f / 256.0f * maxChannel;
+    float threshold = 20.0f / 256.0f * maxChannel; // 提高阈值，减少范围
     float discriminant = linear * linear - 4.0f * quadratic * (constant - 1.0f / threshold);
-    float range = 0.0f;
+    float theoreticalRange = 0.0f;
     if (discriminant >= 0.0f)
-        range = (-linear + glm::sqrt(discriminant)) / (2.0f * quadratic);
-    range = glm::max(range, 0.01f);
+        theoreticalRange = (-linear + glm::sqrt(discriminant)) / (2.0f * quadratic);
+    
+    // 使用理论范围和固定范围中的较大值（调试用）
+    range = glm::max(range, theoreticalRange);
+    range = glm::max(range, 8.0f); // 最小范围增大
+    range = glm::min(range, 25.0f); // 最大范围增大
 
     /* 2. 计算光锥底面半径 */
-    float outerAngleRad = glm::radians(outerCutOff);
-    float baseRadius = range * tan(outerAngleRad);
+    // outerCutOff已经是余弦值，不需要转换为弧度
+    float outerAngleRad = glm::acos(outerCutOff); // 从余弦值还原为弧度
+    float baseRadius = range * glm::tan(outerAngleRad);
 
-    /* 3. 模型矩阵：缩放 → 旋转 → 平移 */
+    /* 3. 模型矩阵：使用四元数进行正确的方向计算 */
     glm::mat4 model(1.0f);
 
-    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
-    glm::vec3 dirNorm = glm::normalize(direction);
-    glm::vec3 right = glm::normalize(glm::cross(up, dirNorm));
-    glm::vec3 newUp = glm::cross(dirNorm, right);
-    glm::vec3 rotation = glm::eulerAngles(glm::quatLookAt(dirNorm, newUp));
-    model = glm::translate(model, position);                             // 平移到光源位置
-    model = glm::rotate(model, glm::radians(rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-    model = glm::rotate(model, glm::radians(rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-    model = glm::scale(model, glm::vec3(baseRadius, range, baseRadius)); // 缩放到合适大小
+    // 计算从默认方向（Y轴正方向）到目标方向的旋转
+    // 注意：圆锥几何的顶点在+Y，底面在-Y，所以默认指向+Y方向
+    glm::vec3 defaultDir = glm::vec3(0.0f, 1.0f, 0.0f); // 圆锥默认朝向Y轴正方向
+    glm::vec3 targetDir = glm::normalize(direction);
+    
+    // 计算旋转四元数
+    glm::quat rotation;
+    float dot = glm::dot(defaultDir, targetDir);
+    if (dot < -0.999999f) {
+        // 180度旋转的特殊情况 - 完全相反的方向
+        rotation = glm::angleAxis(glm::pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
+    } else if (dot > 0.999999f) {
+        // 方向相同，无需旋转
+        rotation = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+    } else {
+        // 一般情况下的旋转
+        glm::vec3 axis = glm::normalize(glm::cross(defaultDir, targetDir));
+        float angle = glm::acos(glm::clamp(dot, -1.0f, 1.0f));
+        rotation = glm::angleAxis(angle, axis);
+    }
+
+    // 应用变换：最终目标是圆锥顶点在光源位置，圆锥沿direction方向延伸
+    // 变换顺序（右乘）：缩放 → 旋转 → 平移
+    
+    // 1. 先缩放到正确尺寸
+    glm::mat4 scaleMatrix = glm::scale(glm::mat4(1.0f), glm::vec3(baseRadius, range, baseRadius));
+    
+    // 2. 旋转到正确方向
+    glm::mat4 rotationMatrix = glm::mat4_cast(rotation);
+    
+    // 3. 平移到正确位置
+    // 注意：圆锥几何的顶点在+Y方向，即 +halfHeight = +range/2
+    // 经过缩放后，顶点位置将在 (0, range/2, 0)
+    // 经过旋转后，顶点位置将在 targetDir * (range/2)
+    // 我们希望顶点在光源位置，所以平移向量应该是：
+    // position - (旋转后的顶点相对位置)
+    glm::vec3 rotatedConeVertex = glm::vec3(rotationMatrix * glm::vec4(0.0f, range * 0.5f, 0.0f, 1.0f));
+    glm::vec3 translationVector = position - rotatedConeVertex;
+    glm::mat4 translationMatrix = glm::translate(glm::mat4(1.0f), translationVector);
+    
+    // 最终变换矩阵：先缩放，然后旋转，最后平移
+    model = translationMatrix * rotationMatrix * scaleMatrix;
 
     
 
@@ -368,6 +415,11 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetFloat("light.quadratic", quadratic);
     shader->SetInt("lightType", this->getType());
     
+    // 调试输出（可选）
+    // std::cout << "SpotLight 绘制 - 位置: (" << position.x << ", " << position.y << ", " << position.z << ")" << std::endl;
+    // std::cout << "SpotLight 绘制 - 方向: (" << direction.x << ", " << direction.y << ", " << direction.z << ")" << std::endl;
+    // std::cout << "SpotLight 绘制 - 范围: " << range << ", 底面半径: " << baseRadius << std::endl;
+    
     // 设置阴影相关参数
     shader->SetBool("light.hasShadows", shadowEnabled);
     if (shadowEnabled && shadowMap != 0)
@@ -376,7 +428,7 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
         
         // 绑定阴影贴图到固定的纹理单元
         int textureUnit = 30; // 延迟渲染使用专用纹理单元
-        shader->SetInt("light.shadowMap", textureUnit);
+        shader->SetInt("lightShadowMap", textureUnit);
         glActiveTexture(GL_TEXTURE0 + textureUnit);
         glBindTexture(GL_TEXTURE_2D, shadowMap);
         

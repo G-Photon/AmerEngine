@@ -8,6 +8,9 @@
 #include "utils/FileSystem.hpp"
 #include <iostream>
 #include <random>
+#include "glm/gtc/quaternion.hpp"
+#define GLM_ENABLE_EXPERIMENTAL
+#include "glm/gtx/quaternion.hpp"
 #include <glm/gtc/matrix_transform.hpp>
 
 Renderer::Renderer(int width, int height) : width(width), height(height)
@@ -161,6 +164,7 @@ void Renderer::Initialize()
     SetupBloomBuffer();
     SetupSSAOBuffer();
     SetupFXAABuffer();
+    SetupViewportBuffer();
 
     GenerateSSAOKernel();
     GenerateSSAONoiseTexture();
@@ -262,6 +266,13 @@ void Renderer::SetupFXAABuffer()
     fxaaBuffer = std::make_unique<Framebuffer>(width, height);
     fxaaBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
     fxaaBuffer->CheckComplete();
+}
+
+void Renderer::SetupViewportBuffer()
+{
+    viewportBuffer = std::make_unique<Framebuffer>(width, height);
+    viewportBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
+    viewportBuffer->CheckComplete();
 }
 
 void Renderer::SetupSkybox()
@@ -464,6 +475,15 @@ void Renderer::RenderDeferred()
     {
         if (light->getType() != 1)
         {
+            // 调试输出：记录光源类型
+            const char* lightTypeName = "Unknown";
+            switch(light->getType()) {
+                case 0: lightTypeName = "PointLight"; break;
+                case 1: lightTypeName = "DirectionalLight"; break;
+                case 2: lightTypeName = "SpotLight"; break;
+            }
+            // std::cout << "延迟渲染处理 " << lightTypeName << " (type=" << light->getType() << ")" << std::endl;
+            
             // === 第一步：标记光体积区域 ===
             glClear(GL_STENCIL_BUFFER_BIT);
             glColorMask(GL_FALSE, GL_FALSE, GL_FALSE, GL_FALSE); // 不写颜色
@@ -835,37 +855,55 @@ void Renderer::RenderLights()
             auto spotLight = std::dynamic_pointer_cast<SpotLight>(light);
             if (spotLight)
             {
-                // 计算圆锥的高度和半径（基于外切角）
-                const float coneHeight = 1.0f; // 固定高度，美观的比例
-                const float coneRadius = coneHeight * glm::tan(glm::acos(spotLight->outerCutOff));
+                // 为可视化目的使用更合理的光锥尺寸
+                // 不使用完整的理论衰减距离，而是使用一个合适的显示范围
+                
+                // 方案1：使用固定的合理显示距离
+                float visualRange = 5.0f; // 合适的可视化距离
+                
+                // 方案2：基于光源强度的自适应范围（更智能）
+                float intensityFactor = glm::clamp(spotLight->intensity, 0.1f, 2.0f);
+                visualRange = 2.0f + intensityFactor * 3.0f; // 2-8单位的范围
+                
+                // outerCutOff已经是余弦值，还原为弧度
+                float outerAngleRad = glm::acos(spotLight->outerCutOff);
+                float coneRadius = visualRange * glm::tan(outerAngleRad);
+                
+                // 限制最大半径，避免过大的可视化
+                coneRadius = glm::min(coneRadius, visualRange * 0.8f);
 
-                // 创建圆台（顶部半径为0即为圆锥）
-                lightMesh = Geometry::CreateFrustum(0.0f, coneRadius, coneHeight / 2, 16);
+                // 创建圆锥（顶部半径为0，底部半径为计算值）
+                lightMesh = Geometry::CreateFrustum(0.0f, coneRadius, visualRange, 16);
 
-                // 计算旋转使圆锥指向正确方向
-                glm::vec3 direction = glm::normalize(spotLight->direction);
-                glm::vec3 up(0.0f, 1.0f, 0.0f);
-
-                if (glm::length(direction) > 0.001f)
-                {
-                    direction = glm::normalize(-direction);
-
-                    // 计算旋转轴和角度
-                    glm::vec3 axis = glm::cross(up, direction);
-                    float angle = glm::acos(glm::dot(up, direction));
-
-                    rotation = glm::degrees(axis * angle);
+                // 使用四元数计算正确的旋转
+                glm::vec3 defaultDir = glm::vec3(0.0f, 1.0f, 0.0f); // 圆锥默认朝向Y轴正方向
+                glm::vec3 targetDir = glm::normalize(spotLight->direction);
+                
+                glm::quat rotationQuat;
+                float dot = glm::dot(defaultDir, targetDir);
+                if (dot < -0.999999f) {
+                    // 180度旋转的特殊情况
+                    rotationQuat = glm::angleAxis(glm::pi<float>(), glm::vec3(1.0f, 0.0f, 0.0f));
+                } else if (dot > 0.999999f) {
+                    // 方向相同，无需旋转
+                    rotationQuat = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+                } else {
+                    // 一般情况下的旋转
+                    glm::vec3 axis = glm::normalize(glm::cross(defaultDir, targetDir));
+                    float angle = glm::acos(glm::clamp(dot, -1.0f, 1.0f));
+                    rotationQuat = glm::angleAxis(angle, axis);
                 }
-
-                // 调整位置使圆锥顶点在光源位置
-                // 圆锥顶点在光源位置，底部沿方向延伸
-                glm::vec3 position = spotLight->position;
-
-                // 设置变换并绘制
-                lightMesh->SetTransform(position, rotation, glm::vec3(1.0f));
-
-                // 恢复原始颜色
-                lightsShader->SetVec3("lightColor", light->getLightColor());
+                
+                // 转换四元数为欧拉角用于SetTransform
+                glm::vec3 eulerAngles = glm::degrees(glm::eulerAngles(rotationQuat));
+                
+                // 调整位置，使圆锥顶点在光源位置
+                // 由于圆锥几何顶点在+Y，我们需要调整位置
+                glm::vec3 offset = -targetDir * (visualRange * 0.5f);
+                glm::vec3 adjustedPosition = spotLight->position + offset;
+                
+                // 设置变换
+                lightMesh->SetTransform(adjustedPosition, eulerAngles, glm::vec3(1.0f));
             }
             break;
         }
@@ -1081,8 +1119,8 @@ void Renderer::RenderPostProcessing()
         RenderQuad();
     }
 
-    // Final Compose
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    // Final Compose to viewport buffer (for ImGui)
+    viewportBuffer->Bind();
     glClear(GL_COLOR_BUFFER_BIT);
     postProcessShader->Use();
     postProcessShader->SetBool("hdrEnabled", hdrEnabled);
@@ -1101,6 +1139,12 @@ void Renderer::RenderPostProcessing()
         bloomBlurBuffers[false]->BindTexture(0, 1);
 
     RenderQuad();
+    
+    // Copy viewport buffer to default framebuffer (for window display)
+    glBindFramebuffer(GL_READ_FRAMEBUFFER, viewportBuffer->GetID());
+    glBindFramebuffer(GL_DRAW_FRAMEBUFFER, 0);
+    glBlitFramebuffer(0, 0, width, height, 0, 0, width, height, GL_COLOR_BUFFER_BIT, GL_NEAREST);
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
 
 std::shared_ptr<Model> Renderer::LoadModel(const std::string &path)
@@ -1229,6 +1273,7 @@ void Renderer::Resize(int newWidth, int newHeight)
     ssaoBlurBuffer->Resize(newWidth, newHeight);
     shadowBuffer->Resize(2048, 2048); // 阴影缓冲大小固定
     fxaaBuffer->Resize(newWidth, newHeight);
+    viewportBuffer->Resize(newWidth, newHeight);
 }
 
 // Renderer.cpp
