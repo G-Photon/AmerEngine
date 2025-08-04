@@ -5,18 +5,19 @@ out vec4 FragColor;
 uniform sampler2D screenTexture;
 uniform vec2 resolution;
 
-#define EDGE_THRESHOLD 0.125
-#define EDGE_THRESHOLD_MIN 0.0625
+#define FXAA_REDUCE_MIN (1.0/128.0)
+#define FXAA_REDUCE_MUL (1.0/8.0)
+#define FXAA_SPAN_MAX 8.0
 
 void main() {
     vec2 invRes = 1.0 / resolution;
     
     // 当前像素颜色
-    vec3 rgbNW = texture(screenTexture, TexCoords + vec2(-1.0, -1.0) * invRes).xyz;
-    vec3 rgbNE = texture(screenTexture, TexCoords + vec2(1.0, -1.0) * invRes).xyz;
-    vec3 rgbSW = texture(screenTexture, TexCoords + vec2(-1.0, 1.0) * invRes).xyz;
-    vec3 rgbSE = texture(screenTexture, TexCoords + vec2(1.0, 1.0) * invRes).xyz;
-    vec3 rgbM  = texture(screenTexture, TexCoords).xyz;
+    vec3 rgbNW = texture(screenTexture, TexCoords + vec2(-1.0, -1.0) * invRes).rgb;
+    vec3 rgbNE = texture(screenTexture, TexCoords + vec2(1.0, -1.0) * invRes).rgb;
+    vec3 rgbSW = texture(screenTexture, TexCoords + vec2(-1.0, 1.0) * invRes).rgb;
+    vec3 rgbSE = texture(screenTexture, TexCoords + vec2(1.0, 1.0) * invRes).rgb;
+    vec3 rgbM  = texture(screenTexture, TexCoords).rgb;
     
     // 计算亮度
     float lumaNW = dot(rgbNW, vec3(0.299, 0.587, 0.114));
@@ -25,58 +26,43 @@ void main() {
     float lumaSE = dot(rgbSE, vec3(0.299, 0.587, 0.114));
     float lumaM  = dot(rgbM,  vec3(0.299, 0.587, 0.114));
     
-    // 确定边缘方向
-    float edgeVert = 
-        abs((0.25 * lumaNW) + (-0.5 * lumaM) + (0.25 * lumaNE)) +
-        abs((0.50 * lumaSW) + (-1.0 * lumaM) + (0.50 * lumaSE));
+    // 确定亮度范围
+    float lumaMin = min(lumaM, min(min(lumaNW, lumaNE), min(lumaSW, lumaSE)));
+    float lumaMax = max(lumaM, max(max(lumaNW, lumaNE), max(lumaSW, lumaSE)));
     
-    float edgeHorz = 
-        abs((0.25 * lumaNW) + (-0.5 * lumaM) + (0.25 * lumaSW)) +
-        abs((0.50 * lumaNE) + (-1.0 * lumaM) + (0.50 * lumaSE));
-    
-    bool isHorizontal = edgeHorz >= edgeVert;
-    
-    // 选择采样方向
-    float luma1 = isHorizontal ? lumaSW : lumaSE;
-    float luma2 = isHorizontal ? lumaNW : lumaNE;
-    
-    // 计算梯度
-    float gradient1 = luma1 - lumaM;
-    float gradient2 = luma2 - lumaM;
-    
-    bool is1Steepest = abs(gradient1) >= abs(gradient2);
-    float gradientScaled = 0.25 * max(abs(gradient1), abs(gradient2));
-    
-    // 计算步长
-    float stepLength = isHorizontal ? invRes.y : invRes.x;
-    
-    // 计算UV偏移
-    float lumaLocalAvg = 0.0;
-    if (is1Steepest) {
-        stepLength = -stepLength;
-        lumaLocalAvg = 0.5 * (luma1 + lumaM);
-    } else {
-        lumaLocalAvg = 0.5 * (luma2 + lumaM);
-    }
-    
-    // 计算新UV坐标
-    vec2 currentUv = TexCoords;
-    if (isHorizontal) {
-        currentUv.y += stepLength * 0.5;
-    } else {
-        currentUv.x += stepLength * 0.5;
-    }
-    
-    // 采样新位置
-    vec3 result = texture(screenTexture, currentUv).xyz;
-    
-    // 计算最终亮度
-    float lumaAvg = dot(result, vec3(0.299, 0.587, 0.114));
-    
-    // 混合条件
-    if ((lumaAvg < lumaLocalAvg) || (lumaAvg > max(lumaM, lumaLocalAvg))) {
+    // 如果对比度不足，直接返回原始颜色
+    if (lumaMax - lumaMin <= max(FXAA_REDUCE_MIN, lumaMax * FXAA_REDUCE_MUL)) {
         FragColor = vec4(rgbM, 1.0);
+        return;
+    }
+    
+    // 计算梯度方向
+    vec2 dir;
+    dir.x = -((lumaNW + lumaNE) - (lumaSW + lumaSE));
+    dir.y =  ((lumaNW + lumaSW) - (lumaNE + lumaSE));
+    
+    // 标准化方向
+    float dirReduce = max((lumaNW + lumaNE + lumaSW + lumaSE) * (0.25 * FXAA_REDUCE_MUL), FXAA_REDUCE_MIN);
+    float rcpDirMin = 1.0 / (min(abs(dir.x), abs(dir.y)) + dirReduce);
+    dir = min(vec2(FXAA_SPAN_MAX, FXAA_SPAN_MAX), 
+              max(vec2(-FXAA_SPAN_MAX, -FXAA_SPAN_MAX), dir * rcpDirMin)) * invRes;
+    
+    // 沿边缘采样
+    vec3 rgbA = 0.5 * (
+        texture(screenTexture, TexCoords + dir * (1.0/3.0 - 0.5)).rgb +
+        texture(screenTexture, TexCoords + dir * (2.0/3.0 - 0.5)).rgb);
+    
+    vec3 rgbB = rgbA * 0.5 + 0.25 * (
+        texture(screenTexture, TexCoords + dir * -0.5).rgb +
+        texture(screenTexture, TexCoords + dir * 0.5).rgb);
+    
+    // 计算混合后颜色的亮度
+    float lumaB = dot(rgbB, vec3(0.299, 0.587, 0.114));
+    
+    // 确定是否使用混合结果
+    if ((lumaB < lumaMin) || (lumaB > lumaMax)) {
+        FragColor = vec4(rgbA, 1.0);
     } else {
-        FragColor = vec4(result, 1.0);
+        FragColor = vec4(rgbB, 1.0);
     }
 }
