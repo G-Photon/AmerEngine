@@ -29,20 +29,61 @@ struct L {
     // 聚光灯参数
     float cutOff;       // 内切角余弦值
     float outerCutOff;  // 外切角余弦值
+    
+    // 阴影相关
+    bool hasShadows;
+    mat4 lightSpaceMatrix;
 };
 uniform L light;
+uniform sampler2D lightShadowMap; // 单独定义阴影贴图
 
 uniform int lightType; // 0:点光源, 1:方向光, 2:聚光灯
 uniform vec3 viewPos;   // 相机位置
 uniform vec2 screenSize; // 屏幕尺寸，用于计算纹理坐标
+uniform bool shadowEnabled; // 全局阴影开关
 
 const float PI = 3.14159265359;
 const float SHININESS_FACTOR = 32.0; // 高光系数
+
+// 阴影计算函数
+float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap)
+{
+    // 执行透视除法
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    
+    // 变换到[0,1]范围
+    projCoords = projCoords * 0.5 + 0.5;
+    
+    // 检查是否在阴影贴图范围内
+    if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+    
+    // 获取当前片段在光源视角下的深度
+    float currentDepth = projCoords.z;
+    
+    // 检查当前片段是否在阴影中
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
+    
+    // PCF软阴影
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+    
+    return shadow;
+}
 
 // 光照计算函数
 vec3 calculateDirectionalLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albedo, vec3 specularColor, float roughness, float ao);
 vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albedo, vec3 specularColor, float roughness, float ao);
 vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albedo, vec3 specularColor, float roughness, float ao);
+
 vec2 CalcTexCoord()
 {
    return gl_FragCoord.xy / screenSize;
@@ -96,8 +137,19 @@ vec3 calculateDirectionalLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec
     float spec = pow(max(dot(normal, halfwayDir), 0.0), SHININESS_FACTOR);
     vec3 specular = light.specular * spec * specularColor;
     
+    // 阴影计算
+    float shadow = 0.0;
+    if (shadowEnabled && light.hasShadows) {
+        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+    }
+    
     // 环境光分量
     vec3 ambient = light.ambient * ambientColor * ao;
+    
+    // 应用阴影
+    diffuse *= (1.0 - shadow);
+    specular *= (1.0 - shadow);
 
     return ambient + diffuse + specular;
 }
@@ -115,23 +167,28 @@ vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albe
     vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(normal, halfwayDir), 0.0), SHININESS_FACTOR);
 
-    
     // 距离衰减计算
     float distance = length(light.position - fragPos);
     float attenuation = 1.0 / (light.constant + light.linear * distance + 
                              light.quadratic * (distance * distance));
     
-    // 漫反射分量
+    // 阴影计算
+    float shadow = 0.0;
+    if (shadowEnabled && light.hasShadows) {
+        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+    }
     
+    // 漫反射分量
     vec3 diffuse = light.diffuse * diff * albedo;
-
     vec3 specular = light.specular * spec * specularColor;
     // 环境光分量
     vec3 ambient = light.ambient * ambientColor * ao;
-    // 应用衰减
+    
+    // 应用衰减和阴影
     ambient *= attenuation;
-    diffuse *= attenuation;
-    specular *= attenuation;
+    diffuse *= attenuation * (1.0 - shadow);
+    specular *= attenuation * (1.0 - shadow);
     
     return ambient + diffuse + specular;
 }
@@ -156,6 +213,13 @@ vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albed
     float attenuation = 1.0 / (light.constant + light.linear * distance + 
                              light.quadratic * (distance * distance));
     
+    // 阴影计算
+    float shadow = 0.0;
+    if (shadowEnabled && light.hasShadows) {
+        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+    }
+    
     // 漫反射分量
     float diff = max(dot(normal, lightDir), 0.0);
     vec3 diffuse = light.diffuse * diff * albedo;
@@ -168,10 +232,10 @@ vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albed
     // 环境光分量
     vec3 ambient = light.ambient * ambientColor * ao;
 
-    // 应用衰减和聚光强度
+    // 应用衰减、聚光强度和阴影
     ambient *= attenuation * intensity;
-    diffuse *= attenuation * intensity;
-    specular *= attenuation * intensity;
+    diffuse *= attenuation * intensity * (1.0 - shadow);
+    specular *= attenuation * intensity * (1.0 - shadow);
     
     return ambient + diffuse + specular;
 }

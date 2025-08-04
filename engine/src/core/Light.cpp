@@ -133,6 +133,27 @@ void PointLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetFloat("light.linear", linear);
     shader->SetFloat("light.quadratic", quadratic);
     shader->SetInt("lightType", this->getType());
+    
+    // 设置阴影相关参数
+    shader->SetBool("light.hasShadows", shadowEnabled);
+    if (shadowEnabled && shadowMap != 0)
+    {
+        shader->SetMat4("light.lightSpaceMatrix", GetLightSpaceMatrix());
+        
+        // 绑定阴影贴图到固定的纹理单元
+        int textureUnit = 30; // 延迟渲染使用专用纹理单元
+        shader->SetInt("lightShadowMap", textureUnit);
+        glActiveTexture(GL_TEXTURE0 + textureUnit);
+        glBindTexture(GL_TEXTURE_2D, shadowMap);
+        
+        // 设置纹理参数
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float border[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    }
 
     // 5. 绘制球体
     glBindVertexArray(lightSphereVAO);
@@ -195,6 +216,27 @@ void DirectionalLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetVec3("light.diffuse", diffuse * intensity);
     shader->SetVec3("light.specular", specular * intensity);
     shader->SetInt("lightType", this->getType());
+    
+    // 设置阴影相关参数
+    shader->SetBool("light.hasShadows", shadowEnabled);
+    if (shadowEnabled && shadowMap != 0)
+    {
+        shader->SetMat4("light.lightSpaceMatrix", GetLightSpaceMatrix());
+        
+        // 绑定阴影贴图到固定的纹理单元
+        int textureUnit = 30; // 延迟渲染使用专用纹理单元
+        shader->SetInt("lightShadowMap", textureUnit);
+        glActiveTexture(GL_TEXTURE0 + textureUnit);
+        glBindTexture(GL_TEXTURE_2D, shadowMap);
+        
+        // 设置纹理参数
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float border[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    }
 
     /*-------------------------------------------------
      * 2. 直接绘制全屏 Quad
@@ -325,6 +367,27 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetFloat("light.linear", linear);
     shader->SetFloat("light.quadratic", quadratic);
     shader->SetInt("lightType", this->getType());
+    
+    // 设置阴影相关参数
+    shader->SetBool("light.hasShadows", shadowEnabled);
+    if (shadowEnabled && shadowMap != 0)
+    {
+        shader->SetMat4("light.lightSpaceMatrix", GetLightSpaceMatrix());
+        
+        // 绑定阴影贴图到固定的纹理单元
+        int textureUnit = 30; // 延迟渲染使用专用纹理单元
+        shader->SetInt("light.shadowMap", textureUnit);
+        glActiveTexture(GL_TEXTURE0 + textureUnit);
+        glBindTexture(GL_TEXTURE_2D, shadowMap);
+        
+        // 设置纹理参数
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_BORDER);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_BORDER);
+        float border[] = {1.0f, 1.0f, 1.0f, 1.0f};
+        glTexParameterfv(GL_TEXTURE_2D, GL_TEXTURE_BORDER_COLOR, border);
+    }
 
     /* 5. 绘制 */
     glBindVertexArray(lightConeVAO);

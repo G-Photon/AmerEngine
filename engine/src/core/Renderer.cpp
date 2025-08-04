@@ -442,6 +442,9 @@ void Renderer::RenderDeferred()
     deferredLightingShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
     deferredLightingShader->SetVec3("viewPos", mainCamera->Position);
     deferredLightingShader->SetVec2("screenSize", glm::vec2(width, height));
+    
+    // 设置全局阴影开关
+    deferredLightingShader->SetBool("shadowEnabled", shadowEnabled);
 
     const int texSlots[8] = {0, 1, 2, 3, 4, 5, 6, 7};
     const char *texNames[8] = {"gPosition", "gNormal", "gAlbedo", "gSpecular", "gMetallic", "gRoughness", "gAo", "gAmbient"};
