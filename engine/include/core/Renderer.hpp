@@ -224,6 +224,10 @@ class Renderer
         return viewportBuffer->GetColorTexture(0); // 假设你有这个函数
     }
 
+    void NewScene();
+    void SaveScene(const std::string &path);
+    void LoadScene(const std::string &path);
+
   private:
     void RenderForward();
     void RenderDeferred();

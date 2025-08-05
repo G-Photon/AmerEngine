@@ -135,6 +135,11 @@ void EditorUI::SetupColors()
     colors[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.80f, 0.80f, 0.80f, 0.35f);
 }
 
+void EditorUI::Update(float deltaTime)
+{
+    UpdateNotifications(deltaTime);
+}
+
 void EditorUI::Render()
 {
     ImGui_ImplOpenGL3_NewFrame();
@@ -158,6 +163,9 @@ void EditorUI::Render()
         ShowMaterialEditor();
     if (showConsole)
         ShowConsole();
+        
+    // 绘制通知
+    DrawNotifications();
         
     ImGui::Render();
     ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -472,14 +480,38 @@ void EditorUI::ShowMainMenuBar()
     {
         if (ImGui::BeginMenu(ConvertToUTF8(L"文件").c_str()))
         {
-            if (ImGui::MenuItem(ConvertToUTF8(L"新建场景").c_str(), "Ctrl+N")) {}
-            if (ImGui::MenuItem(ConvertToUTF8(L"打开场景").c_str(), "Ctrl+O")) {}
-            if (ImGui::MenuItem(ConvertToUTF8(L"保存场景").c_str(), "Ctrl+S")) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"新建场景").c_str(), "Ctrl+N")) {
+                renderer->NewScene();
+                AddNotification(ConvertToUTF8(L"新建场景成功"), true);
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"打开场景").c_str(), "Ctrl+O")) {
+                std::string path = FileDialog::OpenFile("Open Scene", "JSON Files\0*.json\0All Files\0*.*\0");
+                if (!path.empty()) {
+                    try {
+                        renderer->LoadScene(path);
+                        AddNotification(ConvertToUTF8(L"场景加载成功: ") + std::filesystem::path(path).filename().string(), true);
+                    } catch (const std::exception& e) {
+                        AddNotification(ConvertToUTF8(L"场景加载失败: ") + e.what(), false);
+                    }
+                }
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"保存场景").c_str(), "Ctrl+S"))
+            {
+                //默认保存为json
+                std::string path = FileDialog::SaveFile("Save Scene", "JSON Files\0*.json\0All Files\0*.*\0");
+                if (!path.empty()) {
+                    try {
+                        renderer->SaveScene(path);
+                        AddNotification(ConvertToUTF8(L"场景保存成功: ") + std::filesystem::path(path).filename().string(), true);
+                    } catch (const std::exception& e) {
+                        AddNotification(ConvertToUTF8(L"场景保存失败: ") + e.what(), false);
+                    }
+                }
+            }
             ImGui::Separator();
-            if (ImGui::MenuItem(ConvertToUTF8(L"导入模型").c_str())) {}
-            if (ImGui::MenuItem(ConvertToUTF8(L"导入贴图").c_str())) {}
-            ImGui::Separator();
-            if (ImGui::MenuItem(ConvertToUTF8(L"退出").c_str(), "Alt+F4")) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"退出").c_str(), "Alt+F4")) {
+                glfwSetWindowShouldClose(window, true);
+            }
             ImGui::EndMenu();
         }
 
@@ -1481,7 +1513,7 @@ void EditorUI::ShowLightingSettings()
 void EditorUI::ShowShadowSettings()
 {
     bool shadow = renderer->IsShadowEnabled();
-    if (ImGui::Checkbox(ConvertToUTF8(L"阴影").c_str(), &shadow))
+    if (ImGui::Checkbox(ConvertToUTF8(L"阴影##ShadowSetting").c_str(), &shadow))
     {
         renderer->SetShadow(shadow);
     }
@@ -1633,5 +1665,84 @@ void EditorUI::OnLightInspectorGUI(Light &light)
             ImGui::DragFloat(ConvertToUTF8(L"阴影近平面").c_str(), &spotLight.shadowNearPlane, 0.1f, 0.1f, 10.0f);
             ImGui::DragFloat(ConvertToUTF8(L"阴影远平面").c_str(), &spotLight.shadowFarPlane, 1.0f, 10.0f, 1000.0f);
         }
+    }
+}
+
+// 通知系统实现
+void EditorUI::AddNotification(const std::string& message, bool isSuccess, float duration)
+{
+    notifications.push_back({message, duration, 0.0f, isSuccess});
+}
+
+void EditorUI::UpdateNotifications(float deltaTime)
+{
+    for (auto it = notifications.begin(); it != notifications.end();) {
+        it->timer += deltaTime;
+        if (it->timer >= it->duration) {
+            it = notifications.erase(it);
+        } else {
+            ++it;
+        }
+    }
+}
+
+void EditorUI::DrawNotifications()
+{
+    if (notifications.empty()) return;
+    
+    ImGuiIO& io = ImGui::GetIO();
+    ImVec2 displaySize = io.DisplaySize;
+    
+    float notificationWidth = 300.0f;
+    float notificationHeight = 50.0f;
+    float rightMargin = 20.0f;
+    float topMargin = 80.0f; // 留出菜单栏空间
+    
+    for (size_t i = 0; i < notifications.size(); ++i) {
+        const auto& notification = notifications[i];
+        
+        // 计算位置（从上往下排列）
+        float posX = displaySize.x - notificationWidth - rightMargin;
+        float posY = topMargin + i * (notificationHeight + 10.0f);
+        
+        // 设置窗口位置和大小
+        ImGui::SetNextWindowPos(ImVec2(posX, posY), ImGuiCond_Always);
+        ImGui::SetNextWindowSize(ImVec2(notificationWidth, notificationHeight), ImGuiCond_Always);
+        
+        // 创建无标题栏、无调整大小的窗口
+        ImGuiWindowFlags flags = ImGuiWindowFlags_NoTitleBar | ImGuiWindowFlags_NoResize | 
+                                ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoScrollbar |
+                                ImGuiWindowFlags_NoScrollWithMouse | ImGuiWindowFlags_NoCollapse;
+        
+        // 设置背景颜色
+        ImGui::PushStyleColor(ImGuiCol_WindowBg, notification.isSuccess ? 
+                             ImVec4(0.2f, 0.7f, 0.2f, 0.9f) : ImVec4(0.7f, 0.2f, 0.2f, 0.9f));
+        
+        std::string windowName = "Notification##" + std::to_string(i);
+        if (ImGui::Begin(windowName.c_str(), nullptr, flags)) {
+            // 计算淡出效果
+            float alpha = 1.0f;
+            float fadeTime = 1.0f; // 最后1秒开始淡出
+            if (notification.timer > notification.duration - fadeTime) {
+                alpha = (notification.duration - notification.timer) / fadeTime;
+            }
+            
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, alpha);
+            
+            // 居中显示文本
+            ImVec2 textSize = ImGui::CalcTextSize(notification.message.c_str());
+            ImVec2 windowSize = ImGui::GetWindowSize();
+            ImGui::SetCursorPos(ImVec2(
+                (windowSize.x - textSize.x) * 0.5f,
+                (windowSize.y - textSize.y) * 0.5f
+            ));
+            
+            ImGui::Text("%s", notification.message.c_str());
+            
+            ImGui::PopStyleVar(); // Alpha
+        }
+        ImGui::End();
+        
+        ImGui::PopStyleColor(); // WindowBg
     }
 }

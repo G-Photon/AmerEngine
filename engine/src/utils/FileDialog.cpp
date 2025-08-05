@@ -1,105 +1,69 @@
 #include "utils/FileDialog.hpp"
 #include <cstring>
+#include <string>
 #include <vector>
 
 
-// 使用 tinyfiledialogs 实现跨平台文件对话框
 #define TINYFD_NOLIB
 #include "tinyfiledialogs.h"
 
 namespace
 {
-// 将字符串过滤器转换为 tinyfiledialogs 需要的格式
-void ParseFilter(const std::string &filter, std::vector<const char *> &descriptions,
-                 std::vector<const char *> &patterns)
+// 转换过滤器格式为 tinyfiledialogs 要求的格式
+std::vector<const char *> ConvertFilter(const char *filter, std::string &firstDescription)
 {
-    if (filter.empty())
-        return;
+    std::vector<const char *> result;
+    if (!filter || *filter == '\0')
+        return result;
 
-    // 临时存储分割后的字符串
-    std::vector<std::string> tempStorage;
-
-    // 使用 '\0' 分割字符串
-    size_t start = 0;
-    size_t end = filter.find('\0');
-    bool isDescription = true;
-
-    while (end != std::string::npos)
+    const char *p = filter;
+    while (*p != '\0')
     {
-        std::string token = filter.substr(start, end - start);
-        if (!token.empty())
-        {
-            tempStorage.push_back(token);
-            if (isDescription)
-            {
-                descriptions.push_back(tempStorage.back().c_str());
-            }
-            else
-            {
-                patterns.push_back(tempStorage.back().c_str());
-            }
-        }
+        // 添加描述
+        result.push_back(p);
+        p += strlen(p) + 1;
 
-        start = end + 1;
-        end = filter.find('\0', start);
-        isDescription = !isDescription;
+        // 添加模式（Windows 需要格式如 "*.txt"）
+        result.push_back(p);
+        p += strlen(p) + 1;
     }
 
-    // 处理最后一个片段
-    if (start < filter.length())
+    // 获取第一个描述用于对话框
+    if (!result.empty())
     {
-        std::string token = filter.substr(start);
-        if (!token.empty())
-        {
-            tempStorage.push_back(token);
-            if (isDescription)
-            {
-                descriptions.push_back(tempStorage.back().c_str());
-            }
-            else
-            {
-                patterns.push_back(tempStorage.back().c_str());
-            }
-        }
+        firstDescription = result[0];
     }
 
-    // 确保描述和模式数量匹配
-    if (descriptions.size() > patterns.size())
-    {
-        descriptions.pop_back();
-    }
+    return result;
 }
 } // namespace
 
-std::string FileDialog::OpenFile(const std::string &title, const std::string &filter)
+std::string FileDialog::OpenFile(const std::string &title, const char *filter)
 {
-    std::vector<const char *> descriptions;
-    std::vector<const char *> patterns;
-    ParseFilter(filter, descriptions, patterns);
+    std::string firstDescription;
+    std::vector<const char *> filterItems = ConvertFilter(filter, firstDescription);
 
-    const char *result = tinyfd_openFileDialog(title.c_str(),                                       // 对话框标题
-                                               nullptr,                                             // 初始路径
-                                               static_cast<int>(patterns.size()),                   // 过滤器数量
-                                               patterns.data(),                                     // 过滤模式数组
-                                               descriptions.size() > 0 ? descriptions[0] : nullptr, // 默认过滤器描述
-                                               0                                                    // 单选模式
-    );
+    
+    const char **filterPatterns = filterItems.empty() ? nullptr : filterItems.data();
+    int numFilterPatterns = static_cast<int>(filterItems.size() / 2);
+
+    const char *result = tinyfd_openFileDialog(title.c_str(), nullptr, numFilterPatterns, filterPatterns,
+                                               firstDescription.empty() ? nullptr : firstDescription.c_str(), 0);
 
     return result ? std::string(result) : "";
 }
 
-std::string FileDialog::SaveFile(const std::string &title, const std::string &filter)
+std::string FileDialog::SaveFile(const std::string &title, const char *filter)
 {
-    std::vector<const char *> descriptions;
-    std::vector<const char *> patterns;
-    ParseFilter(filter, descriptions, patterns);
+    std::string firstDescription;
+    std::vector<const char *> filterItems = ConvertFilter(filter, firstDescription);
 
-    const char *result = tinyfd_saveFileDialog(title.c_str(),                                      // 对话框标题
-                                               nullptr,                                            // 初始路径
-                                               static_cast<int>(patterns.size()),                  // 过滤器数量
-                                               patterns.data(),                                    // 过滤模式数组
-                                               descriptions.size() > 0 ? descriptions[0] : nullptr // 默认过滤器描述
-    );
+    
+    const char **filterPatterns = filterItems.empty() ? nullptr : filterItems.data();
+    int numFilterPatterns = static_cast<int>(filterItems.size() / 2);
+
+    const char *result = tinyfd_saveFileDialog(title.c_str(), nullptr, numFilterPatterns, filterPatterns,
+                                               firstDescription.empty() ? nullptr : firstDescription.c_str());
 
     return result ? std::string(result) : "";
 }

@@ -1,17 +1,591 @@
+// 核心渲染器定义
 #include "core/Renderer.hpp"
-#include "core/Camera.hpp"
-#include "core/Framebuffer.hpp"
-#include "core/Geometry.hpp"
-#include "core/Light.hpp"
-#include "core/Shader.hpp"
-#include "core/Texture.hpp"
-#include "utils/FileSystem.hpp"
+// 序列化
+#include <fstream>
+#include <nlohmann/json.hpp>
+using json = nlohmann::json;
+// 日志与随机
 #include <iostream>
 #include <random>
+// 文件系统辅助
+#include "utils/FileSystem.hpp"
+// 纹理类型
+#include "core/Texture.hpp"
+// 数学运算
 #include "glm/gtc/quaternion.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+// 新建场景：清空所有模型、光源、几何体等
+void Renderer::NewScene()
+{
+    models.clear();
+    pointLights.clear();
+    directionalLights.clear();
+    spotLights.clear();
+    primitives.clear();
+    // 可根据需要重置相机等
+}
+
+void Renderer::SaveScene(const std::string& path)
+{
+    json j;
+    
+    // 保存场景基本信息
+    j["sceneInfo"] = {
+        {"name", "Scene"},
+        {"version", "1.0"},
+        {"createdTime", std::time(nullptr)}
+    };
+    
+    // 保存模型
+    j["models"] = json::array();
+    for (const auto& model : models) {
+        j["models"].push_back({
+            {"name", model->GetName()},
+            {"path", model->GetPath()},
+            {"position", {model->GetPosition().x, model->GetPosition().y, model->GetPosition().z}},
+            {"rotation", {model->GetRotation().x, model->GetRotation().y, model->GetRotation().z}},
+            {"scale", {model->GetScale().x, model->GetScale().y, model->GetScale().z}}
+        });
+    }
+    
+    // 保存点光源
+    j["pointLights"] = json::array();
+    for (const auto& light : pointLights) {
+        j["pointLights"].push_back({
+            {"position", {light->position.x, light->position.y, light->position.z}},
+            {"diffuse", {light->diffuse.r, light->diffuse.g, light->diffuse.b}},
+            {"specular", {light->specular.r, light->specular.g, light->specular.b}},
+            {"ambient", {light->ambient.r, light->ambient.g, light->ambient.b}},
+            {"intensity", light->intensity},
+            {"constant", light->constant},
+            {"linear", light->linear},
+            {"quadratic", light->quadratic},
+            {"shadowEnabled", light->HasShadows()}
+        });
+    }
+    
+    // 保存定向光源
+    j["directionalLights"] = json::array();
+    for (const auto& light : directionalLights) {
+        j["directionalLights"].push_back({
+            {"direction", {light->direction.x, light->direction.y, light->direction.z}},
+            {"diffuse", {light->diffuse.r, light->diffuse.g, light->diffuse.b}},
+            {"specular", {light->specular.r, light->specular.g, light->specular.b}},
+            {"ambient", {light->ambient.r, light->ambient.g, light->ambient.b}},
+            {"intensity", light->intensity},
+            {"shadowEnabled", light->HasShadows()}
+        });
+    }
+    
+    // 保存聚光灯
+    j["spotLights"] = json::array();
+    for (const auto& light : spotLights) {
+        j["spotLights"].push_back({
+            {"position", {light->position.x, light->position.y, light->position.z}},
+            {"direction", {light->direction.x, light->direction.y, light->direction.z}},
+            {"diffuse", {light->diffuse.r, light->diffuse.g, light->diffuse.b}},
+            {"specular", {light->specular.r, light->specular.g, light->specular.b}},
+            {"ambient", {light->ambient.r, light->ambient.g, light->ambient.b}},
+            {"intensity", light->intensity},
+            {"constant", light->constant},
+            {"linear", light->linear},
+            {"quadratic", light->quadratic},
+            {"cutOff", light->cutOff},
+            {"outerCutOff", light->outerCutOff},
+            {"shadowEnabled", light->HasShadows()}
+        });
+    }
+    
+    // 保存几何体
+    j["primitives"] = json::array();
+    for (const auto& primitive : primitives) {
+        json primitiveJson = {
+            {"type", static_cast<int>(primitive.type)},
+            {"position", {primitive.position.x, primitive.position.y, primitive.position.z}},
+            {"rotation", {primitive.rotation.x, primitive.rotation.y, primitive.rotation.z}},
+            {"scale", {primitive.scale.x, primitive.scale.y, primitive.scale.z}},
+            {"material", {
+                {"type", static_cast<int>(primitive.mesh->GetMaterial()->type)},
+                {"diffuse", {primitive.mesh->GetMaterial()->diffuse.r, primitive.mesh->GetMaterial()->diffuse.g, primitive.mesh->GetMaterial()->diffuse.b}},
+                {"specular", {primitive.mesh->GetMaterial()->specular.r, primitive.mesh->GetMaterial()->specular.g, primitive.mesh->GetMaterial()->specular.b}},
+                {"shininess", primitive.mesh->GetMaterial()->shininess},
+                {"useDiffuseMap", primitive.mesh->GetMaterial()->useDiffuseMap},
+                {"useSpecularMap", primitive.mesh->GetMaterial()->useSpecularMap},
+                {"useNormalMap", primitive.mesh->GetMaterial()->useNormalMap},
+                {"diffuseMapPath", primitive.mesh->GetMaterial()->diffuseMap ? primitive.mesh->GetMaterial()->diffuseMap->GetPath() : ""},
+                {"specularMapPath", primitive.mesh->GetMaterial()->specularMap ? primitive.mesh->GetMaterial()->specularMap->GetPath() : ""},
+                {"normalMapPath", primitive.mesh->GetMaterial()->normalMap ? primitive.mesh->GetMaterial()->normalMap->GetPath() : ""}
+            }}
+        };
+        
+        // 保存几何体参数
+        switch (primitive.type) {
+            case Geometry::SPHERE:
+                primitiveJson["params"] = {
+                    {"radius", primitive.params.sphere.radius},
+                    {"segments", primitive.params.sphere.segments}
+                };
+                break;
+            case Geometry::CUBE:
+                primitiveJson["params"] = {
+                    {"width", primitive.params.cube.width},
+                    {"height", primitive.params.cube.height},
+                    {"depth", primitive.params.cube.depth}
+                };
+                break;
+            case Geometry::CYLINDER:
+                primitiveJson["params"] = {
+                    {"radius", primitive.params.cylinder.radius},
+                    {"height", primitive.params.cylinder.height},
+                    {"segments", primitive.params.cylinder.segments}
+                };
+                break;
+            case Geometry::CONE:
+                primitiveJson["params"] = {
+                    {"radius", primitive.params.cone.radius},
+                    {"height", primitive.params.cone.height},
+                    {"segments", primitive.params.cone.segments}
+                };
+                break;
+            case Geometry::PRISM:
+                primitiveJson["params"] = {
+                    {"sides", primitive.params.prism.sides},
+                    {"radius", primitive.params.prism.radius},
+                    {"height", primitive.params.prism.height}
+                };
+                break;
+            case Geometry::PYRAMID:
+                primitiveJson["params"] = {
+                    {"sides", primitive.params.pyramid.sides},
+                    {"radius", primitive.params.pyramid.radius},
+                    {"height", primitive.params.pyramid.height}
+                };
+                break;
+            case Geometry::TORUS:
+                primitiveJson["params"] = {
+                    {"majorRadius", primitive.params.torus.majorRadius},
+                    {"minorRadius", primitive.params.torus.minorRadius},
+                    {"majorSegments", primitive.params.torus.majorSegments},
+                    {"minorSegments", primitive.params.torus.minorSegments}
+                };
+                break;
+            case Geometry::ELLIPSOID:
+                primitiveJson["params"] = {
+                    {"radiusX", primitive.params.ellipsoid.radiusX},
+                    {"radiusY", primitive.params.ellipsoid.radiusY},
+                    {"radiusZ", primitive.params.ellipsoid.radiusZ},
+                    {"segments", primitive.params.ellipsoid.segments}
+                };
+                break;
+            case Geometry::FRUSTUM:
+                primitiveJson["params"] = {
+                    {"radiusTop", primitive.params.frustum.radiusTop},
+                    {"radiusBottom", primitive.params.frustum.radiusBottom},
+                    {"height", primitive.params.frustum.height},
+                    {"segments", primitive.params.frustum.segments}
+                };
+                break;
+            case Geometry::ARROW:
+                primitiveJson["params"] = {
+                    {"length", primitive.params.arrow.length},
+                    {"headSize", primitive.params.arrow.headSize}
+                };
+                break;
+            default:
+                // 未知类型，使用默认参数
+                primitiveJson["params"] = {};
+                break;
+        }
+        
+        j["primitives"].push_back(primitiveJson);
+    }
+    
+    // 保存相机状态
+    if (mainCamera) {
+        j["camera"] = {
+            {"position", {mainCamera->Position.x, mainCamera->Position.y, mainCamera->Position.z}},
+            {"front", {mainCamera->Front.x, mainCamera->Front.y, mainCamera->Front.z}},
+            {"up", {mainCamera->Up.x, mainCamera->Up.y, mainCamera->Up.z}},
+            {"yaw", mainCamera->Yaw},
+            {"pitch", mainCamera->Pitch},
+            {"fov", mainCamera->Zoom},
+            {"movementSpeed", mainCamera->MovementSpeed},
+            {"mouseSensitivity", mainCamera->MouseSensitivity}
+        };
+    }
+    
+    // 保存渲染设置
+    j["renderSettings"] = {
+        {"renderMode", static_cast<int>(currentMode)},
+        {"shadowEnabled", shadowEnabled},
+        {"hdrEnabled", hdrEnabled},
+        {"bloomEnabled", bloomEnabled},
+        {"ssaoEnabled", ssaoEnabled},
+        {"msaaEnabled", msaaEnabled},
+        {"fxaaEnabled", fxaaEnabled},
+        {"gammaCorrection", gammaCorrection},
+        {"pbrEnabled", pbrEnabled},
+        {"iblEnabled", iblEnabled},
+        {"showLights", showLights}
+    };
+    
+    std::ofstream ofs(path);
+    if (ofs.is_open()) {
+        ofs << j.dump(4);
+        std::cout << "场景已保存到: " << path << std::endl;
+    } else {
+        std::cerr << "无法保存场景文件: " << path << std::endl;
+    }
+}
+
+#include <ctime>
+
+// 从文件加载场景
+void Renderer::LoadScene(const std::string& path)
+{
+    std::ifstream ifs(path);
+    if (!ifs.is_open()) {
+        std::cerr << "无法打开场景文件: " << path << std::endl;
+        return;
+    }
+    
+    json j;
+    try {
+        ifs >> j;
+    } catch (const json::exception& e) {
+        std::cerr << "场景文件格式错误: " << e.what() << std::endl;
+        return;
+    }
+    
+    NewScene(); // 清空当前场景
+    
+    // 加载模型
+    if (j.contains("models")) {
+        for (const auto& m : j["models"]) {
+            try {
+                auto model = std::make_shared<Model>(m["path"].get<std::string>());
+                if (m.contains("name")) {
+                    model->SetName(m["name"].get<std::string>());
+                }
+                auto pos = m["position"];
+                auto rot = m["rotation"];
+                auto scl = m["scale"];
+                model->SetTransform(
+                    glm::vec3(pos[0], pos[1], pos[2]),
+                    glm::vec3(rot[0], rot[1], rot[2]),
+                    glm::vec3(scl[0], scl[1], scl[2])
+                );
+                models.push_back(model);
+            } catch (const std::exception& e) {
+                std::cerr << "加载模型失败: " << e.what() << std::endl;
+            }
+        }
+    }
+    
+    // 加载点光源
+    if (j.contains("pointLights")) {
+        for (const auto& l : j["pointLights"]) {
+            try {
+                auto light = std::make_shared<PointLight>();
+                if (l.contains("position")) {
+                    auto v = l["position"];
+                    light->position = {v[0], v[1], v[2]};
+                }
+                if (l.contains("diffuse")) {
+                    auto c = l["diffuse"];
+                    light->diffuse = {c[0], c[1], c[2]};
+                }
+                if (l.contains("specular")) {
+                    auto c = l["specular"];
+                    light->specular = {c[0], c[1], c[2]};
+                }
+                if (l.contains("ambient")) {
+                    auto c = l["ambient"];
+                    light->ambient = {c[0], c[1], c[2]};
+                }
+                if (l.contains("intensity")) light->intensity = l["intensity"];
+                if (l.contains("constant")) light->constant = l["constant"];
+                if (l.contains("linear")) light->linear = l["linear"];
+                if (l.contains("quadratic")) light->quadratic = l["quadratic"];
+                if (l.contains("shadowEnabled") && l["shadowEnabled"].get<bool>()) {
+                    light->SetShadowEnabled(true);
+                }
+                pointLights.push_back(light);
+            } catch (const std::exception& e) {
+                std::cerr << "加载点光源失败: " << e.what() << std::endl;
+            }
+        }
+    }
+    
+    // 加载定向光源
+    if (j.contains("directionalLights")) {
+        for (const auto& l : j["directionalLights"]) {
+            try {
+                auto light = std::make_shared<DirectionalLight>();
+                if (l.contains("direction")) {
+                    auto d = l["direction"];
+                    light->direction = {d[0], d[1], d[2]};
+                }
+                if (l.contains("diffuse")) {
+                    auto c = l["diffuse"];
+                    light->diffuse = {c[0], c[1], c[2]};
+                }
+                if (l.contains("specular")) {
+                    auto c = l["specular"];
+                    light->specular = {c[0], c[1], c[2]};
+                }
+                if (l.contains("ambient")) {
+                    auto c = l["ambient"];
+                    light->ambient = {c[0], c[1], c[2]};
+                }
+                if (l.contains("intensity")) light->intensity = l["intensity"];
+                if (l.contains("shadowEnabled") && l["shadowEnabled"].get<bool>()) {
+                    light->SetShadowEnabled(true);
+                }
+                directionalLights.push_back(light);
+            } catch (const std::exception& e) {
+                std::cerr << "加载定向光源失败: " << e.what() << std::endl;
+            }
+        }
+    }
+    
+    // 加载聚光灯
+    if (j.contains("spotLights")) {
+        for (const auto& l : j["spotLights"]) {
+            try {
+                auto light = std::make_shared<SpotLight>();
+                if (l.contains("position")) {
+                    auto p = l["position"];
+                    light->position = {p[0], p[1], p[2]};
+                }
+                if (l.contains("direction")) {
+                    auto d = l["direction"];
+                    light->direction = {d[0], d[1], d[2]};
+                }
+                if (l.contains("diffuse")) {
+                    auto c = l["diffuse"];
+                    light->diffuse = {c[0], c[1], c[2]};
+                }
+                if (l.contains("specular")) {
+                    auto c = l["specular"];
+                    light->specular = {c[0], c[1], c[2]};
+                }
+                if (l.contains("ambient")) {
+                    auto c = l["ambient"];
+                    light->ambient = {c[0], c[1], c[2]};
+                }
+                if (l.contains("intensity")) light->intensity = l["intensity"];
+                if (l.contains("constant")) light->constant = l["constant"];
+                if (l.contains("linear")) light->linear = l["linear"];
+                if (l.contains("quadratic")) light->quadratic = l["quadratic"];
+                if (l.contains("cutOff")) light->cutOff = l["cutOff"];
+                if (l.contains("outerCutOff")) light->outerCutOff = l["outerCutOff"];
+                if (l.contains("shadowEnabled") && l["shadowEnabled"].get<bool>()) {
+                    light->SetShadowEnabled(true);
+                }
+                spotLights.push_back(light);
+            } catch (const std::exception& e) {
+                std::cerr << "加载聚光灯失败: " << e.what() << std::endl;
+            }
+        }
+    }
+    
+    // 加载几何体
+    if (j.contains("primitives")) {
+        for (const auto& p : j["primitives"]) {
+            try {
+                Geometry::Type type = static_cast<Geometry::Type>(p["type"].get<int>());
+                auto pos = p["position"];
+                auto rot = p["rotation"];
+                auto scl = p["scale"];
+                
+                glm::vec3 position(pos[0], pos[1], pos[2]);
+                glm::vec3 rotation(rot[0], rot[1], rot[2]);
+                glm::vec3 scale(scl[0], scl[1], scl[2]);
+                
+                // 创建默认材质
+                Material defaultMaterial;
+                if (p.contains("material")) {
+                    const auto& mat = p["material"];
+                    if (mat.contains("type"))
+                        defaultMaterial.type = static_cast<MaterialType>(mat["type"].get<int>());
+                    if (mat.contains("diffuse")) {
+                        auto c = mat["diffuse"];
+                        defaultMaterial.diffuse = {c[0], c[1], c[2]};
+                    }
+                    if (mat.contains("specular")) {
+                        auto c = mat["specular"];
+                        defaultMaterial.specular = {c[0], c[1], c[2]};
+                    }
+                    if (mat.contains("shininess")) defaultMaterial.shininess = mat["shininess"];
+                    if (mat.contains("useDiffuseMap")) defaultMaterial.useDiffuseMap = mat["useDiffuseMap"];
+                    if (mat.contains("useSpecularMap")) defaultMaterial.useSpecularMap = mat["useSpecularMap"];
+                    if (mat.contains("useNormalMap")) defaultMaterial.useNormalMap = mat["useNormalMap"];
+                    if (mat.contains("diffuseMapPath") && !mat["diffuseMapPath"].get<std::string>().empty())
+                    {
+                        defaultMaterial.diffuseMap = std::make_shared<Texture>(mat["diffuseMapPath"].get<std::string>());
+                    }
+                    if (mat.contains("specularMapPath") && !mat["specularMapPath"].get<std::string>().empty()) {
+                        defaultMaterial.specularMap = std::make_shared<Texture>(mat["specularMapPath"].get<std::string>());
+                    }
+                    if (mat.contains("normalMapPath") && !mat["normalMapPath"].get<std::string>().empty()) {
+                        defaultMaterial.normalMap = std::make_shared<Texture>(mat["normalMapPath"].get<std::string>());
+                    }
+                }
+                
+                // 根据参数创建几何体
+                if (p.contains("params")) {
+                    const auto& params = p["params"];
+                    switch (type) {
+                        case Geometry::SPHERE: {
+                            float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
+                            int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::CUBE: {
+                            float width = params.contains("width") ? params["width"].get<float>() : 1.0f;
+                            float height = params.contains("height") ? params["height"].get<float>() : 1.0f;
+                            float depth = params.contains("depth") ? params["depth"].get<float>() : 1.0f;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数
+                            break;
+                        }
+                        case Geometry::CYLINDER: {
+                            float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
+                            float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
+                            int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::CONE: {
+                            float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
+                            float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
+                            int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::PRISM: {
+                            int sides = params.contains("sides") ? params["sides"].get<int>() : 3;
+                            float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
+                            float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::PYRAMID: {
+                            int sides = params.contains("sides") ? params["sides"].get<int>() : 4;
+                            float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
+                            float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::TORUS: {
+                            float majorRadius = params.contains("majorRadius") ? params["majorRadius"].get<float>() : 1.0f;
+                            float minorRadius = params.contains("minorRadius") ? params["minorRadius"].get<float>() : 0.3f;
+                            int majorSegments = params.contains("majorSegments") ? params["majorSegments"].get<int>() : 16;
+                            int minorSegments = params.contains("minorSegments") ? params["minorSegments"].get<int>() : 12;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::ELLIPSOID: {
+                            float radiusX = params.contains("radiusX") ? params["radiusX"].get<float>() : 1.0f;
+                            float radiusY = params.contains("radiusY") ? params["radiusY"].get<float>() : 1.0f;
+                            float radiusZ = params.contains("radiusZ") ? params["radiusZ"].get<float>() : 1.0f;
+                            int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::FRUSTUM: {
+                            float radiusTop = params.contains("radiusTop") ? params["radiusTop"].get<float>() : 0.5f;
+                            float radiusBottom = params.contains("radiusBottom") ? params["radiusBottom"].get<float>() : 1.0f;
+                            float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
+                            int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        case Geometry::ARROW: {
+                            float length = params.contains("length") ? params["length"].get<float>() : 1.0f;
+                            float headSize = params.contains("headSize") ? params["headSize"].get<float>() : 0.2f;
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            // 更新参数（这里需要根据实际API调整）
+                            break;
+                        }
+                        // 其他几何体类型类似处理...
+                        default:
+                            CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                            break;
+                    }
+                } else {
+                    CreatePrimitive(type, position, scale, rotation, defaultMaterial);
+                }
+            } catch (const std::exception& e) {
+                std::cerr << "加载几何体失败: " << e.what() << std::endl;
+            }
+        }
+    }
+    
+    // 加载相机状态
+    if (j.contains("camera") && mainCamera) {
+        try {
+            const auto& cam = j["camera"];
+            if (cam.contains("position")) {
+                auto p = cam["position"];
+                mainCamera->Position = glm::vec3(p[0], p[1], p[2]);
+            }
+            if (cam.contains("front")) {
+                auto f = cam["front"];
+                mainCamera->Front = glm::vec3(f[0], f[1], f[2]);
+            }
+            if (cam.contains("up")) {
+                auto u = cam["up"];
+                mainCamera->Up = glm::vec3(u[0], u[1], u[2]);
+            }
+            if (cam.contains("yaw")) mainCamera->Yaw = cam["yaw"];
+            if (cam.contains("pitch")) mainCamera->Pitch = cam["pitch"];
+            if (cam.contains("fov")) mainCamera->Zoom = cam["fov"];
+            if (cam.contains("movementSpeed")) mainCamera->MovementSpeed = cam["movementSpeed"];
+            if (cam.contains("mouseSensitivity")) mainCamera->MouseSensitivity = cam["mouseSensitivity"];
+        } catch (const std::exception& e) {
+            std::cerr << "加载相机状态失败: " << e.what() << std::endl;
+        }
+    }
+    
+    // 加载渲染设置
+    if (j.contains("renderSettings")) {
+        try {
+            const auto& settings = j["renderSettings"];
+            if (settings.contains("renderMode")) {
+                SetRenderMode(static_cast<RenderMode>(settings["renderMode"].get<int>()));
+            }
+            if (settings.contains("shadowEnabled")) SetShadow(settings["shadowEnabled"]);
+            if (settings.contains("hdrEnabled")) SetHDR(settings["hdrEnabled"]);
+            if (settings.contains("bloomEnabled")) SetBloom(settings["bloomEnabled"]);
+            if (settings.contains("ssaoEnabled")) SetSSAO(settings["ssaoEnabled"]);
+            if (settings.contains("msaaEnabled")) {
+                SetMSAA(settings["msaaEnabled"], 4); // 默认4倍采样
+            }
+            if (settings.contains("fxaaEnabled")) fxaaEnabled = settings["fxaaEnabled"];
+            if (settings.contains("gammaCorrection")) SetGammaCorrection(settings["gammaCorrection"]);
+            if (settings.contains("pbrEnabled")) SetPBR(settings["pbrEnabled"]);
+            if (settings.contains("iblEnabled")) SetIBL(settings["iblEnabled"]);
+            if (settings.contains("showLights")) showLights = settings["showLights"];
+        } catch (const std::exception& e) {
+            std::cerr << "加载渲染设置失败: " << e.what() << std::endl;
+        }
+    }
+    
+    std::cout << "场景已加载: " << path << std::endl;
+}
 
 Renderer::Renderer(int width, int height) : width(width), height(height)
 {

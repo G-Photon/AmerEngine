@@ -54,6 +54,7 @@ public:
     ~EditorUI();
 
     void Initialize();
+    void Update(float deltaTime);
     void BeginFrame();
     void Render();
     void EndFrame();
@@ -144,6 +145,19 @@ private:
     
     // 控制台日志
     std::vector<std::string> consoleLog;
+    
+    // 场景操作状态通知
+    struct Notification {
+        std::string message;
+        float duration;
+        float timer;
+        bool isSuccess;
+    };
+    std::vector<Notification> notifications;
+    
+    void AddNotification(const std::string& message, bool isSuccess = true, float duration = 3.0f);
+    void UpdateNotifications(float deltaTime);
+    void DrawNotifications();
     
     // 样式常量
     static constexpr float BUTTON_HEIGHT = 25.0f;

@@ -11,7 +11,7 @@ class Texture
   public:
     Texture();
     ~Texture();
-
+    explicit Texture(const std::string &filePath){ LoadFromFile(filePath); }
     bool LoadFromFile(const std::string &filepath);
     void Generate(unsigned int width, unsigned int height, unsigned char *data);
     void Bind(unsigned int unit = 0) const;

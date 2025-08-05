@@ -3,10 +3,13 @@
 #include <assimp/postprocess.h>
 #include <assimp/scene.h>
 #include <iostream>
+#include <filesystem>
 
 Model::Model(const std::string &path)
 {
     LoadModel(path);
+    this->path = path; // 保存模型文件路径
+    name = this->path.substr(this->path.find_last_of("/\\") + 1);
 }
 
 void Model::Draw(Shader &shader)
@@ -30,12 +33,8 @@ void Model::LoadModel(const std::string &path)
         return;
     }
 
-    // WINDOWS端为'\'，其他平台为'/'
-    #ifdef _WIN32
-    directory = path.substr(0, path.find_last_of('\\'));
-    #else
-    directory = path.substr(0, path.find_last_of('/'));
-    #endif
+    // 第一个\\或者/
+    directory = path.substr(0, path.find_last_of("\\/"));
     ProcessNode(scene->mRootNode, scene);
 }
 
@@ -242,10 +241,15 @@ std::vector<std::shared_ptr<Texture>> Model::LoadMaterialTextures(aiMaterial *ma
         std::string filename = std::string(str.C_Str());
         filename = directory + '/' + filename;
 
-
 #ifdef _WIN32
         std::replace(filename.begin(), filename.end(), '\\', '/'); // 替换Windows路径分隔符
 #endif
+
+        // Check if the file exists
+        if (!std::filesystem::exists(filename)) {
+            std::cerr << "ERROR: Texture file does not exist at path: " << filename << std::endl;
+            continue;
+        }
         
         bool skip = false;
         for (auto &tex : texturesLoaded)

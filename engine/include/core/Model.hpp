@@ -30,6 +30,11 @@ class Model
         scale = scl;
     }
 
+    void SetName(const std::string &newName)
+    {
+        name = newName;
+    }
+    
     glm::vec3 GetPosition() const
     {
         return position;
@@ -41,6 +46,10 @@ class Model
     glm::vec3 GetScale() const
     {
         return scale;
+    }
+    const std::string &GetPath() const
+    {
+        return path;
     }
 
   private:
@@ -60,4 +69,5 @@ class Model
     glm::vec3 scale = glm::vec3(1.0f);
 
     std::string name = "Model";
+    std::string path; // 模型文件路径
 };

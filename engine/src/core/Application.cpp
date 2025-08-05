@@ -157,6 +157,7 @@ void Application::ProcessInput(float deltaTime)
 void Application::Update(float deltaTime)
 {
     renderer->Update(deltaTime);
+    editorUI->Update(deltaTime);
 }
 
 void Application::Render()
