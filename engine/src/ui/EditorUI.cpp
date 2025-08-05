@@ -597,7 +597,7 @@ void EditorUI::ShowModelCreationDialog()
         if (ImGui::Button(ConvertToUTF8(L"浏览").c_str()))
         {
             std::string modelPath =
-                FileDialog::OpenFile(ConvertToUTF8(L"选择模型文件").c_str(), "Model Files\0*.obj;*.fbx;*.gltf;*.glb\0");
+                FileDialog::OpenFile(ConvertToUTF8(L"选择模型文件").c_str(), "Model Files\0*.obj;*.fbx;*.gltf;*.glb;*.pmx\0");
             if (!modelPath.empty())
             {
                 // 这里可以处理模型路径

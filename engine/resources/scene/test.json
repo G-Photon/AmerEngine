@@ -1,0 +1,370 @@
+{
+    "camera": {
+        "fov": 41.0,
+        "front": [
+            -0.4321705102920532,
+            -0.11840402334928513,
+            -0.8939849734306335
+        ],
+        "mouseSensitivity": 0.10000000149011612,
+        "movementSpeed": 5.0,
+        "pitch": -6.8000030517578125,
+        "position": [
+            5.184609413146973,
+            14.71408462524414,
+            13.968605995178223
+        ],
+        "up": [
+            -0.05153324082493782,
+            0.9929655194282532,
+            -0.1066013053059578
+        ],
+        "yaw": -115.80006408691406
+    },
+    "directionalLights": [
+        {
+            "ambient": [
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
+            ],
+            "diffuse": [
+                1.0,
+                1.0,
+                1.0
+            ],
+            "direction": [
+                -0.40824827551841736,
+                -0.8164965510368347,
+                -0.40824827551841736
+            ],
+            "intensity": 1.0,
+            "shadowEnabled": true,
+            "specular": [
+                1.0,
+                1.0,
+                1.0
+            ]
+        }
+    ],
+    "models": [
+        {
+            "name": "nanosuit.obj",
+            "path": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\nanosuit_reflection\\nanosuit.obj",
+            "position": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "scale": [
+                1.0,
+                1.0,
+                1.0
+            ]
+        }
+    ],
+    "pointLights": [
+        {
+            "ambient": [
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
+            ],
+            "constant": 1.0,
+            "diffuse": [
+                0.5,
+                0.5,
+                1.0
+            ],
+            "intensity": 0.5,
+            "linear": 0.09000000357627869,
+            "position": [
+                0.0,
+                3.0,
+                0.0
+            ],
+            "quadratic": 0.03200000151991844,
+            "shadowEnabled": true,
+            "specular": [
+                1.0,
+                1.0,
+                1.0
+            ]
+        }
+    ],
+    "primitives": [
+        {
+            "material": {
+                "diffuse": [
+                    0.800000011920929,
+                    0.800000011920929,
+                    0.800000011920929
+                ],
+                "diffuseMapPath": "",
+                "normalMapPath": "",
+                "shininess": 32.0,
+                "specular": [
+                    0.10000000149011612,
+                    0.10000000149011612,
+                    0.10000000149011612
+                ],
+                "specularMapPath": "",
+                "type": 0,
+                "useDiffuseMap": false,
+                "useNormalMap": false,
+                "useSpecularMap": false
+            },
+            "params": {
+                "depth": 1.0,
+                "height": 1.0,
+                "width": 1.0
+            },
+            "position": [
+                0.0,
+                -2.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "scale": [
+                10.0,
+                0.10000000149011612,
+                10.0
+            ],
+            "type": 1
+        },
+        {
+            "material": {
+                "diffuse": [
+                    0.800000011920929,
+                    0.20000000298023224,
+                    0.20000000298023224
+                ],
+                "diffuseMapPath": "",
+                "normalMapPath": "",
+                "shininess": 64.0,
+                "specular": [
+                    0.5,
+                    0.5,
+                    0.5
+                ],
+                "specularMapPath": "",
+                "type": 0,
+                "useDiffuseMap": false,
+                "useNormalMap": false,
+                "useSpecularMap": false
+            },
+            "params": {
+                "depth": 1.0,
+                "height": 1.0,
+                "width": 1.0
+            },
+            "position": [
+                -2.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "scale": [
+                1.0,
+                2.0,
+                1.0
+            ],
+            "type": 1
+        },
+        {
+            "material": {
+                "diffuse": [
+                    0.20000000298023224,
+                    0.20000000298023224,
+                    0.800000011920929
+                ],
+                "diffuseMapPath": "",
+                "normalMapPath": "",
+                "shininess": 64.0,
+                "specular": [
+                    0.5,
+                    0.5,
+                    0.5
+                ],
+                "specularMapPath": "",
+                "type": 0,
+                "useDiffuseMap": false,
+                "useNormalMap": false,
+                "useSpecularMap": false
+            },
+            "params": {
+                "depth": 1.0,
+                "height": 1.0,
+                "width": 1.0
+            },
+            "position": [
+                2.0,
+                0.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "scale": [
+                1.0,
+                2.0,
+                1.0
+            ],
+            "type": 1
+        },
+        {
+            "material": {
+                "diffuse": [
+                    0.20000000298023224,
+                    0.800000011920929,
+                    0.20000000298023224
+                ],
+                "diffuseMapPath": "",
+                "normalMapPath": "",
+                "shininess": 64.0,
+                "specular": [
+                    0.5,
+                    0.5,
+                    0.5
+                ],
+                "specularMapPath": "",
+                "type": 0,
+                "useDiffuseMap": false,
+                "useNormalMap": false,
+                "useSpecularMap": false
+            },
+            "params": {
+                "depth": 1.0,
+                "height": 1.0,
+                "width": 1.0
+            },
+            "position": [
+                0.0,
+                0.0,
+                -2.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "scale": [
+                1.0,
+                2.0,
+                1.0
+            ],
+            "type": 1
+        },
+        {
+            "material": {
+                "diffuse": [
+                    0.800000011920929,
+                    0.800000011920929,
+                    0.20000000298023224
+                ],
+                "diffuseMapPath": "",
+                "normalMapPath": "",
+                "shininess": 128.0,
+                "specular": [
+                    0.800000011920929,
+                    0.800000011920929,
+                    0.800000011920929
+                ],
+                "specularMapPath": "",
+                "type": 0,
+                "useDiffuseMap": false,
+                "useNormalMap": false,
+                "useSpecularMap": false
+            },
+            "params": {
+                "radius": 1.0,
+                "segments": 16
+            },
+            "position": [
+                0.0,
+                1.0,
+                0.0
+            ],
+            "rotation": [
+                0.0,
+                0.0,
+                0.0
+            ],
+            "scale": [
+                0.5,
+                0.5,
+                0.5
+            ],
+            "type": 0
+        }
+    ],
+    "renderSettings": {
+        "bloomEnabled": true,
+        "fxaaEnabled": false,
+        "gammaCorrection": true,
+        "hdrEnabled": true,
+        "iblEnabled": true,
+        "msaaEnabled": false,
+        "pbrEnabled": false,
+        "renderMode": 1,
+        "shadowEnabled": true,
+        "showLights": false,
+        "ssaoEnabled": true
+    },
+    "sceneInfo": {
+        "createdTime": 1754374668,
+        "name": "Scene",
+        "version": "1.0"
+    },
+    "spotLights": [
+        {
+            "ambient": [
+                0.05000000074505806,
+                0.05000000074505806,
+                0.05000000074505806
+            ],
+            "constant": 1.0,
+            "cutOff": 0.9063077569007874,
+            "diffuse": [
+                1.0,
+                0.800000011920929,
+                0.6000000238418579
+            ],
+            "direction": [
+                -0.40824833512306213,
+                -0.8164966702461243,
+                -0.40824833512306213
+            ],
+            "intensity": 0.800000011920929,
+            "linear": 0.09000000357627869,
+            "outerCutOff": 0.8191520571708679,
+            "position": [
+                2.0,
+                4.0,
+                2.0
+            ],
+            "quadratic": 0.03200000151991844,
+            "shadowEnabled": true,
+            "specular": [
+                1.0,
+                1.0,
+                1.0
+            ]
+        }
+    ]
+}
