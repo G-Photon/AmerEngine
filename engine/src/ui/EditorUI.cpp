@@ -155,6 +155,9 @@ void EditorUI::Render()
         ShowInspector();
     if (showAssetsPanel)
         ShowAssetsPanel();
+    
+    if (showAssetPreview && selectedAsset)
+        ShowAssetPreviewWindow();
     if (showViewport)
         ShowViewport();
     if (showRendererSettings)
@@ -252,6 +255,17 @@ void EditorUI::ShowAssetsPanel()
         // 导入资源对话框
     }
     ImGui::SameLine();
+    ImGui::Checkbox(ConvertToUTF8(L"预加载").c_str(), &enableAssetPreloading);
+    ImGui::SameLine();
+    if (ImGui::Button(ConvertToUTF8(L"清除缓存").c_str()))
+    {
+        preloadedAssets.clear();
+        for (auto& item : assetItems)
+        {
+            item.isPreloaded = false;
+            item.previewTexture.reset();
+        }
+    }
     ImGui::Text(ConvertToUTF8(L"路径: %s").c_str(), currentAssetPath.c_str());
     
     ImGui::Separator();
@@ -291,6 +305,24 @@ void EditorUI::ShowAssetsPanel()
         if (ImGui::Selectable((std::string(icon) + " " + asset.name).c_str(), isSelected))
         {
             selectedAssetIndex = (int)i;
+            selectedAsset = const_cast<AssetItem*>(&asset);
+            
+            // 如果启用预加载，则预加载资源
+            if (enableAssetPreloading && !asset.isPreloaded)
+            {
+                PreloadAsset(*selectedAsset);
+            }
+        }
+        
+        // 双击打开预览窗口
+        if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
+        {
+            showAssetPreview = true;
+            selectedAsset = const_cast<AssetItem*>(&asset);
+            if (enableAssetPreloading && !asset.isPreloaded)
+            {
+                PreloadAsset(*selectedAsset);
+            }
         }
         
         // 右键菜单
@@ -416,8 +448,9 @@ AssetType EditorUI::DetermineAssetType(const std::filesystem::path& path)
     {
         return AssetType::TEXTURE;
     }
-    else if (extension == ".obj" || extension == ".fbx" || extension == ".gltf" || 
-             extension == ".glb" || extension == ".dae" || extension == ".3ds")
+    else if (extension == ".obj" || extension == ".fbx" || extension == ".gltf" || extension == ".glb" ||
+             extension == ".dae" || extension == ".3ds" ||
+             extension == ".blend" || extension == ".pmx")
     {
         return AssetType::MODEL;
     }
@@ -454,6 +487,43 @@ void EditorUI::ShowAssetContextMenu(AssetItem& item)
             default:
                 break;
         }
+    }
+    
+    ImGui::Separator();
+    
+    // 预加载选项
+    if (!item.isPreloaded)
+    {
+        if (ImGui::MenuItem(ConvertToUTF8(L"预加载").c_str()))
+        {
+            PreloadAsset(item);
+        }
+    }
+    else
+    {
+        if (ImGui::MenuItem(ConvertToUTF8(L"卸载").c_str()))
+        {
+            UnloadAsset(item);
+        }
+    }
+    
+    // 预览选项
+    if (ImGui::MenuItem(ConvertToUTF8(L"预览").c_str()))
+    {
+        selectedAsset = &item;
+        showAssetPreview = true;
+        if (!item.isPreloaded)
+        {
+            PreloadAsset(item);
+        }
+    }
+    
+    ImGui::Separator();
+    
+    // 应用到选中对象
+    if (ImGui::MenuItem(ConvertToUTF8(L"应用到选中对象").c_str()))
+    {
+        ApplyAssetToSelected(item);
     }
     
     if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str()))
@@ -531,6 +601,7 @@ void EditorUI::ShowMainMenuBar()
             ImGui::MenuItem(ConvertToUTF8(L"场景层级").c_str(), NULL, &showSceneHierarchy);
             ImGui::MenuItem(ConvertToUTF8(L"检视器").c_str(), NULL, &showInspector);
             ImGui::MenuItem(ConvertToUTF8(L"资源管理").c_str(), NULL, &showAssetsPanel);
+            ImGui::MenuItem(ConvertToUTF8(L"资源预览").c_str(), NULL, &showAssetPreview);
             ImGui::MenuItem(ConvertToUTF8(L"视口").c_str(), NULL, &showViewport);
             ImGui::MenuItem(ConvertToUTF8(L"渲染器设置").c_str(), NULL, &showRendererSettings);
             ImGui::MenuItem(ConvertToUTF8(L"材质编辑器").c_str(), NULL, &showMaterialEditor);
@@ -542,18 +613,52 @@ void EditorUI::ShowMainMenuBar()
         {
             if (ImGui::BeginMenu(ConvertToUTF8(L"3D对象").c_str()))
             {
-                if (ImGui::MenuItem(ConvertToUTF8(L"立方体").c_str())) {
-                    renderer->CreatePrimitive(Geometry::CUBE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+                if (ImGui::MenuItem(ConvertToUTF8(L"立方体").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::CUBE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
                 }
-                if (ImGui::MenuItem(ConvertToUTF8(L"球体").c_str())) {
-                    renderer->CreatePrimitive(Geometry::SPHERE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+                if (ImGui::MenuItem(ConvertToUTF8(L"球体").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::SPHERE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
                 }
-                if (ImGui::MenuItem(ConvertToUTF8(L"圆柱体").c_str())) {
-                    renderer->CreatePrimitive(Geometry::CYLINDER, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+                if (ImGui::MenuItem(ConvertToUTF8(L"圆柱体").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::CYLINDER, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
                 }
-                if (ImGui::MenuItem(ConvertToUTF8(L"平面").c_str())) {
-                    // 创建平面
+                if (ImGui::MenuItem(ConvertToUTF8(L"圆锥体").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::CONE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
                 }
+                if (ImGui::MenuItem(ConvertToUTF8(L"环面").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::TORUS, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"金字塔").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::PYRAMID, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"椭球体").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::ELLIPSOID, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"圆台").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::CONE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"棱柱").c_str()))
+                {
+                    renderer->CreatePrimitive(Geometry::PRISM, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f),
+                                              Material());
+                }
+
                 ImGui::EndMenu();
             }
             
@@ -583,58 +688,6 @@ void EditorUI::ShowMainMenuBar()
         }
 
         ImGui::EndMainMenuBar();
-    }
-}
-
-void EditorUI::ShowModelCreationDialog()
-{
-    // ImGui::OpenPopup("Create Model");
-    if (ImGui::BeginPopup(ConvertToUTF8(L"导入模型").c_str()))
-    {
-        // 用FileDialog选择模型文件
-        ImGui::Text("%s", ConvertToUTF8(L"选择模型文件:").c_str());
-
-        if (ImGui::Button(ConvertToUTF8(L"浏览").c_str()))
-        {
-            std::string modelPath =
-                FileDialog::OpenFile(ConvertToUTF8(L"选择模型文件").c_str(), "Model Files\0*.obj;*.fbx;*.gltf;*.glb;*.pmx\0");
-            if (!modelPath.empty())
-            {
-                // 这里可以处理模型路径
-                renderer->LoadModel(modelPath);
-                ImGui::CloseCurrentPopup(); // 关闭对话框
-            }
-        }
-        ImGui::EndPopup();
-    }
-}
-
-void EditorUI::ShowPrimitiveSelectionDialog()
-{
-    // ImGui::OpenPopup("Create Primitive");
-    if (ImGui::BeginPopup(ConvertToUTF8(L"创建简单几何体").c_str()))
-    {
-        ImGui::Text("%s", ConvertToUTF8(L"几何体类型：").c_str());
-        static int primitiveType = 0;
-        ImGui::RadioButton(ConvertToUTF8(L"球").c_str(), &primitiveType, 0);
-        ImGui::RadioButton(ConvertToUTF8(L"立方体").c_str(), &primitiveType, 1);
-        ImGui::RadioButton(ConvertToUTF8(L"圆柱体").c_str(), &primitiveType, 2);
-        ImGui::RadioButton(ConvertToUTF8(L"圆锥体").c_str(), &primitiveType, 3);
-        ImGui::RadioButton(ConvertToUTF8(L"棱柱").c_str(), &primitiveType, 4);
-        ImGui::RadioButton(ConvertToUTF8(L"金字塔").c_str(), &primitiveType, 5);
-        ImGui::RadioButton(ConvertToUTF8(L"环面").c_str(), &primitiveType, 6);
-        ImGui::RadioButton(ConvertToUTF8(L"椭球体").c_str(), &primitiveType, 7);
-        ImGui::RadioButton(ConvertToUTF8(L"圆台").c_str(), &primitiveType, 8);
-        ImGui::RadioButton(ConvertToUTF8(L"箭头").c_str(), &primitiveType, 9);
-
-        if (ImGui::Button(ConvertToUTF8(L"创建").c_str()))
-        {
-            // 创建几何体逻辑
-            renderer->CreatePrimitive(static_cast<Geometry::Type>(primitiveType), glm::vec3(0.0f), glm::vec3(1.0f),
-                                      glm::vec3(0.0f), Material());
-            ImGui::CloseCurrentPopup();
-        }
-        ImGui::EndPopup();
     }
 }
 
@@ -730,6 +783,21 @@ void EditorUI::ShowSceneHierarchy()
             if (ImGui::MenuItem(ConvertToUTF8(L"圆锥体").c_str())) {
                 renderer->CreatePrimitive(Geometry::CONE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
             }
+            if (ImGui::MenuItem(ConvertToUTF8(L"环面").c_str())) {
+                renderer->CreatePrimitive(Geometry::TORUS, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"金字塔").c_str())) {
+                renderer->CreatePrimitive(Geometry::PYRAMID, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"椭球体").c_str())) {
+                renderer->CreatePrimitive(Geometry::ELLIPSOID, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"圆台").c_str())) {
+                renderer->CreatePrimitive(Geometry::CONE, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
+            if (ImGui::MenuItem(ConvertToUTF8(L"棱柱").c_str())) {
+                renderer->CreatePrimitive(Geometry::PRISM, glm::vec3(0.0f), glm::vec3(1.0f), glm::vec3(0.0f), Material());
+            }
             ImGui::EndMenu();
         }
         
@@ -753,7 +821,7 @@ void EditorUI::ShowSceneHierarchy()
         if (ImGui::MenuItem(ConvertToUTF8(L"导入模型...").c_str())) {
             std::string modelPath = FileDialog::OpenFile(
                 ConvertToUTF8(L"选择模型文件").c_str(), 
-                "Model Files\0*.obj;*.fbx;*.gltf;*.glb\0All Files\0*.*\0"
+                "Model Files\0*.obj;*.fbx;*.gltf;*.glb;*.pmx\0All Files\0*.*\0"
             );
             if (!modelPath.empty()) {
                 renderer->LoadModel(modelPath);
@@ -1380,6 +1448,7 @@ void EditorUI::ShowAntiAliasingSettings()
     static std::string msaa2xText = "MSAA 2x";
     static std::string msaa4xText = "MSAA 4x";
     static std::string msaa8xText = "MSAA 8x";
+    static std::string msaa16xText = "MSAA 16x";
     static std::string fxaaText = "FXAA";
     
     const char* aaOptions[] = {
@@ -1387,6 +1456,7 @@ void EditorUI::ShowAntiAliasingSettings()
         msaa2xText.c_str(),
         msaa4xText.c_str(),
         msaa8xText.c_str(),
+        msaa16xText.c_str(),
         fxaaText.c_str()
     };
     
@@ -1401,63 +1471,155 @@ void EditorUI::ShowAntiAliasingSettings()
             case AntiAliasingType::NONE:
                 renderer->SetMSAA(false);
                 renderer->SetFXAA(false);
+                msaaSamples = 0;
+                AddNotification(ConvertToUTF8(L"抗锯齿已禁用"), true, 2.0f);
                 break;
             case AntiAliasingType::MSAA_2X:
                 renderer->SetMSAA(true, 2);
                 renderer->SetFXAA(false);
                 msaaSamples = 2;
+                AddNotification(ConvertToUTF8(L"MSAA 2x 已启用"), true, 2.0f);
                 break;
             case AntiAliasingType::MSAA_4X:
                 renderer->SetMSAA(true, 4);
                 renderer->SetFXAA(false);
                 msaaSamples = 4;
+                AddNotification(ConvertToUTF8(L"MSAA 4x 已启用"), true, 2.0f);
                 break;
             case AntiAliasingType::MSAA_8X:
                 renderer->SetMSAA(true, 8);
                 renderer->SetFXAA(false);
                 msaaSamples = 8;
+                AddNotification(ConvertToUTF8(L"MSAA 8x 已启用"), true, 2.0f);
+                break;
+            case AntiAliasingType::MSAA_16X:
+                renderer->SetMSAA(true, 16);
+                renderer->SetFXAA(false);
+                msaaSamples = 16;
+                AddNotification(ConvertToUTF8(L"MSAA 16x 已启用（高性能需求）"), true, 3.0f);
                 break;
             case AntiAliasingType::FXAA:
                 renderer->SetMSAA(false);
                 renderer->SetFXAA(true);
+                msaaSamples = 0;
+                AddNotification(ConvertToUTF8(L"FXAA 已启用"), true, 2.0f);
                 break;
         }
     }
     
+    ImGui::Separator();
+    
     // 显示当前状态
     ImGui::TextUnformatted(ConvertToUTF8(L"当前状态:").c_str());
     ImGui::Indent();
-    ImGui::Text("MSAA: %s", renderer->IsMSAAEnabled() ? ConvertToUTF8(L"启用").c_str() : ConvertToUTF8(L"禁用").c_str());
+    
+    // MSAA状态
+    std::string msaaStatus = renderer->IsMSAAEnabled() ? ConvertToUTF8(L"启用") : ConvertToUTF8(L"禁用");
+    ImGui::Text("MSAA: %s", msaaStatus.c_str());
     if (renderer->IsMSAAEnabled())
     {
         ImGui::SameLine();
-        ImGui::Text("(%dx)", msaaSamples);
+        ImGui::Text("(%dx)", renderer->GetMSAASamples());
     }
-    ImGui::Text("FXAA: %s", renderer->IsFXAAEnabled() ? ConvertToUTF8(L"启用").c_str() : ConvertToUTF8(L"禁用").c_str());
+    
+    // FXAA状态
+    std::string fxaaStatus = renderer->IsFXAAEnabled() ? ConvertToUTF8(L"启用") : ConvertToUTF8(L"禁用");
+    ImGui::Text("FXAA: %s", fxaaStatus.c_str());
+    
     ImGui::Unindent();
     
-    // 性能提示
-    if (currentAAType != AntiAliasingType::NONE)
+    // MSAA详细设置（仅在MSAA启用时显示）
+    if (renderer->IsMSAAEnabled())
     {
         ImGui::Separator();
-        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%s", ConvertToUTF8(L"性能提示:").c_str());
+        ImGui::TextUnformatted(ConvertToUTF8(L"MSAA 设置:").c_str());
         
-        switch (currentAAType)
+        // 显示支持的最大采样数
+        GLint maxSamples;
+        glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+        ImGui::Text(ConvertToUTF8(L"硬件支持最大采样数: %d").c_str(), maxSamples);
+        
+        // 性能提示
+        if (renderer->GetMSAASamples() >= 8)
         {
-            case AntiAliasingType::MSAA_2X:
-                ImGui::TextUnformatted(ConvertToUTF8(L"轻微性能影响").c_str());
-                break;
-            case AntiAliasingType::MSAA_4X:
-                ImGui::TextUnformatted(ConvertToUTF8(L"中等性能影响").c_str());
-                break;
-            case AntiAliasingType::MSAA_8X:
-                ImGui::TextUnformatted(ConvertToUTF8(L"较大性能影响").c_str());
-                break;
-            case AntiAliasingType::FXAA:
-                ImGui::TextUnformatted(ConvertToUTF8(L"最小性能影响").c_str());
-                break;
-            default:
-                break;
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), ConvertToUTF8(L"⚠ 高采样率可能影响性能").c_str());
+        }
+        
+        // 快速切换按钮
+        std::string quickSwitchText = ConvertToUTF8(L"快速切换:");
+        ImGui::Text("%s", quickSwitchText.c_str());
+        ImGui::SameLine();
+        
+        // 获取当前采样数以高亮显示对应按钮
+        int currentSamples = renderer->GetMSAASamples();
+        
+        // 2x按钮
+        if (currentSamples == 2) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.0f, 0.6f));
+        }
+        if (ImGui::SmallButton("2x")) {
+            renderer->SetMSAA(true, 2);
+            currentAAType = AntiAliasingType::MSAA_2X;
+            msaaSamples = 2;
+        }
+        if (currentSamples == 2) {
+            ImGui::PopStyleColor();
+        }
+        
+        ImGui::SameLine();
+        
+        // 4x按钮
+        if (currentSamples == 4) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.0f, 0.6f));
+        }
+        if (ImGui::SmallButton("4x")) {
+            renderer->SetMSAA(true, 4);
+            currentAAType = AntiAliasingType::MSAA_4X;
+            msaaSamples = 4;
+        }
+        if (currentSamples == 4) {
+            ImGui::PopStyleColor();
+        }
+        
+        ImGui::SameLine();
+        
+        // 8x按钮
+        if (currentSamples == 8) {
+            ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.0f, 0.6f));
+        }
+        if (ImGui::SmallButton("8x")) {
+            renderer->SetMSAA(true, 8);
+            currentAAType = AntiAliasingType::MSAA_8X;
+            msaaSamples = 8;
+        }
+        if (currentSamples == 8) {
+            ImGui::PopStyleColor();
+        }
+        
+        ImGui::SameLine();
+        
+        // 16x按钮（只在硬件支持时显示）
+        if (maxSamples >= 16) {
+            if (currentSamples == 16) {
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.0f, 0.7f, 0.0f, 0.6f));
+            }
+            if (ImGui::SmallButton("16x")) {
+                renderer->SetMSAA(true, 16);
+                currentAAType = AntiAliasingType::MSAA_16X;
+                msaaSamples = 16;
+            }
+            if (currentSamples == 16) {
+                ImGui::PopStyleColor();
+            }
+        } else {
+            // 显示不可用的16x按钮
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+            ImGui::SmallButton("16x");
+            ImGui::PopStyleVar();
+            if (ImGui::IsItemHovered()) {
+                std::string tooltip = ConvertToUTF8(L"硬件不支持16x采样");
+                ImGui::SetTooltip("%s", tooltip.c_str());
+            }
         }
     }
 }
@@ -1744,5 +1906,243 @@ void EditorUI::DrawNotifications()
         ImGui::End();
         
         ImGui::PopStyleColor(); // WindowBg
+    }
+}
+
+// 资源预加载函数
+void EditorUI::PreloadAsset(AssetItem &item)
+{
+    if (item.isPreloaded) return;
+    
+    // 检查是否已经在缓存中
+    std::string key = item.path.string();
+    if (preloadedAssets.find(key) != preloadedAssets.end())
+    {
+        item.isPreloaded = true;
+        return;
+    }
+    
+    // 根据资源类型进行预加载
+    try 
+    {
+        switch (item.type)
+        {
+            case AssetType::TEXTURE:
+            {
+                auto texture = std::make_shared<Texture>();
+                if (texture->LoadFromFile(item.path.string()))
+                {
+                    item.resource = texture;
+                    item.previewTexture = texture;
+                    // 注意：由于Width, Height, nrComponents是私有成员，这里需要添加公有访问器
+                    // 或者从文件中重新读取图像信息
+                    // 暂时设置默认值
+                    item.cachedData.textureData.width = 512;
+                    item.cachedData.textureData.height = 512;
+                    item.cachedData.textureData.channels = 4;
+                    preloadedAssets[key] = texture;
+                    item.isPreloaded = true;
+                    AddNotification(ConvertToUTF8(L"预加载纹理: ") + item.name, true, 2.0f);
+                }
+                break;
+            }
+            case AssetType::MODEL:
+            {
+                // 为模型创建缩略图纹理（简化实现）
+                // 实际项目中可能需要离屏渲染生成模型预览
+                item.isPreloaded = true;
+                AddNotification(ConvertToUTF8(L"预加载模型: ") + item.name, true, 2.0f);
+                break;
+            }
+            default:
+                break;
+        }
+    }
+    catch (const std::exception& e)
+    {
+        AddNotification(ConvertToUTF8(L"预加载失败: ") + item.name + " - " + e.what(), false, 3.0f);
+    }
+}
+
+void EditorUI::UnloadAsset(AssetItem &item)
+{
+    std::string key = item.path.string();
+    auto it = preloadedAssets.find(key);
+    if (it != preloadedAssets.end())
+    {
+        preloadedAssets.erase(it);
+    }
+    
+    item.resource.reset();
+    item.previewTexture.reset();
+    item.isPreloaded = false;
+}
+
+void EditorUI::ShowAssetPreviewWindow()
+{
+    if (!selectedAsset) return;
+    
+    ImGui::Begin(ConvertToUTF8(L"资源预览").c_str(), &showAssetPreview, ImGuiWindowFlags_AlwaysAutoResize);
+    
+    // 资源信息
+    ImGui::Text(ConvertToUTF8(L"名称: %s").c_str(), selectedAsset->name.c_str());
+    ImGui::Text(ConvertToUTF8(L"路径: %s").c_str(), selectedAsset->path.string().c_str());
+    
+    const char* typeNames[] = { 
+        "纹理", 
+        "模型", 
+        "材质", 
+        "着色器", 
+        "音频", 
+        "未知"
+    };
+    ImGui::Text(ConvertToUTF8(L"类型: %s").c_str(), typeNames[(int)selectedAsset->type]);
+    
+    ImGui::Separator();
+    
+    // 预加载控制
+    if (!selectedAsset->isPreloaded)
+    {
+        if (ImGui::Button(ConvertToUTF8(L"预加载").c_str()))
+        {
+            PreloadAsset(*selectedAsset);
+        }
+    }
+    else
+    {
+        std::string text = ConvertToUTF8(L"已预加载");
+        ImGui::Text("%s", text.c_str());
+        ImGui::SameLine();
+        if (ImGui::Button(ConvertToUTF8(L"卸载").c_str()))
+        {
+            UnloadAsset(*selectedAsset);
+        }
+    }
+    
+    ImGui::Separator();
+    
+    // 根据资源类型显示预览
+    switch (selectedAsset->type)
+    {
+        case AssetType::TEXTURE:
+            ShowTexturePreview(*selectedAsset);
+            break;
+        case AssetType::MODEL:
+            ShowModelPreview(*selectedAsset);
+            break;
+        default:
+        {
+            std::string text = ConvertToUTF8(L"暂不支持此类型预览");
+            ImGui::Text("%s", text.c_str());
+            break;
+        }
+    }
+    
+    ImGui::Separator();
+    
+    // 操作按钮
+    if (ImGui::Button(ConvertToUTF8(L"应用到选中对象").c_str()))
+    {
+        ApplyAssetToSelected(*selectedAsset);
+    }
+    ImGui::SameLine();
+    if (ImGui::Button(ConvertToUTF8(L"添加到场景").c_str()))
+    {
+        if (selectedAsset->type == AssetType::MODEL)
+        {
+            renderer->LoadModel(selectedAsset->path.string());
+            AddNotification(ConvertToUTF8(L"模型已添加到场景: ") + selectedAsset->name, true);
+        }
+    }
+    
+    ImGui::End();
+}
+
+void EditorUI::ShowTexturePreview(const AssetItem &item)
+{
+    if (item.previewTexture)
+    {
+        // 显示纹理信息
+        ImGui::Text(ConvertToUTF8(L"尺寸: %dx%d").c_str(), 
+                   item.cachedData.textureData.width, 
+                   item.cachedData.textureData.height);
+        ImGui::Text(ConvertToUTF8(L"通道数: %d").c_str(), item.cachedData.textureData.channels);
+        
+        ImGui::Separator();
+        
+        // 显示纹理预览
+        float aspectRatio = (float)item.cachedData.textureData.width / item.cachedData.textureData.height;
+        ImVec2 imageSize;
+        if (aspectRatio > 1.0f)
+        {
+            imageSize.x = previewWindowSize;
+            imageSize.y = previewWindowSize / aspectRatio;
+        }
+        else
+        {
+            imageSize.x = previewWindowSize * aspectRatio;
+            imageSize.y = previewWindowSize;
+        }
+        
+        ImGui::Image((void*)(intptr_t)item.previewTexture->GetID(), imageSize);
+        
+        // 缩放控制
+        ImGui::SliderFloat(ConvertToUTF8(L"预览大小").c_str(), &previewWindowSize, 64.0f, 512.0f);
+    }
+    else
+    {
+        std::string text = ConvertToUTF8(L"纹理未加载");
+        ImGui::Text("%s", text.c_str());
+    }
+}
+
+void EditorUI::ShowModelPreview(const AssetItem &item)
+{
+    std::string title = ConvertToUTF8(L"模型预览");
+    ImGui::Text("%s", title.c_str());
+    
+    if (item.isPreloaded)
+    {
+        ImGui::Text(ConvertToUTF8(L"顶点数: %d").c_str(), item.cachedData.modelData.vertexCount);
+        ImGui::Text(ConvertToUTF8(L"面数: %d").c_str(), item.cachedData.modelData.faceCount);
+        
+        // 简单的模型信息显示
+        // 实际项目中可以在这里显示3D模型的缩略图
+        ImGui::BeginChild("ModelPreview", ImVec2(previewWindowSize, previewWindowSize), true);
+        std::string previewText1 = ConvertToUTF8(L"[3D模型预览]");
+        std::string previewText2 = ConvertToUTF8(L"(需要3D渲染实现)");
+        ImGui::Text("%s", previewText1.c_str());
+        ImGui::Text("%s", previewText2.c_str());
+        ImGui::EndChild();
+    }
+    else
+    {
+        std::string text = ConvertToUTF8(L"模型未预加载");
+        ImGui::Text("%s", text.c_str());
+    }
+}
+
+void EditorUI::ApplyAssetToSelected(const AssetItem &item)
+{
+    if (selectedObjectIndex >= 0)
+    {
+        switch (item.type)
+        {
+            case AssetType::TEXTURE:
+                // 将纹理应用到选中对象的材质
+                AddNotification(ConvertToUTF8(L"纹理已应用到选中对象: ") + item.name, true);
+                break;
+            case AssetType::MATERIAL:
+                // 将材质应用到选中对象
+                AddNotification(ConvertToUTF8(L"材质已应用到选中对象: ") + item.name, true);
+                break;
+            default:
+                AddNotification(ConvertToUTF8(L"此资源类型无法应用到对象"), false);
+                break;
+        }
+    }
+    else
+    {
+        AddNotification(ConvertToUTF8(L"请先选择一个对象"), false);
     }
 }

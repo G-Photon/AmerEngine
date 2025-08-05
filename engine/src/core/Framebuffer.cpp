@@ -1,4 +1,5 @@
 #include "core/Framebuffer.hpp"
+#include <iostream>
 
 Framebuffer::Framebuffer(int width, int height) : width(width), height(height)
 {
@@ -43,6 +44,18 @@ void Framebuffer::AddColorTextureMultisample(GLint internalFormat, int samples)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, ID);
 
+    // 检查硬件支持的最大采样数
+    GLint maxSamples;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+    
+    // 限制采样数在硬件支持范围内
+    if (samples > maxSamples) {
+        samples = maxSamples;
+        std::cerr << "Warning: Requested MSAA samples (" << samples 
+                  << ") exceeds hardware limit (" << maxSamples 
+                  << "), using maximum supported." << std::endl;
+    }
+
     GLuint tex;
     glGenTextures(1, &tex);
     glBindTexture(GL_TEXTURE_2D_MULTISAMPLE, tex);
@@ -83,15 +96,27 @@ void Framebuffer::AddDepthBuffer()
     lastSamples = 1;
 }
 
-void Framebuffer::AddDepthBufferMultisample()
+void Framebuffer::AddDepthBufferMultisample(int samples)
 {
     glBindFramebuffer(GL_FRAMEBUFFER, ID);
 
+    // 检查硬件支持的最大采样数
+    GLint maxSamples;
+    glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+    
+    // 限制采样数在硬件支持范围内
+    if (samples > maxSamples) {
+        samples = maxSamples;
+        std::cerr << "Warning: Requested MSAA samples (" << samples 
+                  << ") exceeds hardware limit (" << maxSamples 
+                  << "), using maximum supported." << std::endl;
+    }
+
     glGenRenderbuffers(1, &depthBuffer);
     glBindRenderbuffer(GL_RENDERBUFFER, depthBuffer);
-    glRenderbufferStorageMultisample(GL_RENDERBUFFER, 4, GL_DEPTH24_STENCIL8, width, height);
+    glRenderbufferStorageMultisample(GL_RENDERBUFFER, samples, GL_DEPTH24_STENCIL8, width, height);
     glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_STENCIL_ATTACHMENT, GL_RENDERBUFFER, depthBuffer);
-    lastSamples = 4; // 使用4倍多重采样
+    lastSamples = samples;
 }
 
 void Framebuffer::CheckComplete()

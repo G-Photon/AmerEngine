@@ -25,7 +25,7 @@ class Framebuffer
     void AddDepthBuffer();
 
     // 多重采样深度缓冲
-    void AddDepthBufferMultisample();
+    void AddDepthBufferMultisample(int samples = 4);
 
     // 检查完整性
     void CheckComplete();

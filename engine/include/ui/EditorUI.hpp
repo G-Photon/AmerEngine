@@ -13,6 +13,9 @@
 #include <filesystem>
 #include <codecvt>
 #include <locale>
+#include <unordered_map>
+#include <thread>
+#include <mutex>
 
 class Renderer;
 
@@ -23,6 +26,7 @@ enum class AntiAliasingType
     MSAA_2X,
     MSAA_4X,
     MSAA_8X,
+    MSAA_16X,
     FXAA
 };
 
@@ -45,6 +49,18 @@ struct AssetItem
     std::string name;
     std::shared_ptr<void> resource; // 通用资源指针
     bool isLoaded = false;
+    bool isPreloaded = false;       // 是否已预加载
+    std::shared_ptr<Texture> previewTexture; // 预览纹理
+    
+    // 缓存的资源数据
+    union {
+        struct {
+            int width, height, channels;
+        } textureData;
+        struct {
+            int vertexCount, faceCount;
+        } modelData;
+    } cachedData;
 };
 
 class EditorUI
@@ -69,6 +85,7 @@ public:
     void ShowRendererSettings();
     void ShowMaterialEditor();
     void ShowConsole(); // 控制台面板
+    void ShowAssetPreviewWindow(); // 资源预览窗口
 
     // 对话框
     void ShowPrimitiveSelectionDialog();
@@ -94,6 +111,16 @@ private:
     void ShowAssetContextMenu(AssetItem &item);
     AssetType DetermineAssetType(const std::filesystem::path &path);
     void CreateDefaultLayout();
+    
+    // 资源预加载和管理
+    void PreloadAsset(AssetItem &item);
+    void UnloadAsset(AssetItem &item);
+    bool LoadAssetData(AssetItem &item);
+    void CreateAssetPreview(AssetItem &item);
+    void ShowAssetDetailWindow(const AssetItem &item);
+    void ApplyAssetToSelected(const AssetItem &item);
+    void ShowTexturePreview(const AssetItem &item);
+    void ShowModelPreview(const AssetItem &item);
     
     // 样式设置
     void SetupModernStyle();
@@ -123,6 +150,7 @@ private:
     bool showRendererSettings = true;
     bool showMaterialEditor = true;
     bool showConsole = false;
+    bool showAssetPreview = false; // 资源预览窗口
 
     // 选择状态
     int selectedObjectIndex = -1;
@@ -132,6 +160,12 @@ private:
     std::vector<AssetItem> assetItems;
     std::string currentAssetPath = "resources"; // 默认资源路径
     std::vector<std::string> assetPathHistory;
+    
+    // 资源预览和管理
+    AssetItem* selectedAsset = nullptr; // 当前选中的资源
+    std::unordered_map<std::string, std::shared_ptr<void>> preloadedAssets; // 预加载资源缓存
+    bool enableAssetPreloading = true; // 是否启用资源预加载
+    float previewWindowSize = 256.0f; // 预览窗口大小
     
     // 渲染设置
     AntiAliasingType currentAAType = AntiAliasingType::NONE;

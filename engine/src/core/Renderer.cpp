@@ -803,8 +803,8 @@ void Renderer::SetupHDRBuffer()
 void Renderer::SetupHDRBufferMS()
 {
     hdrBufferMS = std::make_unique<Framebuffer>(width, height);
-    hdrBufferMS->AddColorTextureMultisample(GL_RGBA16F, 4); // 使用4倍多重采样
-    hdrBufferMS->AddDepthBufferMultisample();
+    hdrBufferMS->AddColorTextureMultisample(GL_RGBA16F, msaaSamples); // 使用动态采样数
+    hdrBufferMS->AddDepthBufferMultisample(msaaSamples);
     hdrBufferMS->CheckComplete();
 }
 
@@ -1655,7 +1655,7 @@ void Renderer::RenderPostProcessing()
         hdrBuffer->Bind();
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         postShaderMS->Use();
-        postShaderMS->SetInt("uSamples", 4);
+        postShaderMS->SetInt("uSamples", msaaSamples); // 使用实际的采样数
         hdrBufferMS->BindTexture(0, 0); // 绑定多重采样的 HDR 纹理
         RenderQuad();
     }
@@ -1751,15 +1751,58 @@ void Renderer::SetGammaCorrection(bool enabled)
 
 void Renderer::SetMSAA(bool enabled, int samples)
 {
+    if (msaaEnabled == enabled && msaaSamples == samples) {
+        return; // 没有变化，直接返回
+    }
+    
+    bool previousEnabled = msaaEnabled;
+    int previousSamples = msaaSamples;
+    
     msaaEnabled = enabled;
+    msaaSamples = samples;
+    
     if (enabled)
     {
+        // 检查硬件支持的最大采样数
+        GLint maxSamples;
+        glGetIntegerv(GL_MAX_SAMPLES, &maxSamples);
+        
+        if (samples > maxSamples) {
+            std::cerr << "Warning: Requested MSAA " << samples << "x exceeds hardware limit " 
+                      << maxSamples << "x, using maximum supported." << std::endl;
+            samples = maxSamples;
+            msaaSamples = samples;
+        }
+        
         glEnable(GL_MULTISAMPLE);
-        glSampleCoverage(samples, GL_TRUE);
+        
+        // 重新创建多重采样帧缓冲
+        if (hdrBufferMS) {
+            // 删除旧的多重采样缓冲
+            hdrBufferMS.reset();
+        }
+        
+        // 创建新的多重采样帧缓冲
+        try {
+            hdrBufferMS = std::make_unique<Framebuffer>(width, height);
+            hdrBufferMS->AddColorTextureMultisample(GL_RGBA16F, samples);
+            hdrBufferMS->AddDepthBufferMultisample(samples);
+            hdrBufferMS->CheckComplete();
+            
+            std::cout << "MSAA " << samples << "x enabled successfully." << std::endl;
+        } catch (const std::exception& e) {
+            std::cerr << "Failed to create MSAA framebuffer: " << e.what() << std::endl;
+            // 恢复到之前的状态
+            msaaEnabled = previousEnabled;
+            msaaSamples = previousSamples;
+            glDisable(GL_MULTISAMPLE);
+            return;
+        }
     }
     else
     {
         glDisable(GL_MULTISAMPLE);
+        std::cout << "MSAA disabled." << std::endl;
     }
 }
 

@@ -101,6 +101,10 @@ class Renderer
     {
         return msaaEnabled;
     }
+    int GetMSAASamples() const
+    {
+        return msaaSamples;
+    }
     bool IsFXAAEnabled() const
     {
         return fxaaEnabled;
@@ -319,6 +323,7 @@ class Renderer
     // 特效状态
     bool gammaCorrection = false;
     bool msaaEnabled = false;
+    int msaaSamples = 4; // MSAA采样倍数
     bool hdrEnabled = false;
     bool bloomEnabled = false;
     bool ssaoEnabled = false;
