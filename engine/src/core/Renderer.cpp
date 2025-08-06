@@ -43,13 +43,68 @@ void Renderer::SaveScene(const std::string& path)
     // 保存模型
     j["models"] = json::array();
     for (const auto& model : models) {
-        j["models"].push_back({
+        json modelJson = {
             {"name", model->GetName()},
             {"path", model->GetPath()},
             {"position", {model->GetPosition().x, model->GetPosition().y, model->GetPosition().z}},
             {"rotation", {model->GetRotation().x, model->GetRotation().y, model->GetRotation().z}},
             {"scale", {model->GetScale().x, model->GetScale().y, model->GetScale().z}}
-        });
+        };
+        
+        // 保存模型的材质信息
+        modelJson["materials"] = json::array();
+        const auto& meshes = model->GetMeshes();
+        for (size_t i = 0; i < meshes.size(); ++i) {
+            const auto& materialPtr = meshes[i]->GetMaterial();
+            if (materialPtr) {
+                const auto& material = *materialPtr;
+                json materialJson = {
+                    {"meshIndex", i},
+                    {"type", static_cast<int>(material.type)},
+                    {"albedo", {material.albedo.r, material.albedo.g, material.albedo.b}},
+                    {"metallic", material.metallic},
+                    {"roughness", material.roughness},
+                    {"ao", material.ao},
+                    {"diffuse", {material.diffuse.r, material.diffuse.g, material.diffuse.b}},
+                    {"specular", {material.specular.r, material.specular.g, material.specular.b}},
+                    {"shininess", material.shininess},
+                    {"useAlbedoMap", material.useAlbedoMap},
+                    {"useMetallicMap", material.useMetallicMap},
+                    {"useRoughnessMap", material.useRoughnessMap},
+                    {"useNormalMap", material.useNormalMap},
+                    {"useAOMap", material.useAOMap},
+                    {"useDiffuseMap", material.useDiffuseMap},
+                    {"useSpecularMap", material.useSpecularMap}
+                };
+                
+                // 保存贴图路径
+                if (material.albedoMap) {
+                    materialJson["albedoMapPath"] = material.albedoMap->GetPath();
+                }
+                if (material.metallicMap) {
+                    materialJson["metallicMapPath"] = material.metallicMap->GetPath();
+                }
+                if (material.roughnessMap) {
+                    materialJson["roughnessMapPath"] = material.roughnessMap->GetPath();
+                }
+                if (material.normalMap) {
+                    materialJson["normalMapPath"] = material.normalMap->GetPath();
+                }
+                if (material.aoMap) {
+                    materialJson["aoMapPath"] = material.aoMap->GetPath();
+                }
+                if (material.diffuseMap) {
+                    materialJson["diffuseMapPath"] = material.diffuseMap->GetPath();
+                }
+                if (material.specularMap) {
+                    materialJson["specularMapPath"] = material.specularMap->GetPath();
+                }
+                
+                modelJson["materials"].push_back(materialJson);
+            }
+        }
+        
+        j["models"].push_back(modelJson);
     }
     
     // 保存点光源
@@ -278,6 +333,112 @@ void Renderer::LoadScene(const std::string& path)
                     glm::vec3(rot[0], rot[1], rot[2]),
                     glm::vec3(scl[0], scl[1], scl[2])
                 );
+                
+                // 加载材质信息
+                if (m.contains("materials")) {
+                    const auto& meshes = model->GetMeshes();
+                    for (const auto& materialData : m["materials"]) {
+                        try {
+                            size_t meshIndex = materialData["meshIndex"].get<size_t>();
+                            if (meshIndex < meshes.size()) {
+                                auto materialPtr = meshes[meshIndex]->GetMaterial();
+                                if (materialPtr) {
+                                    // 更新材质属性
+                                    if (materialData.contains("type")) {
+                                        materialPtr->type = static_cast<MaterialType>(materialData["type"].get<int>());
+                                    }
+                                    if (materialData.contains("albedo")) {
+                                        auto c = materialData["albedo"];
+                                        materialPtr->albedo = glm::vec3(c[0], c[1], c[2]);
+                                    }
+                                    if (materialData.contains("metallic")) {
+                                        materialPtr->metallic = materialData["metallic"];
+                                    }
+                                    if (materialData.contains("roughness")) {
+                                        materialPtr->roughness = materialData["roughness"];
+                                    }
+                                    if (materialData.contains("ao")) {
+                                        materialPtr->ao = materialData["ao"];
+                                    }
+                                    if (materialData.contains("diffuse")) {
+                                        auto c = materialData["diffuse"];
+                                        materialPtr->diffuse = glm::vec3(c[0], c[1], c[2]);
+                                    }
+                                    if (materialData.contains("specular")) {
+                                        auto c = materialData["specular"];
+                                        materialPtr->specular = glm::vec3(c[0], c[1], c[2]);
+                                    }
+                                    if (materialData.contains("shininess")) {
+                                        materialPtr->shininess = materialData["shininess"];
+                                    }
+                                    
+                                    // 更新贴图使用标志
+                                    if (materialData.contains("useAlbedoMap")) {
+                                        materialPtr->useAlbedoMap = materialData["useAlbedoMap"];
+                                    }
+                                    if (materialData.contains("useMetallicMap")) {
+                                        materialPtr->useMetallicMap = materialData["useMetallicMap"];
+                                    }
+                                    if (materialData.contains("useRoughnessMap")) {
+                                        materialPtr->useRoughnessMap = materialData["useRoughnessMap"];
+                                    }
+                                    if (materialData.contains("useNormalMap")) {
+                                        materialPtr->useNormalMap = materialData["useNormalMap"];
+                                    }
+                                    if (materialData.contains("useAOMap")) {
+                                        materialPtr->useAOMap = materialData["useAOMap"];
+                                    }
+                                    if (materialData.contains("useDiffuseMap")) {
+                                        materialPtr->useDiffuseMap = materialData["useDiffuseMap"];
+                                    }
+                                    if (materialData.contains("useSpecularMap")) {
+                                        materialPtr->useSpecularMap = materialData["useSpecularMap"];
+                                    }
+                                    
+                                    // 加载贴图（如果路径存在且不为空）
+                                    if (materialData.contains("albedoMapPath") && 
+                                        !materialData["albedoMapPath"].get<std::string>().empty()) {
+                                        materialPtr->albedoMap = std::make_shared<Texture>(
+                                            materialData["albedoMapPath"].get<std::string>());
+                                    }
+                                    if (materialData.contains("metallicMapPath") && 
+                                        !materialData["metallicMapPath"].get<std::string>().empty()) {
+                                        materialPtr->metallicMap = std::make_shared<Texture>(
+                                            materialData["metallicMapPath"].get<std::string>());
+                                    }
+                                    if (materialData.contains("roughnessMapPath") && 
+                                        !materialData["roughnessMapPath"].get<std::string>().empty()) {
+                                        materialPtr->roughnessMap = std::make_shared<Texture>(
+                                            materialData["roughnessMapPath"].get<std::string>());
+                                    }
+                                    if (materialData.contains("normalMapPath") && 
+                                        !materialData["normalMapPath"].get<std::string>().empty()) {
+                                        materialPtr->normalMap = std::make_shared<Texture>(
+                                            materialData["normalMapPath"].get<std::string>());
+                                    }
+                                    if (materialData.contains("aoMapPath") && 
+                                        !materialData["aoMapPath"].get<std::string>().empty()) {
+                                        materialPtr->aoMap = std::make_shared<Texture>(
+                                            materialData["aoMapPath"].get<std::string>());
+                                    }
+                                    if (materialData.contains("diffuseMapPath") && 
+                                        !materialData["diffuseMapPath"].get<std::string>().empty()) {
+                                        materialPtr->diffuseMap = std::make_shared<Texture>(
+                                            materialData["diffuseMapPath"].get<std::string>());
+                                    }
+                                    if (materialData.contains("specularMapPath") && 
+                                        !materialData["specularMapPath"].get<std::string>().empty()) {
+                                        materialPtr->specularMap = std::make_shared<Texture>(
+                                            materialData["specularMapPath"].get<std::string>());
+                                    }
+                                }
+                            }
+                        } catch (const std::exception& e) {
+                            std::cerr << "加载模型材质失败: " << e.what() << std::endl;
+                        }
+                    }
+                }
+                
                 models.push_back(model);
             } catch (const std::exception& e) {
                 std::cerr << "加载模型失败: " << e.what() << std::endl;
@@ -657,7 +818,6 @@ Renderer::~Renderer()
     deferredGeometryShader.reset();
     deferredLightingShader.reset();
     pbrDeferredGeometryShader.reset();
-    pbrDeferredLightingShader.reset();
     shadowDepthShader.reset();
     skyboxShader.reset();
     hdrShader.reset();
@@ -729,10 +889,6 @@ void Renderer::Initialize()
     pbrDeferredGeometryShader =
         std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/pbr_geometry_pass.vert"),
                                  FileSystem::GetPath("resources/shaders/deferred/pbr_geometry_pass.frag"));
-
-    pbrDeferredLightingShader =
-        std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/lighting_pass.vert"),
-                                 FileSystem::GetPath("resources/shaders/deferred/pbr_lighting_pass.frag"));
 
     lightsShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/utility/light.vert"),
                                             FileSystem::GetPath("resources/shaders/utility/light.frag"));
@@ -1214,6 +1370,23 @@ void Renderer::RenderDeferred()
     
     // 设置全局阴影开关
     deferredLightingShader->SetBool("shadowEnabled", shadowEnabled);
+
+    // 设置IBL参数
+    deferredLightingShader->SetBool("iblEnabled", iblEnabled);
+    if (iblEnabled)
+    {
+        glActiveTexture(GL_TEXTURE20);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+        deferredLightingShader->SetInt("irradianceMap", 20);
+
+        glActiveTexture(GL_TEXTURE21);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+        deferredLightingShader->SetInt("prefilterMap", 21);
+
+        glActiveTexture(GL_TEXTURE22);
+        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+        deferredLightingShader->SetInt("brdfLUT", 22);
+    }
 
     const int texSlots[8] = {0, 1, 2, 3, 4, 5, 6, 7};
     const char *texNames[8] = {"gPosition", "gNormal", "gAlbedo", "gSpecular", "gMetallic", "gRoughness", "gAo", "gAmbient"};

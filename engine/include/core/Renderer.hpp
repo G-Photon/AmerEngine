@@ -291,7 +291,6 @@ class Renderer
     std::unique_ptr<Shader> deferredGeometryShader;
     std::unique_ptr<Shader> deferredLightingShader;
     std::unique_ptr<Shader> pbrDeferredGeometryShader;
-    std::unique_ptr<Shader> pbrDeferredLightingShader;
     std::unique_ptr<Shader> shadowDepthShader;
     std::unique_ptr<Shader> skyboxShader;
     std::unique_ptr<Shader> hdrShader;

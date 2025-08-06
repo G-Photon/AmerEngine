@@ -1705,6 +1705,27 @@ void EditorUI::ShowLightingSettings()
         renderer->SetLightsEnabled(showLights);
     }
     DrawTooltip(ConvertToUTF8(L"在场景中显示光源图标").c_str());
+    
+    ImGui::Separator();
+    
+    // HDR环境贴图信息
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"环境贴图").c_str()))
+    {
+        ImGui::TextUnformatted("Current HDR: Newport Loft (Indoor)");
+        if (ImGui::IsItemHovered())
+        {
+            ImGui::BeginTooltip();
+            ImGui::TextUnformatted("This is an indoor HDR environment");
+            ImGui::TextUnformatted("Suitable for indoor scenes and metallic reflections");
+            ImGui::TextUnformatted("Recommend adding outdoor HDR maps for richer lighting");
+            ImGui::EndTooltip();
+        }
+        
+        ImGui::Spacing();
+        ImGui::TextWrapped("Note: Currently using indoor HDR environment. "
+                          "All PBR materials will reflect this indoor lighting. "
+                          "Consider adding outdoor HDR environments for better variety.");
+    }
 }
 
 void EditorUI::ShowShadowSettings()

@@ -1,25 +1,25 @@
 {
     "camera": {
-        "fov": 45.0,
+        "fov": 38.0,
         "front": [
-            0.15626637637615204,
-            -0.7033949494361877,
-            -0.6934092044830322
+            -0.0833810493350029,
+            0.5195194482803345,
+            0.8503805994987488
         ],
         "mouseSensitivity": 0.10000000149011612,
         "movementSpeed": 5.0,
-        "pitch": -44.70001983642578,
+        "pitch": 31.30002212524414,
         "position": [
-            -2.800408124923706,
-            13.483908653259277,
-            11.350199699401855
+            3.962329149246216,
+            10.102264404296875,
+            -14.016278266906738
         ],
         "up": [
-            0.15463857352733612,
-            0.7107992172241211,
-            -0.6861860752105713
+            0.05069651082158089,
+            0.8544585704803467,
+            -0.517039954662323
         ],
-        "yaw": -77.30001068115234
+        "yaw": 95.60003662109375
     },
     "directionalLights": [
         {
@@ -49,11 +49,11 @@
     ],
     "models": [
         {
-            "name": "nahida.pmx",
-            "path": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\nahida\\nahida.pmx",
+            "name": "Cerberus_LP.FBX",
+            "path": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Cerberus_LP.FBX",
             "position": [
                 0.0,
-                0.0,
+                18.200000762939453,
                 0.0
             ],
             "rotation": [
@@ -62,9 +62,9 @@
                 0.0
             ],
             "scale": [
-                1.0,
-                1.0,
-                1.0
+                0.10000000149011612,
+                0.10000000149011612,
+                0.10000000149011612
             ]
         }
     ],
@@ -105,7 +105,7 @@
                     0.800000011920929,
                     0.800000011920929
                 ],
-                "diffuseMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\textures\\container2.png",
+                "diffuseMapPath": "",
                 "normalMapPath": "",
                 "shininess": 32.0,
                 "specular": [
@@ -113,11 +113,11 @@
                     0.10000000149011612,
                     0.10000000149011612
                 ],
-                "specularMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\textures\\container2_specular.png",
+                "specularMapPath": "",
                 "type": 0,
-                "useDiffuseMap": true,
+                "useDiffuseMap": false,
                 "useNormalMap": false,
-                "useSpecularMap": true
+                "useSpecularMap": false
             },
             "params": {
                 "depth": 1.0,
@@ -319,15 +319,14 @@
         "gammaCorrection": true,
         "hdrEnabled": true,
         "iblEnabled": true,
-        "msaaEnabled": true,
-        "pbrEnabled": true,
-        "renderMode": 1,
+        "msaaEnabled": false,
+        "renderMode": 0,
         "shadowEnabled": true,
         "showLights": false,
-        "ssaoEnabled": true
+        "ssaoEnabled": false
     },
     "sceneInfo": {
-        "createdTime": 1754399603,
+        "createdTime": 1754469454,
         "name": "Scene",
         "version": "1.0"
     },
