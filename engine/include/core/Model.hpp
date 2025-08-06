@@ -13,7 +13,8 @@ class Model
     Model(const std::string &path);
 
     void Draw(Shader &shader);
-
+    void DrawWithMaterialType(Shader &shader, MaterialType materialType);
+    
     const std::vector<std::shared_ptr<Mesh>> &GetMeshes() const
     {
         return meshes;

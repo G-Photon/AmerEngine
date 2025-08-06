@@ -16,6 +16,8 @@ using json = nlohmann::json;
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 #include <glm/gtc/matrix_transform.hpp>
+// STB图像处理
+#include "stb_image.h"
 // 新建场景：清空所有模型、光源、几何体等
 void Renderer::NewScene()
 {
@@ -226,7 +228,6 @@ void Renderer::SaveScene(const std::string& path)
         {"msaaEnabled", msaaEnabled},
         {"fxaaEnabled", fxaaEnabled},
         {"gammaCorrection", gammaCorrection},
-        {"pbrEnabled", pbrEnabled},
         {"iblEnabled", iblEnabled},
         {"showLights", showLights}
     };
@@ -576,7 +577,6 @@ void Renderer::LoadScene(const std::string& path)
             }
             if (settings.contains("fxaaEnabled")) fxaaEnabled = settings["fxaaEnabled"];
             if (settings.contains("gammaCorrection")) SetGammaCorrection(settings["gammaCorrection"]);
-            if (settings.contains("pbrEnabled")) SetPBR(settings["pbrEnabled"]);
             if (settings.contains("iblEnabled")) SetIBL(settings["iblEnabled"]);
             if (settings.contains("showLights")) showLights = settings["showLights"];
         } catch (const std::exception& e) {
@@ -596,7 +596,17 @@ Renderer::~Renderer()
     // 清理资源
     glDeleteVertexArrays(1, &skyboxVAO);
     glDeleteBuffers(1, &skyboxVBO);
+    glDeleteVertexArrays(1, &cubeVAO);
+    glDeleteBuffers(1, &cubeVBO);
     glDeleteTextures(1, &ssaoNoiseTexture);
+    
+    // 清理IBL资源
+    glDeleteTextures(1, &envCubemap);
+    glDeleteTextures(1, &irradianceMap);
+    glDeleteTextures(1, &prefilterMap);
+    glDeleteTextures(1, &brdfLUTTexture);
+    glDeleteFramebuffers(1, &captureFBO);
+    glDeleteRenderbuffers(1, &captureRBO);
     
     // 清理多光源阴影缓冲区
     ClearLightShadowBuffers();
@@ -643,8 +653,11 @@ Renderer::~Renderer()
     }
     ssaoBuffer.reset();
     forwardShader.reset();
+    pbrShader.reset();
     deferredGeometryShader.reset();
     deferredLightingShader.reset();
+    pbrDeferredGeometryShader.reset();
+    pbrDeferredLightingShader.reset();
     shadowDepthShader.reset();
     skyboxShader.reset();
     hdrShader.reset();
@@ -653,6 +666,10 @@ Renderer::~Renderer()
     bloomPreShader.reset();
     bloomBlurShader.reset();
     ssaoShader.reset();
+    equirectangularToCubemapShader.reset();
+    irradianceShader.reset();
+    prefilterShader.reset();
+    brdfShader.reset();
     environmentMap.reset();
     mainCamera.reset();
 }
@@ -698,6 +715,9 @@ void Renderer::Initialize()
     forwardShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/forward/blinn_phong.vert"),
                                              FileSystem::GetPath("resources/shaders/forward/blinn_phong.frag"));
 
+    pbrShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/forward/pbr.vert"),
+                                         FileSystem::GetPath("resources/shaders/forward/pbr.frag"));
+
     deferredGeometryShader =
         std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/geometry_pass.vert"),
                                  FileSystem::GetPath("resources/shaders/deferred/geometry_pass.frag"));
@@ -705,6 +725,14 @@ void Renderer::Initialize()
     deferredLightingShader =
         std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/lighting_pass.vert"),
                                  FileSystem::GetPath("resources/shaders/deferred/lighting_pass.frag"));
+
+    pbrDeferredGeometryShader =
+        std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/pbr_geometry_pass.vert"),
+                                 FileSystem::GetPath("resources/shaders/deferred/pbr_geometry_pass.frag"));
+
+    pbrDeferredLightingShader =
+        std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/deferred/lighting_pass.vert"),
+                                 FileSystem::GetPath("resources/shaders/deferred/pbr_lighting_pass.frag"));
 
     lightsShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/utility/light.vert"),
                                             FileSystem::GetPath("resources/shaders/utility/light.frag"));
@@ -730,6 +758,23 @@ void Renderer::Initialize()
         FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
         FileSystem::GetPath("resources/shaders/postprocess/fxaa.frag"));
     
+    // IBL着色器
+    equirectangularToCubemapShader = std::make_unique<Shader>(
+        FileSystem::GetPath("resources/shaders/ibl/cubemap.vert"),
+        FileSystem::GetPath("resources/shaders/ibl/equirectangular_to_cubemap.frag"));
+    
+    irradianceShader = std::make_unique<Shader>(
+        FileSystem::GetPath("resources/shaders/ibl/cubemap.vert"),
+        FileSystem::GetPath("resources/shaders/ibl/irradiance_convolution.frag"));
+    
+    prefilterShader = std::make_unique<Shader>(
+        FileSystem::GetPath("resources/shaders/ibl/cubemap.vert"),
+        FileSystem::GetPath("resources/shaders/ibl/prefilter.frag"));
+    
+    brdfShader = std::make_unique<Shader>(
+        FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
+        FileSystem::GetPath("resources/shaders/ibl/brdf_lut.frag"));
+    
     // 初始化帧缓冲
     SetupShadowBuffer();
     SetupGBuffer();
@@ -742,6 +787,9 @@ void Renderer::Initialize()
 
     GenerateSSAOKernel();
     GenerateSSAONoiseTexture();
+
+    // 设置IBL
+    SetupIBL();
 
     // 加载默认纹理
     auto whiteTexture = std::make_shared<Texture>();
@@ -923,6 +971,9 @@ void Renderer::RenderForward()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
+    // 分别处理Blinn-Phong材质和PBR材质的物体
+    
+    // 1. 渲染Blinn-Phong材质的物体
     forwardShader->Use();
     // 设置相机、光照等uniform
     glm::mat4 view = mainCamera->GetViewMatrix();
@@ -957,15 +1008,120 @@ void Renderer::RenderForward()
     {
         spotLights[i]->SetupShader(*forwardShader, i, shadowEnabled);
     }
-    // 渲染所有模型和几何体
+    
+    // 渲染Blinn-Phong材质的模型
     for (auto &model : models)
     {
-        model->Draw(*forwardShader);
+        model->DrawWithMaterialType(*forwardShader, BLINN_PHONG);
     }
 
+    // 渲染Blinn-Phong材质的几何体
     for (auto &primitive : primitives)
     {
-        primitive.mesh->Draw(*forwardShader);
+        if (primitive.mesh->GetMaterial()->type == BLINN_PHONG)
+        {
+            primitive.mesh->Draw(*forwardShader);
+        }
+    }
+
+    // 2. 渲染PBR材质的物体
+    pbrShader->Use();
+    
+    // 设置相机矩阵
+    pbrShader->SetMat4("view", view);
+    pbrShader->SetMat4("projection", projection);
+    pbrShader->SetVec3("viewPos", mainCamera->Position);
+
+    // 设置光源数量
+    pbrShader->SetInt("numLights[0]", directionalLights.size());
+    pbrShader->SetInt("numLights[1]", pointLights.size());
+    pbrShader->SetInt("numLights[2]", spotLights.size());
+    
+    // 设置阴影
+    pbrShader->SetBool("shadowEnabled", shadowEnabled);
+    
+    // 设置光源参数
+    for (size_t i = 0; i < directionalLights.size(); ++i)
+    {
+        auto& light = directionalLights[i];
+        std::string base = "dirLights[" + std::to_string(i) + "]";
+        pbrShader->SetVec3(base + ".direction", light->direction);
+        pbrShader->SetVec3(base + ".color", light->diffuse);
+        pbrShader->SetFloat(base + ".intensity", light->intensity);
+        pbrShader->SetBool(base + ".shadowEnabled", light->HasShadows() && shadowEnabled);
+        if (light->HasShadows() && shadowEnabled)
+        {
+            pbrShader->SetMat4(base + ".lightSpaceMatrix", light->GetLightSpaceMatrix());
+            // 绑定阴影贴图
+            glActiveTexture(GL_TEXTURE10 + i);
+            glBindTexture(GL_TEXTURE_2D, light->GetShadowMap());
+            pbrShader->SetInt(base + ".shadowMap", 10 + i);
+        }
+    }
+    
+    for (size_t i = 0; i < pointLights.size(); ++i)
+    {
+        auto& light = pointLights[i];
+        std::string base = "pointLights[" + std::to_string(i) + "]";
+        pbrShader->SetVec3(base + ".position", light->position);
+        pbrShader->SetVec3(base + ".color", light->diffuse);
+        pbrShader->SetFloat(base + ".intensity", light->intensity);
+        pbrShader->SetFloat(base + ".constant", light->constant);
+        pbrShader->SetFloat(base + ".linear", light->linear);
+        pbrShader->SetFloat(base + ".quadratic", light->quadratic);
+        pbrShader->SetBool(base + ".shadowEnabled", light->HasShadows() && shadowEnabled);
+    }
+    
+    for (size_t i = 0; i < spotLights.size(); ++i)
+    {
+        auto& light = spotLights[i];
+        std::string base = "spotLights[" + std::to_string(i) + "]";
+        pbrShader->SetVec3(base + ".position", light->position);
+        pbrShader->SetVec3(base + ".direction", light->direction);
+        pbrShader->SetVec3(base + ".color", light->diffuse);
+        pbrShader->SetFloat(base + ".intensity", light->intensity);
+        pbrShader->SetFloat(base + ".constant", light->constant);
+        pbrShader->SetFloat(base + ".linear", light->linear);
+        pbrShader->SetFloat(base + ".quadratic", light->quadratic);
+        pbrShader->SetFloat(base + ".cutOff", light->cutOff);
+        pbrShader->SetFloat(base + ".outerCutOff", light->outerCutOff);
+        pbrShader->SetBool(base + ".shadowEnabled", light->HasShadows() && shadowEnabled);
+        if (light->HasShadows() && shadowEnabled)
+        {
+            pbrShader->SetMat4(base + ".lightSpaceMatrix", light->GetLightSpaceMatrix());
+        }
+    }
+
+    // 设置IBL
+    pbrShader->SetBool("iblEnabled", iblEnabled);
+    if (iblEnabled)
+    {
+        glActiveTexture(GL_TEXTURE20);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+        pbrShader->SetInt("irradianceMap", 20);
+
+        glActiveTexture(GL_TEXTURE21);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+        pbrShader->SetInt("prefilterMap", 21);
+
+        glActiveTexture(GL_TEXTURE22);
+        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+        pbrShader->SetInt("brdfLUT", 22);
+    }
+
+    // 渲染PBR材质的模型
+    for (auto &model : models)
+    {
+        model->DrawWithMaterialType(*pbrShader, PBR);
+    }
+
+    // 渲染PBR材质的几何体
+    for (auto &primitive : primitives)
+    {
+        if (primitive.mesh->GetMaterial()->type == PBR)
+        {
+            primitive.mesh->Draw(*pbrShader);
+        }
     }
 
     if (iblEnabled)
@@ -982,21 +1138,49 @@ void Renderer::RenderDeferred()
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
-    deferredGeometryShader->Use();
+    auto view = mainCamera->GetViewMatrix();
+    auto projection = mainCamera->GetProjectionMatrix(static_cast<float>(width) / height);
 
-    // 设置相机等uniform
-    deferredGeometryShader->SetMat4("view", mainCamera->GetViewMatrix());
-    deferredGeometryShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
+    // 1. 渲染Blinn-Phong材质的物体
+    deferredGeometryShader->Use();
+    deferredGeometryShader->SetMat4("view", view);
+    deferredGeometryShader->SetMat4("projection", projection);
     deferredGeometryShader->SetVec3("viewPos", mainCamera->Position);
 
+    // 渲染Blinn-Phong材质的模型
     for (auto &model : models)
     {
-        model->Draw(*deferredGeometryShader);
+        model->DrawWithMaterialType(*deferredGeometryShader, BLINN_PHONG);
     }
 
+    // 渲染Blinn-Phong材质的几何体
     for (auto &primitive : primitives)
     {
-        primitive.mesh->Draw(*deferredGeometryShader);
+        if (primitive.mesh->GetMaterial()->type == BLINN_PHONG)
+        {
+            primitive.mesh->Draw(*deferredGeometryShader);
+        }
+    }
+
+    // 2. 渲染PBR材质的物体
+    pbrDeferredGeometryShader->Use();
+    pbrDeferredGeometryShader->SetMat4("view", view);
+    pbrDeferredGeometryShader->SetMat4("projection", projection);
+    pbrDeferredGeometryShader->SetVec3("viewPos", mainCamera->Position);
+
+    // 渲染PBR材质的模型
+    for (auto &model : models)
+    {
+        model->DrawWithMaterialType(*pbrDeferredGeometryShader, PBR);
+    }
+
+    // 渲染PBR材质的几何体
+    for (auto &primitive : primitives)
+    {
+        if (primitive.mesh->GetMaterial()->type == PBR)
+        {
+            primitive.mesh->Draw(*pbrDeferredGeometryShader);
+        }
     }
 
     if (ssaoEnabled)
@@ -1519,6 +1703,71 @@ void Renderer::RenderQuad()
     glBindVertexArray(0);
 }
 
+void Renderer::RenderCube()
+{
+    if (cubeVAO == 0)
+    {
+        float cubeVertices[] = {
+            // back face
+            -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
+             1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
+             1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 0.0f, // bottom-right         
+             1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 1.0f, 1.0f, // top-right
+            -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 0.0f, // bottom-left
+            -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, -1.0f, 0.0f, 1.0f, // top-left
+            // front face
+            -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
+             1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 0.0f, // bottom-right
+             1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
+             1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 1.0f, 1.0f, // top-right
+            -1.0f,  1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 1.0f, // top-left
+            -1.0f, -1.0f,  1.0f,  0.0f,  0.0f,  1.0f, 0.0f, 0.0f, // bottom-left
+            // left face
+            -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
+            -1.0f,  1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-left
+            -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
+            -1.0f, -1.0f, -1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-left
+            -1.0f, -1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-right
+            -1.0f,  1.0f,  1.0f, -1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-right
+            // right face
+             1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
+             1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
+             1.0f,  1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 1.0f, // top-right         
+             1.0f, -1.0f, -1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 1.0f, // bottom-right
+             1.0f,  1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 1.0f, 0.0f, // top-left
+             1.0f, -1.0f,  1.0f,  1.0f,  0.0f,  0.0f, 0.0f, 0.0f, // bottom-left     
+            // bottom face
+            -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
+             1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 1.0f, // top-left
+             1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
+             1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 1.0f, 0.0f, // bottom-left
+            -1.0f, -1.0f,  1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 0.0f, // bottom-right
+            -1.0f, -1.0f, -1.0f,  0.0f, -1.0f,  0.0f, 0.0f, 1.0f, // top-right
+            // top face
+            -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
+             1.0f,  1.0f , 1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
+             1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 1.0f, // top-right     
+             1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 1.0f, 0.0f, // bottom-right
+            -1.0f,  1.0f, -1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 1.0f, // top-left
+            -1.0f,  1.0f,  1.0f,  0.0f,  1.0f,  0.0f, 0.0f, 0.0f  // bottom-left        
+        };
+        glGenVertexArrays(1, &cubeVAO);
+        glGenBuffers(1, &cubeVBO);
+        glBindVertexArray(cubeVAO);
+        glBindBuffer(GL_ARRAY_BUFFER, cubeVBO);
+        glBufferData(GL_ARRAY_BUFFER, sizeof(cubeVertices), cubeVertices, GL_STATIC_DRAW);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+        glEnableVertexAttribArray(1);
+        glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+        glEnableVertexAttribArray(2);
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    }
+    glBindVertexArray(cubeVAO);
+    glDrawArrays(GL_TRIANGLES, 0, 36);
+    glBindVertexArray(0);
+}
+
 void Renderer::CreatePrimitive(Geometry::Type type, const glm::vec3 &position, const glm::vec3 &scale,
                                const glm::vec3 &rotation, const Material &material)
 {
@@ -1826,11 +2075,6 @@ void Renderer::SetShadow(bool enabled)
     shadowEnabled = enabled;
 }
 
-void Renderer::SetPBR(bool enabled)
-{
-    pbrEnabled = enabled;
-}
-
 // 多光源阴影管理函数实现
 void Renderer::ClearLightShadowBuffers()
 {
@@ -1940,4 +2184,227 @@ void Renderer::GenerateSSAONoiseTexture()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+}
+
+// IBL相关实现
+void Renderer::SetupIBL()
+{
+    // 创建帧缓冲用于IBL预计算
+    glGenFramebuffers(1, &captureFBO);
+    glGenRenderbuffers(1, &captureRBO);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
+
+    // 生成BRDF LUT纹理
+    glGenTextures(1, &brdfLUTTexture);
+    glBindTexture(GL_TEXTURE_2D, brdfLUTTexture);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RG16F, 512, 512, 0, GL_RG, GL_FLOAT, 0);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // 生成BRDF LUT
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdfLUTTexture, 0);
+
+    glViewport(0, 0, 512, 512);
+    brdfShader->Use();
+    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+    RenderQuad();
+
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 加载默认HDR环境贴图（如果存在）
+    std::string hdrPath = FileSystem::GetPath("resources/textures/hdr/newport_loft.hdr");
+    if (std::ifstream(hdrPath))
+    {
+        LoadHDREnvironment(hdrPath);
+    }
+    else
+    {
+        // 如果没有HDR文件，使用默认天空盒创建IBL纹理
+        GenerateIBLTextures();
+    }
+}
+
+void Renderer::LoadHDREnvironment(const std::string& hdrPath)
+{
+    // 加载HDR纹理
+    unsigned int hdrTexture = LoadHDRTexture(hdrPath);
+    
+    if (hdrTexture == 0)
+    {
+        std::cerr << "Failed to load HDR texture: " << hdrPath << std::endl;
+        return;
+    }
+
+    // 创建立方体贴图
+    glGenTextures(1, &envCubemap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 512, 512, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    // 设置投影和视图矩阵用于渲染立方体贴图
+    glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+    glm::mat4 captureViews[] = 
+    {
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // +X
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // -X
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)), // +Y
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)), // -Y
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // +Z
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))  // -Z
+    };
+
+    // 转换HDR equirectangular到立方体贴图
+    equirectangularToCubemapShader->Use();
+    equirectangularToCubemapShader->SetInt("equirectangularMap", 0);
+    equirectangularToCubemapShader->SetMat4("projection", captureProjection);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, hdrTexture);
+
+    glViewport(0, 0, 512, 512);
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        equirectangularToCubemapShader->SetMat4("view", captureViews[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, envCubemap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        RenderCube(); // 需要实现一个渲染立方体的函数
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 生成mipmaps
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+    // 生成辐照度贴图
+    glGenTextures(1, &irradianceMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 32, 32, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
+
+    irradianceShader->Use();
+    irradianceShader->SetInt("environmentMap", 0);
+    irradianceShader->SetMat4("projection", captureProjection);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+
+    glViewport(0, 0, 32, 32);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        irradianceShader->SetMat4("view", captureViews[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, irradianceMap, 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        RenderCube();
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 生成预过滤贴图
+    glGenTextures(1, &prefilterMap);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, GL_RGB16F, 128, 128, 0, GL_RGB, GL_FLOAT, nullptr);
+    }
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+
+    prefilterShader->Use();
+    prefilterShader->SetInt("environmentMap", 0);
+    prefilterShader->SetMat4("projection", captureProjection);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+
+    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    unsigned int maxMipLevels = 5;
+    for (unsigned int mip = 0; mip < maxMipLevels; ++mip)
+    {
+        unsigned int mipWidth = static_cast<unsigned int>(128 * std::pow(0.5, mip));
+        unsigned int mipHeight = static_cast<unsigned int>(128 * std::pow(0.5, mip));
+        glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
+        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
+        glViewport(0, 0, mipWidth, mipHeight);
+
+        float roughness = (float)mip / (float)(maxMipLevels - 1);
+        prefilterShader->SetFloat("roughness", roughness);
+        for (unsigned int i = 0; i < 6; ++i)
+        {
+            prefilterShader->SetMat4("view", captureViews[i]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, prefilterMap, mip);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            RenderCube();
+        }
+    }
+    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    // 清理
+    glDeleteTextures(1, &hdrTexture);
+}
+
+unsigned int Renderer::LoadHDRTexture(const std::string& path)
+{
+    stbi_set_flip_vertically_on_load(false);  // 改为false避免翻转
+    int width, height, nrComponents;
+    float* data = stbi_loadf(path.c_str(), &width, &height, &nrComponents, 0);
+    unsigned int hdrTexture = 0;
+    if (data)
+    {
+        glGenTextures(1, &hdrTexture);
+        glBindTexture(GL_TEXTURE_2D, hdrTexture);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data);
+
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+        stbi_image_free(data);
+    }
+    else
+    {
+        std::cout << "Failed to load HDR image: " << path << std::endl;
+    }
+
+    return hdrTexture;
+}
+
+void Renderer::GenerateIBLTextures()
+{
+    // 使用现有的天空盒立方体贴图作为环境贴图
+    envCubemap = environmentMap->GetID();
+    
+    // 生成辐照度贴图和预过滤贴图（基于现有环境贴图）
+    // 这里可以添加基于现有立方体贴图生成IBL纹理的代码
+    // 为简化，我们暂时使用默认值
+    irradianceMap = envCubemap;
+    prefilterMap = envCubemap;
 }

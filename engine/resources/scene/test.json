@@ -1,25 +1,25 @@
 {
     "camera": {
-        "fov": 41.0,
+        "fov": 45.0,
         "front": [
-            -0.4321705102920532,
-            -0.11840402334928513,
-            -0.8939849734306335
+            0.15626637637615204,
+            -0.7033949494361877,
+            -0.6934092044830322
         ],
         "mouseSensitivity": 0.10000000149011612,
         "movementSpeed": 5.0,
-        "pitch": -6.8000030517578125,
+        "pitch": -44.70001983642578,
         "position": [
-            5.184609413146973,
-            14.71408462524414,
-            13.968605995178223
+            -2.800408124923706,
+            13.483908653259277,
+            11.350199699401855
         ],
         "up": [
-            -0.05153324082493782,
-            0.9929655194282532,
-            -0.1066013053059578
+            0.15463857352733612,
+            0.7107992172241211,
+            -0.6861860752105713
         ],
-        "yaw": -115.80006408691406
+        "yaw": -77.30001068115234
     },
     "directionalLights": [
         {
@@ -49,8 +49,8 @@
     ],
     "models": [
         {
-            "name": "nanosuit.obj",
-            "path": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\nanosuit_reflection\\nanosuit.obj",
+            "name": "nahida.pmx",
+            "path": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\nahida\\nahida.pmx",
             "position": [
                 0.0,
                 0.0,
@@ -105,7 +105,7 @@
                     0.800000011920929,
                     0.800000011920929
                 ],
-                "diffuseMapPath": "",
+                "diffuseMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\textures\\container2.png",
                 "normalMapPath": "",
                 "shininess": 32.0,
                 "specular": [
@@ -113,11 +113,11 @@
                     0.10000000149011612,
                     0.10000000149011612
                 ],
-                "specularMapPath": "",
+                "specularMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\textures\\container2_specular.png",
                 "type": 0,
-                "useDiffuseMap": false,
+                "useDiffuseMap": true,
                 "useNormalMap": false,
-                "useSpecularMap": false
+                "useSpecularMap": true
             },
             "params": {
                 "depth": 1.0,
@@ -314,20 +314,20 @@
         }
     ],
     "renderSettings": {
-        "bloomEnabled": true,
+        "bloomEnabled": false,
         "fxaaEnabled": false,
         "gammaCorrection": true,
         "hdrEnabled": true,
         "iblEnabled": true,
-        "msaaEnabled": false,
-        "pbrEnabled": false,
+        "msaaEnabled": true,
+        "pbrEnabled": true,
         "renderMode": 1,
         "shadowEnabled": true,
         "showLights": false,
         "ssaoEnabled": true
     },
     "sceneInfo": {
-        "createdTime": 1754374668,
+        "createdTime": 1754399603,
         "name": "Scene",
         "version": "1.0"
     },

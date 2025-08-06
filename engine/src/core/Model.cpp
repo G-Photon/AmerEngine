@@ -21,6 +21,18 @@ void Model::Draw(Shader &shader)
     }
 }
 
+void Model::DrawWithMaterialType(Shader &shader, MaterialType materialType)
+{
+    for (auto &mesh : meshes)
+    {
+        if (mesh->GetMaterial()->type == materialType)
+        {
+            mesh->SetTransform(position, rotation, scale);
+            mesh->Draw(shader);
+        }
+    }
+}
+
 void Model::LoadModel(const std::string &path)
 {
     Assimp::Importer importer;

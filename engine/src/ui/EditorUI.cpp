@@ -1199,10 +1199,52 @@ void EditorUI::ShowInspector()
 void EditorUI::ShowMaterialEditor(Material &material)
 {
     int materialType = static_cast<int>(material.type);
-    if (ImGui::Combo(ConvertToUTF8(L"材质类型").c_str(), &materialType, ConvertToUTF8(L"Blinn-Phong\0PBR\0").c_str()))
+    const char *material_items[] = {"Blinn-Phong", "PBR"};
+    if (ImGui::Combo(ConvertToUTF8(L"材质类型").c_str(), &materialType, material_items, IM_ARRAYSIZE(material_items)))
     {
+        MaterialType oldType = material.type;
+        MaterialType newType = static_cast<MaterialType>(materialType);
+        
         // 类型改变时的处理
-        material.type = static_cast<MaterialType>(materialType);
+        material.type = newType;
+        
+        // 如果类型发生了实际变化，设置合适的默认值
+        if (oldType != newType)
+        {
+            if (newType == PBR)
+            {
+                // 从Blinn-Phong切换到PBR时，设置合理的PBR默认值
+                if (material.albedo == glm::vec3(0.0f))
+                {
+                    material.albedo = glm::vec3(0.8f, 0.8f, 0.8f);
+                }
+                if (material.metallic == 0.0f && material.roughness == 0.0f)
+                {
+                    material.metallic = 0.1f;
+                    material.roughness = 0.5f;
+                }
+                if (material.ao == 0.0f)
+                {
+                    material.ao = 1.0f;
+                }
+            }
+            else if (newType == BLINN_PHONG)
+            {
+                // 从PBR切换到Blinn-Phong时，设置合理的Blinn-Phong默认值
+                if (material.diffuse == glm::vec3(0.0f))
+                {
+                    material.diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
+                }
+                if (material.specular == glm::vec3(0.0f))
+                {
+                    material.specular = glm::vec3(0.5f, 0.5f, 0.5f);
+                }
+                if (material.shininess == 0.0f)
+                {
+                    material.shininess = 32.0f;
+                }
+            }
+        }
     }
 
     if (material.type == BLINN_PHONG)
@@ -1650,13 +1692,6 @@ void EditorUI::ShowPostProcessSettings()
 
 void EditorUI::ShowLightingSettings()
 {
-    bool pbr = renderer->IsPBREnabled();
-    if (ImGui::Checkbox("PBR", &pbr))
-    {
-        renderer->SetPBR(pbr);
-    }
-    DrawTooltip(ConvertToUTF8(L"基于物理的渲染，更真实的材质表现").c_str());
-
     bool ibl = renderer->IsIBLEnabled();
     if (ImGui::Checkbox("IBL", &ibl))
     {

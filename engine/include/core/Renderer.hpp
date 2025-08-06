@@ -78,7 +78,6 @@ class Renderer
     void SetBloom(bool enabled);
     void SetSSAO(bool enabled);
     void SetShadow(bool enabled);
-    void SetPBR(bool enabled);
     void SetIBL(bool enabled);
     void SetLightsEnabled(bool enabled)
     {
@@ -124,10 +123,6 @@ class Renderer
     bool IsShadowEnabled() const
     {
         return shadowEnabled;
-    }
-    bool IsPBREnabled() const
-    {
-        return pbrEnabled;
     }
     bool IsIBLEnabled() const
     {
@@ -238,6 +233,7 @@ class Renderer
     void RenderPostProcessing();
     void RenderLights();
     void RenderQuad();
+    void RenderCube();
 
     void SetupGBuffer();
     void SetupShadowBuffer();
@@ -261,6 +257,12 @@ class Renderer
     void RenderSkybox();
     void RenderShadows();
     void RenderSSAO();
+    
+    // IBL相关方法
+    void SetupIBL();
+    void LoadHDREnvironment(const std::string& hdrPath);
+    unsigned int LoadHDRTexture(const std::string& path);
+    void GenerateIBLTextures();
 
     int width, height;
 
@@ -285,8 +287,11 @@ class Renderer
 
     // 着色器
     std::unique_ptr<Shader> forwardShader;
+    std::unique_ptr<Shader> pbrShader;
     std::unique_ptr<Shader> deferredGeometryShader;
     std::unique_ptr<Shader> deferredLightingShader;
+    std::unique_ptr<Shader> pbrDeferredGeometryShader;
+    std::unique_ptr<Shader> pbrDeferredLightingShader;
     std::unique_ptr<Shader> shadowDepthShader;
     std::unique_ptr<Shader> skyboxShader;
     std::unique_ptr<Shader> hdrShader;
@@ -298,6 +303,12 @@ class Renderer
     std::unique_ptr<Shader> postProcessShader;
     std::unique_ptr<Shader> postShaderMS; // 采样 sampler2DMS
     std::unique_ptr<Shader> fxaaShader;
+    
+    // IBL着色器
+    std::unique_ptr<Shader> equirectangularToCubemapShader;
+    std::unique_ptr<Shader> irradianceShader;
+    std::unique_ptr<Shader> prefilterShader;
+    std::unique_ptr<Shader> brdfShader;
 
     std::unordered_map<std::string, std::shared_ptr<Shader>> shaders;
 
@@ -311,6 +322,14 @@ class Renderer
     // 环境
     std::shared_ptr<Texture> environmentMap;
     unsigned int skyboxVAO, skyboxVBO;
+    
+    // IBL纹理
+    unsigned int envCubemap;
+    unsigned int irradianceMap;
+    unsigned int prefilterMap;
+    unsigned int brdfLUTTexture;
+    unsigned int captureFBO, captureRBO;
+    unsigned int cubeVAO, cubeVBO;
 
     // 相机
     std::shared_ptr<Camera> mainCamera;
@@ -328,7 +347,6 @@ class Renderer
     bool bloomEnabled = false;
     bool ssaoEnabled = false;
     bool shadowEnabled = false;
-    bool pbrEnabled = false;
     bool iblEnabled = false;
     bool showLights = false;
     bool fxaaEnabled = false;

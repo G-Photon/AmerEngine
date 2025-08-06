@@ -2,6 +2,22 @@
 
 Material::Material(MaterialType type) : type(type)
 {
+    // 确保所有材质类型都有合理的默认值
+    if (type == PBR)
+    {
+        // PBR默认值
+        albedo = glm::vec3(0.8f, 0.8f, 0.8f);
+        metallic = 0.1f;
+        roughness = 0.5f;
+        ao = 1.0f;
+    }
+    else
+    {
+        // Blinn-Phong默认值
+        diffuse = glm::vec3(0.8f, 0.8f, 0.8f);
+        specular = glm::vec3(0.5f, 0.5f, 0.5f);
+        shininess = 32.0f;
+    }
 }
 
 void Material::Bind(Shader &shader)
@@ -55,31 +71,37 @@ void Material::Bind(Shader &shader)
         shader.SetFloat("material.roughness", roughness);
         shader.SetFloat("material.ao", ao);
 
-        if (albedoMap)
+        shader.SetBool("material.useAlbedoMap", useAlbedoMap);
+        shader.SetBool("material.useMetallicMap", useMetallicMap);
+        shader.SetBool("material.useRoughnessMap", useRoughnessMap);
+        shader.SetBool("material.useAOMap", useAOMap);
+        shader.SetBool("material.useNormalMap", useNormalMap);
+
+        if (useAlbedoMap && albedoMap)
         {
             albedoMap->Bind(0);
             shader.SetInt("material.albedoMap", 0);
         }
 
-        if (metallicMap)
+        if (useMetallicMap && metallicMap)
         {
             metallicMap->Bind(1);
             shader.SetInt("material.metallicMap", 1);
         }
 
-        if (roughnessMap)
+        if (useRoughnessMap && roughnessMap)
         {
             roughnessMap->Bind(2);
             shader.SetInt("material.roughnessMap", 2);
         }
 
-        if (aoMap)
+        if (useAOMap && aoMap)
         {
             aoMap->Bind(3);
             shader.SetInt("material.aoMap", 3);
         }
 
-        if (normalMap)
+        if (useNormalMap && normalMap)
         {
             normalMap->Bind(4);
             shader.SetInt("material.normalMap", 4);
