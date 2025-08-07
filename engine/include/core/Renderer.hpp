@@ -21,6 +21,12 @@ class Renderer
         DEFERRED
     };
 
+    enum BackgroundType
+    {
+        SKYBOX,
+        HDR_ENVIRONMENT
+    };
+
     Renderer(int width, int height);
     ~Renderer();
 
@@ -79,6 +85,8 @@ class Renderer
     void SetSSAO(bool enabled);
     void SetShadow(bool enabled);
     void SetIBL(bool enabled);
+    void SetBackgroundType(BackgroundType type);
+    BackgroundType GetBackgroundType() const { return backgroundType; }
     void SetLightsEnabled(bool enabled)
     {
         showLights = enabled;
@@ -291,6 +299,7 @@ class Renderer
     std::unique_ptr<Shader> deferredGeometryShader;
     std::unique_ptr<Shader> deferredLightingShader;
     std::unique_ptr<Shader> pbrDeferredGeometryShader;
+    std::unique_ptr<Shader> pbrDeferredLightingShader;
     std::unique_ptr<Shader> shadowDepthShader;
     std::unique_ptr<Shader> skyboxShader;
     std::unique_ptr<Shader> hdrShader;
@@ -327,8 +336,8 @@ class Renderer
     unsigned int irradianceMap;
     unsigned int prefilterMap;
     unsigned int brdfLUTTexture;
-    unsigned int captureFBO, captureRBO;
-    unsigned int cubeVAO, cubeVBO;
+    std::unique_ptr<Framebuffer> iblCaptureBuffer; // 用于IBL预计算
+    unsigned int cubeVAO=0, cubeVBO=0;
 
     // 相机
     std::shared_ptr<Camera> mainCamera;
@@ -349,4 +358,7 @@ class Renderer
     bool iblEnabled = false;
     bool showLights = false;
     bool fxaaEnabled = false;
+    
+    // 背景类型
+    BackgroundType backgroundType = SKYBOX;
 };

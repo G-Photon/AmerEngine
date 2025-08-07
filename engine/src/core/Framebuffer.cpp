@@ -130,11 +130,6 @@ void Framebuffer::CheckComplete()
             attachments.push_back(GL_COLOR_ATTACHMENT0 + i);
         glDrawBuffers(attachments.size(), attachments.data());
     }
-    else
-    {
-        glDrawBuffer(GL_NONE);
-        glReadBuffer(GL_NONE);
-    }
 
     if (glCheckFramebufferStatus(GL_FRAMEBUFFER) != GL_FRAMEBUFFER_COMPLETE)
         throw std::runtime_error("Framebuffer is not complete!");

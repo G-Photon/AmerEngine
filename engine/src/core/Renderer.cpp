@@ -1,5 +1,7 @@
 // 核心渲染器定义
 #include "core/Renderer.hpp"
+#include "core/Camera.hpp"
+#include "core/Framebuffer.hpp"
 // 序列化
 #include <fstream>
 #include <nlohmann/json.hpp>
@@ -295,7 +297,8 @@ void Renderer::SaveScene(const std::string& path)
         {"fxaaEnabled", fxaaEnabled},
         {"gammaCorrection", gammaCorrection},
         {"iblEnabled", iblEnabled},
-        {"showLights", showLights}
+        {"showLights", showLights},
+        {"backgroundType", static_cast<int>(backgroundType)}
     };
     
     std::ofstream ofs(path);
@@ -766,6 +769,9 @@ void Renderer::LoadScene(const std::string& path)
             if (settings.contains("gammaCorrection")) SetGammaCorrection(settings["gammaCorrection"]);
             if (settings.contains("iblEnabled")) SetIBL(settings["iblEnabled"]);
             if (settings.contains("showLights")) showLights = settings["showLights"];
+            if (settings.contains("backgroundType")) {
+                SetBackgroundType(static_cast<BackgroundType>(settings["backgroundType"].get<int>()));
+            }
         } catch (const std::exception& e) {
             std::cerr << "加载渲染设置失败: " << e.what() << std::endl;
         }
@@ -792,8 +798,9 @@ Renderer::~Renderer()
     glDeleteTextures(1, &irradianceMap);
     glDeleteTextures(1, &prefilterMap);
     glDeleteTextures(1, &brdfLUTTexture);
-    glDeleteFramebuffers(1, &captureFBO);
-    glDeleteRenderbuffers(1, &captureRBO);
+    
+    // 清理IBL帧缓冲区（Framebuffer对象会自动清理）
+    iblCaptureBuffer.reset();
     
     // 清理多光源阴影缓冲区
     ClearLightShadowBuffers();
@@ -1691,13 +1698,14 @@ void Renderer::RenderSkybox()
     glDepthFunc(GL_LEQUAL);
     glDepthMask(GL_FALSE);
     glDisable(GL_CULL_FACE);
+    
     skyboxShader->Use();
-    // 设置环境贴图
-    skyboxShader->SetInt("skybox", 0);
+    
     // 设置视图矩阵(移除平移部分)
     glm::mat4 view = glm::mat4(glm::mat3(mainCamera->GetViewMatrix()));
     skyboxShader->SetMat4("view", view);
     skyboxShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
+    
     if (gammaCorrection)
     {
         skyboxShader->SetBool("gammaEnabled", true);
@@ -1709,7 +1717,21 @@ void Renderer::RenderSkybox()
 
     glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap->GetID());
+    
+    // 根据背景类型选择不同的纹理
+    if (backgroundType == HDR_ENVIRONMENT && iblEnabled && envCubemap != 0)
+    {
+        // 使用HDR环境贴图
+        skyboxShader->SetInt("skybox", 0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
+    }
+    else if (environmentMap)
+    {
+        // 使用传统skybox纹理
+        skyboxShader->SetInt("skybox", 0);
+        glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap->GetID());
+    }
+    
     glDrawArrays(GL_TRIANGLES, 0, 36);
     glBindVertexArray(0);
     glDepthFunc(GL_LESS);
@@ -1950,7 +1972,8 @@ void Renderer::RenderCube()
         glEnableVertexAttribArray(1);
         glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
         glEnableVertexAttribArray(2);
-        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+        glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void *)(6 * sizeof(float)));
+        glBindVertexArray(0); // 解绑VAO
     }
     glBindVertexArray(cubeVAO);
     glDrawArrays(GL_TRIANGLES, 0, 36);
@@ -2295,6 +2318,11 @@ void Renderer::SetIBL(bool enabled)
     iblEnabled = enabled;
 }
 
+void Renderer::SetBackgroundType(BackgroundType type)
+{
+    backgroundType = type;
+}
+
 void Renderer::SetRenderMode(RenderMode mode)
 {
     currentMode = mode;
@@ -2378,14 +2406,13 @@ void Renderer::GenerateSSAONoiseTexture()
 // IBL相关实现
 void Renderer::SetupIBL()
 {
-    // 创建帧缓冲用于IBL预计算
-    glGenFramebuffers(1, &captureFBO);
-    glGenRenderbuffers(1, &captureRBO);
+    // 创建IBL专用的帧缓冲
+    iblCaptureBuffer = std::make_unique<Framebuffer>(512, 512);
+    iblCaptureBuffer->AddDepthBuffer();
+    iblCaptureBuffer->CheckComplete();
 
-    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
-    glFramebufferRenderbuffer(GL_FRAMEBUFFER, GL_DEPTH_ATTACHMENT, GL_RENDERBUFFER, captureRBO);
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
 
     // 生成BRDF LUT纹理
     glGenTextures(1, &brdfLUTTexture);
@@ -2397,17 +2424,14 @@ void Renderer::SetupIBL()
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
     // 生成BRDF LUT
-    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 512, 512);
+    iblCaptureBuffer->Bind();
     glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, brdfLUTTexture, 0);
-
     glViewport(0, 0, 512, 512);
     brdfShader->Use();
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
     RenderQuad();
-
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_2D, 0, 0);
+    iblCaptureBuffer->Unbind();
 
     // 加载默认HDR环境贴图（如果存在）
     std::string hdrPath = FileSystem::GetPath("resources/textures/hdr/newport_loft.hdr");
@@ -2417,13 +2441,18 @@ void Renderer::SetupIBL()
     }
     else
     {
-        // 如果没有HDR文件，使用默认天空盒创建IBL纹理
         GenerateIBLTextures();
     }
 }
 
 void Renderer::LoadHDREnvironment(const std::string& hdrPath)
 {
+    // 保存当前viewport和帧缓冲设置
+    GLint prevViewport[4];
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+    GLint prevFramebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFramebuffer);
+    
     // 加载HDR纹理
     unsigned int hdrTexture = LoadHDRTexture(hdrPath);
     
@@ -2460,21 +2489,35 @@ void Renderer::LoadHDREnvironment(const std::string& hdrPath)
 
     // 转换HDR equirectangular到立方体贴图
     equirectangularToCubemapShader->Use();
+    GLenum shaderError = glGetError();
+    if (shaderError != GL_NO_ERROR) {
+        std::cerr << "Error using equirectangularToCubemapShader: " << shaderError << std::endl;
+    }
+    
     equirectangularToCubemapShader->SetInt("equirectangularMap", 0);
     equirectangularToCubemapShader->SetMat4("projection", captureProjection);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, hdrTexture);
 
     glViewport(0, 0, 512, 512);
-    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
+    iblCaptureBuffer->Bind();
+
     for (unsigned int i = 0; i < 6; ++i)
     {
         equirectangularToCubemapShader->SetMat4("view", captureViews[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, envCubemap, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        RenderCube(); // 需要实现一个渲染立方体的函数
+        RenderCube();
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, 0);
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+
+    iblCaptureBuffer->Unbind();
+
+    // 检查OpenGL错误
+    GLenum error = glGetError();
+    if (error != GL_NO_ERROR) {
+        std::cerr << "OpenGL error after generating envCubemap: " << error << std::endl;
+    }
 
     // 生成mipmaps
     glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
@@ -2493,9 +2536,9 @@ void Renderer::LoadHDREnvironment(const std::string& hdrPath)
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
-    glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-    glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, 32, 32);
+    // 调整IBL缓冲区尺寸为32x32用于辐照度贴图
+    iblCaptureBuffer->Resize(32, 32);
+    iblCaptureBuffer->Bind();
 
     irradianceShader->Use();
     irradianceShader->SetInt("environmentMap", 0);
@@ -2510,8 +2553,9 @@ void Renderer::LoadHDREnvironment(const std::string& hdrPath)
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, irradianceMap, 0);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
         RenderCube();
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, 0);
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
+    iblCaptureBuffer->Unbind();
 
     // 生成预过滤贴图
     glGenTextures(1, &prefilterMap);
@@ -2533,14 +2577,14 @@ void Renderer::LoadHDREnvironment(const std::string& hdrPath)
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap);
 
-    glBindFramebuffer(GL_FRAMEBUFFER, captureFBO);
     unsigned int maxMipLevels = 5;
     for (unsigned int mip = 0; mip < maxMipLevels; ++mip)
     {
         unsigned int mipWidth = static_cast<unsigned int>(128 * std::pow(0.5, mip));
         unsigned int mipHeight = static_cast<unsigned int>(128 * std::pow(0.5, mip));
-        glBindRenderbuffer(GL_RENDERBUFFER, captureRBO);
-        glRenderbufferStorage(GL_RENDERBUFFER, GL_DEPTH_COMPONENT24, mipWidth, mipHeight);
+        iblCaptureBuffer->Resize(mipWidth, mipHeight);
+        iblCaptureBuffer->Bind();
+        
         glViewport(0, 0, mipWidth, mipHeight);
 
         float roughness = (float)mip / (float)(maxMipLevels - 1);
@@ -2551,17 +2595,24 @@ void Renderer::LoadHDREnvironment(const std::string& hdrPath)
             glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, prefilterMap, mip);
             glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
             RenderCube();
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, mip);
         }
+        iblCaptureBuffer->Unbind();
     }
-    glBindFramebuffer(GL_FRAMEBUFFER, 0);
 
     // 清理
     glDeleteTextures(1, &hdrTexture);
+    
+    // 恢复原始设置
+    glBindFramebuffer(GL_FRAMEBUFFER, prevFramebuffer);
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    
+    std::cout << "LoadHDREnvironment completed. envCubemap ID: " << envCubemap << std::endl;
 }
 
 unsigned int Renderer::LoadHDRTexture(const std::string& path)
 {
-    stbi_set_flip_vertically_on_load(false);  // 改为false避免翻转
+    stbi_set_flip_vertically_on_load(true);  // 改为false避免翻转
     int width, height, nrComponents;
     float* data = stbi_loadf(path.c_str(), &width, &height, &nrComponents, 0);
     unsigned int hdrTexture = 0;

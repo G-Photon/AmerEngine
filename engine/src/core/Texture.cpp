@@ -115,6 +115,7 @@ void Texture::CreateNormalMap()
 
 void Texture::LoadCubemap(const std::vector<std::string> &faces)
 {
+    stbi_set_flip_vertically_on_load(false);
     if (faces.size() != 6)
     {
         std::cerr << "Cubemap faces must be exactly 6!" << std::endl;

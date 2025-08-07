@@ -1,25 +1,25 @@
 {
     "camera": {
-        "fov": 45.0,
+        "fov": 35.0,
         "front": [
-            0.8123171925544739,
-            0.16160322725772858,
-            -0.5603794455528259
+            -0.6647576093673706,
+            -0.3665038049221039,
+            -0.6509779691696167
         ],
         "mouseSensitivity": 0.10000000149011612,
         "movementSpeed": 5.0,
-        "pitch": 9.299965858459473,
+        "pitch": -21.500158309936523,
         "position": [
-            -8.426112174987793,
-            10.446720123291016,
-            2.1566600799560547
+            13.228750228881836,
+            9.704423904418945,
+            15.686090469360352
         ],
         "up": [
-            -0.1330215483903885,
-            0.9868558645248413,
-            0.09176530689001083
+            -0.2618570923805237,
+            0.9304165840148926,
+            -0.25642913579940796
         ],
-        "yaw": -34.59996795654297
+        "yaw": -135.60003662109375
     },
     "directionalLights": [
         {
@@ -161,7 +161,7 @@
                 ],
                 "specularMapFlipY": true,
                 "specularMapPath": "",
-                "type": 0,
+                "type": 1,
                 "useDiffuseMap": true,
                 "useNormalMap": false,
                 "useSpecularMap": false
@@ -373,6 +373,7 @@
         }
     ],
     "renderSettings": {
+        "backgroundType": 1,
         "bloomEnabled": false,
         "fxaaEnabled": false,
         "gammaCorrection": true,
@@ -385,7 +386,7 @@
         "ssaoEnabled": false
     },
     "sceneInfo": {
-        "createdTime": 1754535977,
+        "createdTime": 1754557313,
         "name": "Scene",
         "version": "1.0"
     },

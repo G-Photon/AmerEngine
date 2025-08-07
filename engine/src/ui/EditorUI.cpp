@@ -1708,6 +1708,32 @@ void EditorUI::ShowLightingSettings()
     
     ImGui::Separator();
     
+    // 背景类型选择
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"背景设置").c_str()))
+    {
+        const char* backgroundTypes[] = { "Skybox", "HDR Environment" };
+        int currentBackground = static_cast<int>(renderer->GetBackgroundType());
+        
+        if (ImGui::Combo(ConvertToUTF8(L"背景类型").c_str(), &currentBackground, backgroundTypes, 2))
+        {
+            renderer->SetBackgroundType(static_cast<Renderer::BackgroundType>(currentBackground));
+        }
+        DrawTooltip(ConvertToUTF8(L"选择背景渲染类型：传统天空盒或HDR环境贴图").c_str());
+        
+        ImGui::Spacing();
+        
+        if (currentBackground == 0) // Skybox
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Using traditional skybox");
+            ImGui::TextWrapped("Traditional cube map skybox for general scenes");
+        }
+        else // HDR Environment  
+        {
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.4f, 1.0f), "Using HDR environment");
+            ImGui::TextWrapped("Newport Loft HDR environment for realistic lighting");
+        }
+    }
+    
     // HDR环境贴图信息
     if (ImGui::CollapsingHeader(ConvertToUTF8(L"环境贴图").c_str()))
     {
