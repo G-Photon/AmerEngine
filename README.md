@@ -50,7 +50,6 @@ xmake run AmerEngine
 - [ ] 跨平台打包与部署
 - [ ] 完善文档与API注释
 - [ ] 单元测试与CI集成
-- [ ] 支持 PBR 材质
 
 ---
 
@@ -66,6 +65,8 @@ xmake run AmerEngine
 - [x] MSAA、FXAA抗锯齿方法
 - [x] Gamma校正、HDR、泛光、SSAO等后处理效果
 - [x] 延迟着色
+- [x] 支持 PBR 材质
+- [x] 支持 IBL 环境
 
 ---
 
@@ -111,3 +112,4 @@ AmerEngine/
 ---
 
 > 本项目仅供学习与交流，部分资源来源于网络，版权归原作者所有。
+
