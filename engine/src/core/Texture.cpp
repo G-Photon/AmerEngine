@@ -3,6 +3,14 @@
 #include "stb_image.h"
 #include <iostream>
 
+// 初始化静态成员，从100000开始以避免与ImGui等系统纹理ID冲突
+unsigned int Texture::nextTextureID = 100000;
+
+unsigned int Texture::GetNextTextureID()
+{
+    return ++nextTextureID;
+}
+
 Texture::Texture()
     : ID(0), Width(0), Height(0), Internal_Format(GL_RGB), Image_Format(GL_RGB), Wrap_S(GL_REPEAT), Wrap_T(GL_REPEAT),
       Filter_Min(GL_LINEAR), Filter_Max(GL_LINEAR)
@@ -48,13 +56,17 @@ bool Texture::LoadFromFile(const std::string &path)
         std::cerr << "Texture path is empty!" << std::endl;
         return false;
     }
-    stbi_set_flip_vertically_on_load(flipY); // 普通贴图翻转
+    
+    
+    stbi_set_flip_vertically_on_load(flipY); // 使用实例的flipY设置
     // 中文读取，防止乱码
     setlocale(LC_ALL, "zh_CN.UTF-8");
 
     unsigned char *data = stbi_load(path.c_str(), &Width, &Height, &nrComponents, 0);
     if (data)
     {
+        std::cout << "成功读取纹理文件: " << path << " 尺寸: " << Width << "x" << Height << " 通道数: " << nrComponents << " flipY: " << flipY << std::endl;
+        
         if (nrComponents == 1)
         {
             Internal_Format = GL_RED;
@@ -74,10 +86,11 @@ bool Texture::LoadFromFile(const std::string &path)
         Generate(Width, Height, data);
         stbi_image_free(data);
         Path = path;
+        std::cout << "纹理加载成功: " << path << " ID: " << ID << " flipY: " << flipY << std::endl;
         return true;
     }
 
-    std::cerr << "Texture failed to load at path: " << path << std::endl;
+    std::cerr << "纹理加载失败: " << path << " 错误: " << stbi_failure_reason() << std::endl;
     stbi_image_free(data);
     return false;
 }

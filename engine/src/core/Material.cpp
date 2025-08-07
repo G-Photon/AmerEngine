@@ -1,4 +1,5 @@
 #include "core/Material.hpp"
+#include <iostream>
 
 Material::Material(MaterialType type) : type(type)
 {

@@ -415,11 +415,6 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
     shader->SetFloat("light.quadratic", quadratic);
     shader->SetInt("lightType", this->getType());
     
-    // 调试输出（可选）
-    // std::cout << "SpotLight 绘制 - 位置: (" << position.x << ", " << position.y << ", " << position.z << ")" << std::endl;
-    // std::cout << "SpotLight 绘制 - 方向: (" << direction.x << ", " << direction.y << ", " << direction.z << ")" << std::endl;
-    // std::cout << "SpotLight 绘制 - 范围: " << range << ", 底面半径: " << baseRadius << std::endl;
-    
     // 设置阴影相关参数
     shader->SetBool("light.hasShadows", shadowEnabled);
     if (shadowEnabled && shadowMap != 0)

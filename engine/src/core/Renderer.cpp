@@ -11,12 +11,13 @@ using json = nlohmann::json;
 #include "utils/FileSystem.hpp"
 // 纹理类型
 #include "core/Texture.hpp"
+#include "core/TextureManager.hpp"
 // 数学运算
 #include "glm/gtc/quaternion.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 #include <glm/gtc/matrix_transform.hpp>
-// STB图像处理
+// STB图像处理（仅头文件，实现在Texture.cpp中）
 #include "stb_image.h"
 // 新建场景：清空所有模型、光源、几何体等
 void Renderer::NewScene()
@@ -77,27 +78,34 @@ void Renderer::SaveScene(const std::string& path)
                     {"useSpecularMap", material.useSpecularMap}
                 };
                 
-                // 保存贴图路径
+                // 保存贴图路径和flipY状态
                 if (material.albedoMap) {
                     materialJson["albedoMapPath"] = material.albedoMap->GetPath();
+                    materialJson["albedoMapFlipY"] = material.albedoMap->flipY;
                 }
                 if (material.metallicMap) {
                     materialJson["metallicMapPath"] = material.metallicMap->GetPath();
+                    materialJson["metallicMapFlipY"] = material.metallicMap->flipY;
                 }
                 if (material.roughnessMap) {
                     materialJson["roughnessMapPath"] = material.roughnessMap->GetPath();
+                    materialJson["roughnessMapFlipY"] = material.roughnessMap->flipY;
                 }
                 if (material.normalMap) {
                     materialJson["normalMapPath"] = material.normalMap->GetPath();
+                    materialJson["normalMapFlipY"] = material.normalMap->flipY;
                 }
                 if (material.aoMap) {
                     materialJson["aoMapPath"] = material.aoMap->GetPath();
+                    materialJson["aoMapFlipY"] = material.aoMap->flipY;
                 }
                 if (material.diffuseMap) {
                     materialJson["diffuseMapPath"] = material.diffuseMap->GetPath();
+                    materialJson["diffuseMapFlipY"] = material.diffuseMap->flipY;
                 }
                 if (material.specularMap) {
                     materialJson["specularMapPath"] = material.specularMap->GetPath();
+                    materialJson["specularMapFlipY"] = material.specularMap->flipY;
                 }
                 
                 modelJson["materials"].push_back(materialJson);
@@ -173,7 +181,10 @@ void Renderer::SaveScene(const std::string& path)
                 {"useNormalMap", primitive.mesh->GetMaterial()->useNormalMap},
                 {"diffuseMapPath", primitive.mesh->GetMaterial()->diffuseMap ? primitive.mesh->GetMaterial()->diffuseMap->GetPath() : ""},
                 {"specularMapPath", primitive.mesh->GetMaterial()->specularMap ? primitive.mesh->GetMaterial()->specularMap->GetPath() : ""},
-                {"normalMapPath", primitive.mesh->GetMaterial()->normalMap ? primitive.mesh->GetMaterial()->normalMap->GetPath() : ""}
+                {"normalMapPath", primitive.mesh->GetMaterial()->normalMap ? primitive.mesh->GetMaterial()->normalMap->GetPath() : ""},
+                {"diffuseMapFlipY", primitive.mesh->GetMaterial()->diffuseMap ? primitive.mesh->GetMaterial()->diffuseMap->flipY : true},
+                {"specularMapFlipY", primitive.mesh->GetMaterial()->specularMap ? primitive.mesh->GetMaterial()->specularMap->flipY : true},
+                {"normalMapFlipY", primitive.mesh->GetMaterial()->normalMap ? primitive.mesh->GetMaterial()->normalMap->flipY : true}
             }}
         };
         
@@ -398,38 +409,45 @@ void Renderer::LoadScene(const std::string& path)
                                     // 加载贴图（如果路径存在且不为空）
                                     if (materialData.contains("albedoMapPath") && 
                                         !materialData["albedoMapPath"].get<std::string>().empty()) {
-                                        materialPtr->albedoMap = std::make_shared<Texture>(
-                                            materialData["albedoMapPath"].get<std::string>());
+                                        std::string texturePath = materialData["albedoMapPath"].get<std::string>();
+                                        bool flipY = materialData.contains("albedoMapFlipY") ? materialData["albedoMapFlipY"].get<bool>() : true;
+                                        materialPtr->albedoMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("metallicMapPath") && 
                                         !materialData["metallicMapPath"].get<std::string>().empty()) {
-                                        materialPtr->metallicMap = std::make_shared<Texture>(
-                                            materialData["metallicMapPath"].get<std::string>());
+                                        std::string texturePath = materialData["metallicMapPath"].get<std::string>();
+                                        bool flipY = materialData.contains("metallicMapFlipY") ? materialData["metallicMapFlipY"].get<bool>() : true;
+                                        materialPtr->metallicMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("roughnessMapPath") && 
                                         !materialData["roughnessMapPath"].get<std::string>().empty()) {
-                                        materialPtr->roughnessMap = std::make_shared<Texture>(
-                                            materialData["roughnessMapPath"].get<std::string>());
+                                        std::string texturePath = materialData["roughnessMapPath"].get<std::string>();
+                                        bool flipY = materialData.contains("roughnessMapFlipY") ? materialData["roughnessMapFlipY"].get<bool>() : true;
+                                        materialPtr->roughnessMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("normalMapPath") && 
                                         !materialData["normalMapPath"].get<std::string>().empty()) {
-                                        materialPtr->normalMap = std::make_shared<Texture>(
-                                            materialData["normalMapPath"].get<std::string>());
+                                        std::string texturePath = materialData["normalMapPath"].get<std::string>();
+                                        bool flipY = materialData.contains("normalMapFlipY") ? materialData["normalMapFlipY"].get<bool>() : true;
+                                        materialPtr->normalMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("aoMapPath") && 
                                         !materialData["aoMapPath"].get<std::string>().empty()) {
-                                        materialPtr->aoMap = std::make_shared<Texture>(
-                                            materialData["aoMapPath"].get<std::string>());
+                                        std::string texturePath = materialData["aoMapPath"].get<std::string>();
+                                        bool flipY = materialData.contains("aoMapFlipY") ? materialData["aoMapFlipY"].get<bool>() : true;
+                                        materialPtr->aoMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("diffuseMapPath") && 
                                         !materialData["diffuseMapPath"].get<std::string>().empty()) {
-                                        materialPtr->diffuseMap = std::make_shared<Texture>(
-                                            materialData["diffuseMapPath"].get<std::string>());
+                                        std::string texturePath = materialData["diffuseMapPath"].get<std::string>();
+                                        bool flipY = materialData.contains("diffuseMapFlipY") ? materialData["diffuseMapFlipY"].get<bool>() : true;
+                                        materialPtr->diffuseMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("specularMapPath") && 
                                         !materialData["specularMapPath"].get<std::string>().empty()) {
-                                        materialPtr->specularMap = std::make_shared<Texture>(
-                                            materialData["specularMapPath"].get<std::string>());
+                                        std::string texturePath = materialData["specularMapPath"].get<std::string>();
+                                        bool flipY = materialData.contains("specularMapFlipY") ? materialData["specularMapFlipY"].get<bool>() : true;
+                                        materialPtr->specularMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                 }
                             }
@@ -587,13 +605,21 @@ void Renderer::LoadScene(const std::string& path)
                     if (mat.contains("useNormalMap")) defaultMaterial.useNormalMap = mat["useNormalMap"];
                     if (mat.contains("diffuseMapPath") && !mat["diffuseMapPath"].get<std::string>().empty())
                     {
-                        defaultMaterial.diffuseMap = std::make_shared<Texture>(mat["diffuseMapPath"].get<std::string>());
+                        std::string texturePath = mat["diffuseMapPath"].get<std::string>();
+                        bool flipY = mat.contains("diffuseMapFlipY") ? mat["diffuseMapFlipY"].get<bool>() : true;
+                        std::cout << "正在加载几何体diffuse贴图: " << texturePath << " (flipY=" << flipY << ")" << std::endl;
+                        defaultMaterial.diffuseMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                     }
                     if (mat.contains("specularMapPath") && !mat["specularMapPath"].get<std::string>().empty()) {
-                        defaultMaterial.specularMap = std::make_shared<Texture>(mat["specularMapPath"].get<std::string>());
+                        std::string texturePath = mat["specularMapPath"].get<std::string>();
+                        bool flipY = mat.contains("specularMapFlipY") ? mat["specularMapFlipY"].get<bool>() : true;
+                        std::cout << "正在加载几何体specular贴图: " << texturePath << " (flipY=" << flipY << ")" << std::endl;
+                        defaultMaterial.specularMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                     }
                     if (mat.contains("normalMapPath") && !mat["normalMapPath"].get<std::string>().empty()) {
-                        defaultMaterial.normalMap = std::make_shared<Texture>(mat["normalMapPath"].get<std::string>());
+                        std::string texturePath = mat["normalMapPath"].get<std::string>();
+                        bool flipY = mat.contains("normalMapFlipY") ? mat["normalMapFlipY"].get<bool>() : true;
+                        defaultMaterial.normalMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                     }
                 }
                 
@@ -605,7 +631,7 @@ void Renderer::LoadScene(const std::string& path)
                             float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
                             int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::CUBE: {
@@ -613,7 +639,7 @@ void Renderer::LoadScene(const std::string& path)
                             float height = params.contains("height") ? params["height"].get<float>() : 1.0f;
                             float depth = params.contains("depth") ? params["depth"].get<float>() : 1.0f;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数
+
                             break;
                         }
                         case Geometry::CYLINDER: {
@@ -621,7 +647,7 @@ void Renderer::LoadScene(const std::string& path)
                             float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
                             int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::CONE: {
@@ -629,7 +655,7 @@ void Renderer::LoadScene(const std::string& path)
                             float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
                             int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::PRISM: {
@@ -637,7 +663,7 @@ void Renderer::LoadScene(const std::string& path)
                             float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
                             float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::PYRAMID: {
@@ -645,7 +671,7 @@ void Renderer::LoadScene(const std::string& path)
                             float radius = params.contains("radius") ? params["radius"].get<float>() : 1.0f;
                             float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::TORUS: {
@@ -654,7 +680,7 @@ void Renderer::LoadScene(const std::string& path)
                             int majorSegments = params.contains("majorSegments") ? params["majorSegments"].get<int>() : 16;
                             int minorSegments = params.contains("minorSegments") ? params["minorSegments"].get<int>() : 12;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::ELLIPSOID: {
@@ -663,7 +689,7 @@ void Renderer::LoadScene(const std::string& path)
                             float radiusZ = params.contains("radiusZ") ? params["radiusZ"].get<float>() : 1.0f;
                             int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::FRUSTUM: {
@@ -672,14 +698,14 @@ void Renderer::LoadScene(const std::string& path)
                             float height = params.contains("height") ? params["height"].get<float>() : 2.0f;
                             int segments = params.contains("segments") ? params["segments"].get<int>() : 16;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         case Geometry::ARROW: {
                             float length = params.contains("length") ? params["length"].get<float>() : 1.0f;
                             float headSize = params.contains("headSize") ? params["headSize"].get<float>() : 0.2f;
                             CreatePrimitive(type, position, scale, rotation, defaultMaterial);
-                            // 更新参数（这里需要根据实际API调整）
+
                             break;
                         }
                         // 其他几何体类型类似处理...
@@ -744,8 +770,8 @@ void Renderer::LoadScene(const std::string& path)
             std::cerr << "加载渲染设置失败: " << e.what() << std::endl;
         }
     }
-    
-    std::cout << "场景已加载: " << path << std::endl;
+
+    std::cout << "场景已加载成功: " << path << std::endl;
 }
 
 Renderer::Renderer(int width, int height) : width(width), height(height)
@@ -946,16 +972,6 @@ void Renderer::Initialize()
 
     // 设置IBL
     SetupIBL();
-
-    // 加载默认纹理
-    auto whiteTexture = std::make_shared<Texture>();
-    whiteTexture->CreateSolidColor(glm::vec3(1.0f));
-
-    auto blackTexture = std::make_shared<Texture>();
-    blackTexture->CreateSolidColor(glm::vec3(0.0f));
-
-    auto normalTexture = std::make_shared<Texture>();
-    normalTexture->CreateNormalMap();
 
     environmentMap = std::make_shared<Texture>();
     environmentMap->LoadCubemap({FileSystem::GetPath("resources/textures/skybox/right.jpg"),

@@ -1,25 +1,25 @@
 {
     "camera": {
-        "fov": 38.0,
+        "fov": 45.0,
         "front": [
-            -0.0833810493350029,
-            0.5195194482803345,
-            0.8503805994987488
+            0.8123171925544739,
+            0.16160322725772858,
+            -0.5603794455528259
         ],
         "mouseSensitivity": 0.10000000149011612,
         "movementSpeed": 5.0,
-        "pitch": 31.30002212524414,
+        "pitch": 9.299965858459473,
         "position": [
-            3.962329149246216,
-            10.102264404296875,
-            -14.016278266906738
+            -8.426112174987793,
+            10.446720123291016,
+            2.1566600799560547
         ],
         "up": [
-            0.05069651082158089,
-            0.8544585704803467,
-            -0.517039954662323
+            -0.1330215483903885,
+            0.9868558645248413,
+            0.09176530689001083
         ],
-        "yaw": 95.60003662109375
+        "yaw": -34.59996795654297
     },
     "directionalLights": [
         {
@@ -49,11 +49,55 @@
     ],
     "models": [
         {
+            "materials": [
+                {
+                    "albedo": [
+                        0.5882353186607361,
+                        0.5882353186607361,
+                        0.5882353186607361
+                    ],
+                    "albedoMapFlipY": false,
+                    "albedoMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_A.tga",
+                    "ao": 1.0,
+                    "aoMapFlipY": false,
+                    "aoMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Raw\\Cerberus_AO.tga",
+                    "diffuse": [
+                        0.800000011920929,
+                        0.800000011920929,
+                        0.800000011920929
+                    ],
+                    "diffuseMapFlipY": true,
+                    "diffuseMapPath": "D:/Adata/study/opengl/engine/resources/model/Cerberus_by_Andrew_Maximov/Textures/Cerberus_A.tga",
+                    "meshIndex": 0,
+                    "metallic": 0.0,
+                    "metallicMapFlipY": false,
+                    "metallicMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_M.tga",
+                    "normalMapFlipY": false,
+                    "normalMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Raw\\Cerberus_N.tga",
+                    "roughness": 0.8585786819458008,
+                    "roughnessMapFlipY": false,
+                    "roughnessMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_R.tga",
+                    "shininess": 32.0,
+                    "specular": [
+                        0.5,
+                        0.5,
+                        0.5
+                    ],
+                    "type": 1,
+                    "useAOMap": true,
+                    "useAlbedoMap": true,
+                    "useDiffuseMap": true,
+                    "useMetallicMap": true,
+                    "useNormalMap": true,
+                    "useRoughnessMap": true,
+                    "useSpecularMap": false
+                }
+            ],
             "name": "Cerberus_LP.FBX",
             "path": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Cerberus_LP.FBX",
             "position": [
                 0.0,
-                18.200000762939453,
+                16.899999618530273,
                 0.0
             ],
             "rotation": [
@@ -105,7 +149,9 @@
                     0.800000011920929,
                     0.800000011920929
                 ],
-                "diffuseMapPath": "",
+                "diffuseMapFlipY": true,
+                "diffuseMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\textures\\container.jpg",
+                "normalMapFlipY": true,
                 "normalMapPath": "",
                 "shininess": 32.0,
                 "specular": [
@@ -113,9 +159,10 @@
                     0.10000000149011612,
                     0.10000000149011612
                 ],
+                "specularMapFlipY": true,
                 "specularMapPath": "",
                 "type": 0,
-                "useDiffuseMap": false,
+                "useDiffuseMap": true,
                 "useNormalMap": false,
                 "useSpecularMap": false
             },
@@ -148,7 +195,9 @@
                     0.20000000298023224,
                     0.20000000298023224
                 ],
+                "diffuseMapFlipY": true,
                 "diffuseMapPath": "",
+                "normalMapFlipY": true,
                 "normalMapPath": "",
                 "shininess": 64.0,
                 "specular": [
@@ -156,6 +205,7 @@
                     0.5,
                     0.5
                 ],
+                "specularMapFlipY": true,
                 "specularMapPath": "",
                 "type": 0,
                 "useDiffuseMap": false,
@@ -191,7 +241,9 @@
                     0.20000000298023224,
                     0.800000011920929
                 ],
+                "diffuseMapFlipY": true,
                 "diffuseMapPath": "",
+                "normalMapFlipY": true,
                 "normalMapPath": "",
                 "shininess": 64.0,
                 "specular": [
@@ -199,6 +251,7 @@
                     0.5,
                     0.5
                 ],
+                "specularMapFlipY": true,
                 "specularMapPath": "",
                 "type": 0,
                 "useDiffuseMap": false,
@@ -234,7 +287,9 @@
                     0.800000011920929,
                     0.20000000298023224
                 ],
+                "diffuseMapFlipY": true,
                 "diffuseMapPath": "",
+                "normalMapFlipY": true,
                 "normalMapPath": "",
                 "shininess": 64.0,
                 "specular": [
@@ -242,6 +297,7 @@
                     0.5,
                     0.5
                 ],
+                "specularMapFlipY": true,
                 "specularMapPath": "",
                 "type": 0,
                 "useDiffuseMap": false,
@@ -277,7 +333,9 @@
                     0.800000011920929,
                     0.20000000298023224
                 ],
+                "diffuseMapFlipY": true,
                 "diffuseMapPath": "",
+                "normalMapFlipY": true,
                 "normalMapPath": "",
                 "shininess": 128.0,
                 "specular": [
@@ -285,6 +343,7 @@
                     0.800000011920929,
                     0.800000011920929
                 ],
+                "specularMapFlipY": true,
                 "specularMapPath": "",
                 "type": 0,
                 "useDiffuseMap": false,
@@ -317,53 +376,18 @@
         "bloomEnabled": false,
         "fxaaEnabled": false,
         "gammaCorrection": true,
-        "hdrEnabled": true,
+        "hdrEnabled": false,
         "iblEnabled": true,
         "msaaEnabled": false,
-        "renderMode": 0,
-        "shadowEnabled": true,
+        "renderMode": 1,
+        "shadowEnabled": false,
         "showLights": false,
         "ssaoEnabled": false
     },
     "sceneInfo": {
-        "createdTime": 1754469454,
+        "createdTime": 1754535977,
         "name": "Scene",
         "version": "1.0"
     },
-    "spotLights": [
-        {
-            "ambient": [
-                0.05000000074505806,
-                0.05000000074505806,
-                0.05000000074505806
-            ],
-            "constant": 1.0,
-            "cutOff": 0.9063077569007874,
-            "diffuse": [
-                1.0,
-                0.800000011920929,
-                0.6000000238418579
-            ],
-            "direction": [
-                -0.40824833512306213,
-                -0.8164966702461243,
-                -0.40824833512306213
-            ],
-            "intensity": 0.800000011920929,
-            "linear": 0.09000000357627869,
-            "outerCutOff": 0.8191520571708679,
-            "position": [
-                2.0,
-                4.0,
-                2.0
-            ],
-            "quadratic": 0.03200000151991844,
-            "shadowEnabled": true,
-            "specular": [
-                1.0,
-                1.0,
-                1.0
-            ]
-        }
-    ]
+    "spotLights": []
 }
