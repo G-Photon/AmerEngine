@@ -37,7 +37,7 @@ void EditorUI::Initialize()
     
     // 设置现代化样式
     SetupModernStyle();
-    
+
     ImGui_ImplGlfw_InitForOpenGL(window, true);
     ImGui_ImplOpenGL3_Init("#version 460");
     
@@ -1584,7 +1584,7 @@ void EditorUI::ShowAntiAliasingSettings()
         // 性能提示
         if (renderer->GetMSAASamples() >= 8)
         {
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), ConvertToUTF8(L"⚠ 高采样率可能影响性能").c_str());
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), ConvertToUTF8(L"高采样率可能影响性能").c_str());
         }
         
         // 快速切换按钮

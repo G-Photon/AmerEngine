@@ -1,25 +1,25 @@
 {
     "camera": {
-        "fov": 35.0,
+        "fov": 45.0,
         "front": [
-            -0.6647576093673706,
-            -0.3665038049221039,
-            -0.6509779691696167
+            0.7910991311073303,
+            -0.07498408854007721,
+            -0.6070746183395386
         ],
         "mouseSensitivity": 0.10000000149011612,
         "movementSpeed": 5.0,
-        "pitch": -21.500158309936523,
+        "pitch": -4.3003082275390625,
         "position": [
-            13.228750228881836,
-            9.704423904418945,
-            15.686090469360352
+            -13.090425491333008,
+            6.158063888549805,
+            5.826906204223633
         ],
         "up": [
-            -0.2618570923805237,
-            0.9304165840148926,
-            -0.25642913579940796
+            0.059487324208021164,
+            0.9971847534179688,
+            -0.0456494502723217
         ],
-        "yaw": -135.60003662109375
+        "yaw": -397.501953125
     },
     "directionalLights": [
         {
@@ -38,7 +38,7 @@
                 -0.8164965510368347,
                 -0.40824827551841736
             ],
-            "intensity": 1.0,
+            "intensity": 0.460999995470047,
             "shadowEnabled": true,
             "specular": [
                 1.0,
@@ -374,19 +374,19 @@
     ],
     "renderSettings": {
         "backgroundType": 1,
-        "bloomEnabled": false,
-        "fxaaEnabled": false,
+        "bloomEnabled": true,
+        "fxaaEnabled": true,
         "gammaCorrection": true,
-        "hdrEnabled": false,
+        "hdrEnabled": true,
         "iblEnabled": true,
         "msaaEnabled": false,
         "renderMode": 1,
-        "shadowEnabled": false,
+        "shadowEnabled": true,
         "showLights": false,
-        "ssaoEnabled": false
+        "ssaoEnabled": true
     },
     "sceneInfo": {
-        "createdTime": 1754557313,
+        "createdTime": 1754564838,
         "name": "Scene",
         "version": "1.0"
     },

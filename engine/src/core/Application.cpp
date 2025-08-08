@@ -1,8 +1,12 @@
+#include "GLFW/glfw3.h"
 #include "core/Application.hpp"
 #include "core/Light.hpp"
 #include "core/Material.hpp"
-#include "GLFW/glfw3.h"
+#include "stb_image.h"
+#include "utils/FileSystem.hpp"
 #include "utils/Logger.hpp"
+#include <iostream>
+
 
 Application::Application()
 {
@@ -40,6 +44,26 @@ void Application::Initialize()
 
     glfwMakeContextCurrent(window);
     glfwSwapInterval(vsyncEnabled ? 1 : 0);
+
+    std::string iconPath = FileSystem::GetPath("resources/avatar.jpg");
+    if (!FileSystem::FileExists(iconPath))
+    {
+        std::cout << "Icon file not found: " << iconPath << std::endl;
+    }
+    else
+    {
+        GLFWimage icon;
+        icon.pixels = stbi_load(iconPath.c_str(), &icon.width, &icon.height, nullptr, 4);
+        if (icon.pixels)
+        {
+            glfwSetWindowIcon(window, 1, &icon);
+            stbi_image_free(icon.pixels);
+        }
+        else
+        {
+            std::cout << "Failed to load icon image: " << iconPath << std::endl;
+        }
+    }
 
     // 初始化GLAD
     if (!gladLoadGLLoader((GLADloadproc)glfwGetProcAddress))
