@@ -329,7 +329,6 @@ class Renderer
 
     // 环境
     std::shared_ptr<Texture> environmentMap;
-    unsigned int skyboxVAO, skyboxVBO;
     
     // IBL纹理
     unsigned int envCubemap;

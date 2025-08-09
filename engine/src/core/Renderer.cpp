@@ -1,27 +1,20 @@
-// 核心渲染器定义
 #include "core/Renderer.hpp"
 #include "core/Camera.hpp"
 #include "core/Framebuffer.hpp"
-// 序列化
 #include <fstream>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
-// 日志与随机
 #include <iostream>
 #include <random>
-// 文件系统辅助
 #include "utils/FileSystem.hpp"
-// 纹理类型
 #include "core/Texture.hpp"
 #include "core/TextureManager.hpp"
-// 数学运算
 #include "glm/gtc/quaternion.hpp"
 #define GLM_ENABLE_EXPERIMENTAL
 #include "glm/gtx/quaternion.hpp"
 #include <glm/gtc/matrix_transform.hpp>
-// STB图像处理（仅头文件，实现在Texture.cpp中）
 #include "stb_image.h"
-// 新建场景：清空所有模型、光源、几何体等
+
 void Renderer::NewScene()
 {
     models.clear();
@@ -787,8 +780,6 @@ Renderer::Renderer(int width, int height) : width(width), height(height)
 Renderer::~Renderer()
 {
     // 清理资源
-    glDeleteVertexArrays(1, &skyboxVAO);
-    glDeleteBuffers(1, &skyboxVBO);
     glDeleteVertexArrays(1, &cubeVAO);
     glDeleteBuffers(1, &cubeVBO);
     glDeleteTextures(1, &ssaoNoiseTexture);
@@ -1078,33 +1069,6 @@ void Renderer::SetupViewportBuffer()
 
 void Renderer::SetupSkybox()
 {
-    float skyboxVertices[] = {// positions
-                              -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f,
-                              1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f,
-
-                              -1.0f, -1.0f, 1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  -1.0f,
-                              -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f, 1.0f,
-
-                              1.0f,  -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,
-                              1.0f,  1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f,
-
-                              -1.0f, -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,  1.0f,  1.0f,
-                              1.0f,  1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f, -1.0f, 1.0f,
-
-                              -1.0f, 1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  1.0f,
-                              1.0f,  1.0f,  1.0f,  -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f,  -1.0f,
-
-                              -1.0f, -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, -1.0f,
-                              1.0f,  -1.0f, -1.0f, -1.0f, -1.0f, 1.0f,  1.0f,  -1.0f, 1.0f};
-
-    glGenVertexArrays(1, &skyboxVAO);
-    glGenBuffers(1, &skyboxVBO);
-    glBindVertexArray(skyboxVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, skyboxVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(skyboxVertices), &skyboxVertices, GL_STATIC_DRAW);
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(float), (void *)0);
-
     skyboxShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/utility/skybox.vert"),
                                             FileSystem::GetPath("resources/shaders/utility/skybox.frag"));
 }
@@ -1715,7 +1679,6 @@ void Renderer::RenderSkybox()
         skyboxShader->SetBool("gammaEnabled", false);
     }
 
-    glBindVertexArray(skyboxVAO);
     glActiveTexture(GL_TEXTURE0);
     
     // 根据背景类型选择不同的纹理
@@ -1732,8 +1695,7 @@ void Renderer::RenderSkybox()
         glBindTexture(GL_TEXTURE_CUBE_MAP, environmentMap->GetID());
     }
     
-    glDrawArrays(GL_TRIANGLES, 0, 36);
-    glBindVertexArray(0);
+    RenderCube();
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);
