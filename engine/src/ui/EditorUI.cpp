@@ -1708,49 +1708,151 @@ void EditorUI::ShowLightingSettings()
     
     ImGui::Separator();
     
-    // 背景类型选择
-    if (ImGui::CollapsingHeader(ConvertToUTF8(L"背景设置").c_str()))
+    // 统一的背景管理
+    if (ImGui::CollapsingHeader(ConvertToUTF8(L"背景管理").c_str()))
     {
-        const char* backgroundTypes[] = { "Skybox", "HDR Environment" };
-        int currentBackground = static_cast<int>(renderer->GetBackgroundType());
+        // 当前背景信息
+        std::string currentBgName = renderer->GetCurrentBackgroundName();
+        auto bgType = renderer->GetBackgroundType();
+        const char* typeStr = (bgType == Renderer::HDR_ENVIRONMENT) ? "HDR Environment" : "Skybox Cubemap";
         
-        if (ImGui::Combo(ConvertToUTF8(L"背景类型").c_str(), &currentBackground, backgroundTypes, 2))
+        ImGui::Text("Current Background: %s", currentBgName.c_str());
+        ImGui::Text("Type: %s", typeStr);
+        
+        // 显示背景状态
+        if (bgType == Renderer::HDR_ENVIRONMENT)
         {
-            renderer->SetBackgroundType(static_cast<Renderer::BackgroundType>(currentBackground));
+            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.4f, 1.0f), "• HDR环境光照激活");
+            ImGui::TextWrapped("当前使用HDR环境贴图提供真实的光照和反射");
         }
-        DrawTooltip(ConvertToUTF8(L"选择背景渲染类型：传统天空盒或HDR环境贴图").c_str());
+        else
+        {
+            ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "• 传统天空盒激活");
+            ImGui::TextWrapped("当前使用传统立方体贴图作为背景");
+        }
         
         ImGui::Spacing();
         
-        if (currentBackground == 0) // Skybox
+        // 背景选择器
+        std::vector<std::string> backgrounds = renderer->GetAvailableBackgrounds();
+        if (!backgrounds.empty())
         {
-            ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Using traditional skybox");
-            ImGui::TextWrapped("Traditional cube map skybox for general scenes");
-        }
-        else // HDR Environment  
-        {
-            ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.4f, 1.0f), "Using HDR environment");
-            ImGui::TextWrapped("Newport Loft HDR environment for realistic lighting");
-        }
-    }
-    
-    // HDR环境贴图信息
-    if (ImGui::CollapsingHeader(ConvertToUTF8(L"环境贴图").c_str()))
-    {
-        ImGui::TextUnformatted("Current HDR: Newport Loft (Indoor)");
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::TextUnformatted("This is an indoor HDR environment");
-            ImGui::TextUnformatted("Suitable for indoor scenes and metallic reflections");
-            ImGui::TextUnformatted("Recommend adding outdoor HDR maps for richer lighting");
-            ImGui::EndTooltip();
+            const char** bgNames = new const char*[backgrounds.size()];
+            int currentSelection = 0;
+            
+            for (size_t i = 0; i < backgrounds.size(); i++)
+            {
+                bgNames[i] = backgrounds[i].c_str();
+                if (backgrounds[i] == currentBgName)
+                {
+                    currentSelection = i;
+                }
+            }
+            
+            if (ImGui::Combo(ConvertToUTF8(L"选择背景").c_str(), &currentSelection, bgNames, backgrounds.size()))
+            {
+                renderer->SwitchBackground(backgrounds[currentSelection]);
+                AddNotification(ConvertToUTF8(L"背景已切换: ") + backgrounds[currentSelection], true, 2.0f);
+            }
+            
+            delete[] bgNames;
         }
         
         ImGui::Spacing();
-        ImGui::TextWrapped("Note: Currently using indoor HDR environment. "
-                          "All PBR materials will reflect this indoor lighting. "
-                          "Consider adding outdoor HDR environments for better variety.");
+        
+        // 添加新背景按钮组
+        if (ImGui::Button(ConvertToUTF8(L"添加HDR背景").c_str()))
+        {
+            // 使用文件对话框选择HDR文件
+            std::string filter = "HDR Files (*.hdr)\0*.hdr\0All Files (*.*)\0*.*\0";
+            std::string selectedFile = FileDialog::OpenFile("Select HDR Background", filter.c_str());
+            
+            if (!selectedFile.empty())
+            {
+                // 从路径中提取文件名作为背景名称
+                std::filesystem::path path(selectedFile);
+                std::string bgName = path.stem().string();
+                
+                // 检查是否已存在同名背景
+                bool nameExists = false;
+                std::vector<std::string> existingBgs = renderer->GetAvailableBackgrounds();
+                for (const auto& existing : existingBgs)
+                {
+                    if (existing == bgName)
+                    {
+                        nameExists = true;
+                        break;
+                    }
+                }
+                
+                if (nameExists)
+                {
+                    // 如果名称已存在，添加数字后缀
+                    int counter = 1;
+                    std::string originalName = bgName;
+                    while (nameExists)
+                    {
+                        bgName = originalName + "_" + std::to_string(counter);
+                        nameExists = false;
+                        for (const auto& existing : existingBgs)
+                        {
+                            if (existing == bgName)
+                            {
+                                nameExists = true;
+                                break;
+                            }
+                        }
+                        counter++;
+                    }
+                }
+                
+                try
+                {
+                    renderer->LoadBackgroundEnvironment(bgName, selectedFile, true);
+                    AddNotification(ConvertToUTF8(L"HDR背景已加载: ") + bgName, true, 3.0f);
+                }
+                catch (const std::exception& e)
+                {
+                    AddNotification(ConvertToUTF8(L"加载HDR背景失败: ") + std::string(e.what()), false, 5.0f);
+                }
+            }
+        }
+        DrawTooltip(ConvertToUTF8(L"添加新的HDR环境贴图文件 (.hdr格式)").c_str());
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button(ConvertToUTF8(L"添加天空盒背景").c_str()))
+        {
+            // 这里可以添加天空盒背景的对话框
+            AddNotification(ConvertToUTF8(L"天空盒背景功能即将推出"), true, 2.0f);
+        }
+        DrawTooltip(ConvertToUTF8(L"添加传统的6面天空盒背景").c_str());
+        
+        ImGui::Spacing();
+        
+        // 背景详情显示
+        if (ImGui::CollapsingHeader(ConvertToUTF8(L"背景详情").c_str()))
+        {
+            ImGui::TextUnformatted("Available Backgrounds:");
+            for (const auto& bgName : backgrounds)
+            {
+                bool isCurrent = (bgName == currentBgName);
+                if (isCurrent)
+                {
+                    ImGui::TextColored(ImVec4(0.4f, 1.0f, 0.4f, 1.0f), "• %s (Current)", bgName.c_str());
+                }
+                else
+                {
+                    ImGui::TextUnformatted(("• " + bgName).c_str());
+                }
+                
+                if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(0))
+                {
+                    renderer->SwitchBackground(bgName);
+                    AddNotification(ConvertToUTF8(L"切换到背景: ") + bgName, true, 2.0f);
+                }
+            }
+        }
     }
 }
 

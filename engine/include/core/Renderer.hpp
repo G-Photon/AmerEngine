@@ -23,8 +23,8 @@ class Renderer
 
     enum BackgroundType
     {
-        SKYBOX,
-        HDR_ENVIRONMENT
+        SKYBOX_CUBEMAP,     // 传统6面天空盒
+        HDR_ENVIRONMENT     // HDR环境贴图
     };
 
     Renderer(int width, int height);
@@ -46,8 +46,15 @@ class Renderer
 
     void UseShader(const std::string &name);
     void SetGlobalUniforms(const Camera &camera);
-    void SetEnvironmentMap(const std::shared_ptr<Texture> &texture);
-    void SetSkybox(const std::shared_ptr<Texture> &texture);
+
+    // 背景/环境贴图管理（统一接口）
+    void LoadBackgroundEnvironment(const std::string& name, const std::string& path, bool isHDR = true);
+    void LoadBackgroundSkybox(const std::string& name, const std::vector<std::string>& faces);
+    void SwitchBackground(const std::string& name);
+    std::vector<std::string> GetAvailableBackgrounds() const;
+    std::string GetCurrentBackgroundName() const { return currentEnvironmentName; }
+    
+    void SetSkybox(const std::shared_ptr<Texture> &texture); // 保留兼容性
 
     // 更新
     void Update(float deltaTime);
@@ -271,6 +278,21 @@ class Renderer
     void LoadHDREnvironment(const std::string& hdrPath);
     unsigned int LoadHDRTexture(const std::string& path);
     void GenerateIBLTextures();
+    
+    // 背景/环境贴图管理（统一）
+    struct BackgroundData {
+        std::string name;
+        std::string path;
+        BackgroundType type;
+        unsigned int envCubemap = 0;
+        unsigned int irradianceMap = 0;
+        unsigned int prefilterMap = 0;
+        bool isHDR = false;
+    };
+    
+    void LoadSkyboxEnvironment(const std::string& name, const std::vector<std::string>& faces);
+    void GenerateIBLForEnvironment(BackgroundData& envData);
+    void InitializeDefaultBackgrounds();
 
     int width, height;
 
@@ -328,7 +350,7 @@ class Renderer
     std::vector<Geometry::Primitive> primitives;
 
     // 环境
-    std::shared_ptr<Texture> environmentMap;
+    std::shared_ptr<Texture> environmentMap; // 保留兼容性
     
     // IBL纹理
     unsigned int envCubemap;
@@ -337,6 +359,10 @@ class Renderer
     unsigned int brdfLUTTexture;
     std::unique_ptr<Framebuffer> iblCaptureBuffer; // 用于IBL预计算
     unsigned int cubeVAO=0, cubeVBO=0;
+    
+    // 背景/环境贴图管理（统一）
+    std::unordered_map<std::string, BackgroundData> backgrounds;
+    std::string currentEnvironmentName;
 
     // 相机
     std::shared_ptr<Camera> mainCamera;
@@ -359,5 +385,5 @@ class Renderer
     bool fxaaEnabled = false;
     
     // 背景类型
-    BackgroundType backgroundType = SKYBOX;
+    BackgroundType backgroundType = SKYBOX_CUBEMAP;
 };
