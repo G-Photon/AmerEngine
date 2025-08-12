@@ -20,6 +20,7 @@ class Texture
     void CreateSolidColor(const glm::vec3 &color);
     void CreateNormalMap();
     void LoadCubemap(const std::vector<std::string> &faces);
+    void CreateCubemap(unsigned int width, unsigned int height, unsigned int internalFormat = GL_RGB16F);
 
     unsigned int GetID() const
     {

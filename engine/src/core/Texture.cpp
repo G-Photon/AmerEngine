@@ -157,3 +157,39 @@ void Texture::LoadCubemap(const std::vector<std::string> &faces)
 
     glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
 }
+
+void Texture::CreateCubemap(unsigned int width, unsigned int height, unsigned int internalFormat)
+{
+    Width = width;
+    Height = height;
+    Internal_Format = internalFormat;
+    
+    glBindTexture(GL_TEXTURE_CUBE_MAP, ID);
+    for (unsigned int i = 0; i < 6; ++i)
+    {
+        // Determine appropriate format and type based on internal format
+        unsigned int format = GL_RGB;
+        unsigned int type = GL_FLOAT;
+        
+        if (internalFormat == GL_RGB16F || internalFormat == GL_RGB32F)
+        {
+            format = GL_RGB;
+            type = GL_FLOAT;
+        }
+        else if (internalFormat == GL_RGB)
+        {
+            format = GL_RGB;
+            type = GL_UNSIGNED_BYTE;
+        }
+        
+        glTexImage2D(GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 0, internalFormat, width, height, 0, format, type, nullptr);
+    }
+    
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_WRAP_R, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    glBindTexture(GL_TEXTURE_CUBE_MAP, 0);
+}

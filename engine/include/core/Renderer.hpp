@@ -23,8 +23,8 @@ class Renderer
 
     enum BackgroundType
     {
-        SKYBOX_CUBEMAP,     // 传统6面天空盒
-        HDR_ENVIRONMENT     // HDR环境贴图
+        SKYBOX,
+        HDR_ENVIRONMENT
     };
 
     Renderer(int width, int height);
@@ -46,15 +46,8 @@ class Renderer
 
     void UseShader(const std::string &name);
     void SetGlobalUniforms(const Camera &camera);
-
-    // 背景/环境贴图管理（统一接口）
-    void LoadBackgroundEnvironment(const std::string& name, const std::string& path, bool isHDR = true);
-    void LoadBackgroundSkybox(const std::string& name, const std::vector<std::string>& faces);
-    void SwitchBackground(const std::string& name);
-    std::vector<std::string> GetAvailableBackgrounds() const;
-    std::string GetCurrentBackgroundName() const { return currentEnvironmentName; }
-    
-    void SetSkybox(const std::shared_ptr<Texture> &texture); // 保留兼容性
+    void SetEnvironmentMap(const std::shared_ptr<Texture> &texture);
+    void SetSkybox(const std::shared_ptr<Texture> &texture);
 
     // 更新
     void Update(float deltaTime);
@@ -233,6 +226,12 @@ class Renderer
         fxaaEnabled = enabled;
     }
 
+    // 环境贴图控制方法
+    void LoadEnvironmentHDR(int slot, const std::string& hdrPath);
+    void LoadEnvironmentSkybox(int slot, const std::vector<std::string>& faces);
+    void SetCurrentEnvironment(int slot);
+    int GetCurrentEnvironment() const { return envmapnow; }
+
     GLuint GetViewportTexture() const
     {
         return viewportBuffer->GetColorTexture(0); // 假设你有这个函数
@@ -275,24 +274,6 @@ class Renderer
     
     // IBL相关方法
     void SetupIBL();
-    void LoadHDREnvironment(const std::string& hdrPath);
-    unsigned int LoadHDRTexture(const std::string& path);
-    void GenerateIBLTextures();
-    
-    // 背景/环境贴图管理（统一）
-    struct BackgroundData {
-        std::string name;
-        std::string path;
-        BackgroundType type;
-        unsigned int envCubemap = 0;
-        unsigned int irradianceMap = 0;
-        unsigned int prefilterMap = 0;
-        bool isHDR = false;
-    };
-    
-    void LoadSkyboxEnvironment(const std::string& name, const std::vector<std::string>& faces);
-    void GenerateIBLForEnvironment(BackgroundData& envData);
-    void InitializeDefaultBackgrounds();
 
     int width, height;
 
@@ -349,20 +330,17 @@ class Renderer
     std::vector<std::shared_ptr<SpotLight>> spotLights;
     std::vector<Geometry::Primitive> primitives;
 
-    // 环境
-    std::shared_ptr<Texture> environmentMap; // 保留兼容性
+    // 环境贴图
+#define envmapcount 10 // 环境贴图数量
+    static int envmapnow;
     
     // IBL纹理
-    unsigned int envCubemap;
-    unsigned int irradianceMap;
-    unsigned int prefilterMap;
-    unsigned int brdfLUTTexture;
+    std::shared_ptr<Texture> envCubemap[envmapcount];
+    std::shared_ptr<Texture> irradianceMap[envmapcount];
+    std::shared_ptr<Texture> prefilterMap[envmapcount];
+    std::shared_ptr<Texture> brdfLUTTexture;
     std::unique_ptr<Framebuffer> iblCaptureBuffer; // 用于IBL预计算
     unsigned int cubeVAO=0, cubeVBO=0;
-    
-    // 背景/环境贴图管理（统一）
-    std::unordered_map<std::string, BackgroundData> backgrounds;
-    std::string currentEnvironmentName;
 
     // 相机
     std::shared_ptr<Camera> mainCamera;
@@ -385,5 +363,5 @@ class Renderer
     bool fxaaEnabled = false;
     
     // 背景类型
-    BackgroundType backgroundType = SKYBOX_CUBEMAP;
+    BackgroundType backgroundType = SKYBOX;
 };

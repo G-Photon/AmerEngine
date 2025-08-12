@@ -10,14 +10,14 @@ void main()
 {
     vec3 envColor = texture(skybox, WorldPos).rgb;
 
-    // 简单处理HDR数据 - 使用简单的曝光控制
-    // float exposure = 1.0;
-    // envColor = vec3(1.0) - exp(-envColor * exposure);
+    // HDR tone mapping
+    float exposure = 1.0;
+    envColor = vec3(1.0) - exp(-envColor * exposure);
     
     // Gamma校正
-    // if (gammaEnabled) {
-    //     envColor = pow(envColor, vec3(2.2));
-    // }
+    if (gammaEnabled) {
+        envColor = pow(envColor, vec3(1.0/2.2));
+    }
     
     FragColor = vec4(envColor, 1.0);
 }
