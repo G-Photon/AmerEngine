@@ -14,6 +14,11 @@
 #include <codecvt>
 #include <locale>
 #include <unordered_map>
+#include <thread>
+#include <mutex>
+#include <iostream>
+#include <sstream>
+#include <streambuf>
 
 class Renderer;
 
@@ -147,7 +152,7 @@ private:
     bool showViewport = true;
     bool showRendererSettings = true;
     bool showMaterialEditor = true;
-    bool showConsole = false;
+    bool showConsole = true;
     bool showAssetPreview = false; // 资源预览窗口
 
     // 选择状态
@@ -180,7 +185,7 @@ private:
     float bottomPanelHeight = 200.0f;
     
     // 控制台日志
-    std::vector<std::string> consoleLog;
+    // 注意：控制台日志现在由Application管理
     
     // 场景操作状态通知
     struct Notification {

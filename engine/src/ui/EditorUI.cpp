@@ -1,4 +1,5 @@
 ﻿#include "ui/EditorUI.hpp"
+#include "core/Application.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "imgui.h"
 #include "utils/FileDialog.hpp"
@@ -386,7 +387,7 @@ void EditorUI::ShowConsole()
     // 控制台工具栏
     if (ImGui::Button(ConvertToUTF8(L"清除").c_str()))
     {
-        consoleLog.clear();
+        Application::ClearConsoleLogs();
     }
     ImGui::SameLine();
     
@@ -398,7 +399,10 @@ void EditorUI::ShowConsole()
     // 日志区域
     ImGui::BeginChild("ConsoleLog", ImVec2(0, 0), true);
     
-    for (const auto& log : consoleLog)
+    // 获取控制台日志
+    auto logCopy = Application::GetConsoleLogs();
+    
+    for (const auto& log : logCopy)
     {
         ImGui::TextWrapped("%s", log.c_str());
     }
@@ -434,7 +438,7 @@ void EditorUI::RefreshAssetList()
     }
     catch (const std::exception& e)
     {
-        consoleLog.push_back(ConvertToUTF8(L"刷新资源列表失败: ") + e.what());
+        Application::AddConsoleLog(ConvertToUTF8(L"刷新资源列表失败: ") + e.what());
     }
 }
 
@@ -1367,7 +1371,7 @@ void EditorUI::TextureSelector(const std::string &label, std::shared_ptr<Texture
             if (!texture->LoadFromFile(path))
             {
                 texture.reset();
-                consoleLog.push_back(ConvertToUTF8(L"贴图加载失败: ") + path);
+                Application::AddConsoleLog(ConvertToUTF8(L"贴图加载失败: ") + path);
             }
             else
             {

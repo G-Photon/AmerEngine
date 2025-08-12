@@ -7,15 +7,28 @@
 #include "utils/Logger.hpp"
 #include <iostream>
 
+// 静态成员变量定义
+std::vector<std::string> Application::consoleLog;
+std::mutex Application::consoleLogMutex;
+std::unique_ptr<Application::ConsoleRedirector> Application::consoleRedirector;
+std::streambuf* Application::originalCoutBuffer = nullptr;
+std::streambuf* Application::originalCerrBuffer = nullptr;
+
 
 Application::Application()
 {
+    // 首先初始化控制台重定向，确保所有后续输出都被捕获
+    InitializeConsoleRedirection();
+    
     Initialize();
 }
 
 Application::~Application()
 {
     Shutdown();
+    
+    // 最后清理控制台重定向
+    ShutdownConsoleRedirection();
 }
 
 void Application::Initialize()
@@ -307,4 +320,71 @@ void Application::Shutdown()
     renderer.reset();
     glfwDestroyWindow(window);
     glfwTerminate();
+}
+
+// 静态控制台重定向方法实现
+void Application::InitializeConsoleRedirection()
+{
+    // 保存原始的cout和cerr缓冲区
+    originalCoutBuffer = std::cout.rdbuf();
+    originalCerrBuffer = std::cerr.rdbuf();
+    
+    // 创建自定义重定向器
+    consoleRedirector = std::make_unique<ConsoleRedirector>();
+    
+    // 重定向cout和cerr到我们的控制台
+    std::cout.rdbuf(consoleRedirector.get());
+    std::cerr.rdbuf(consoleRedirector.get());
+    
+    // 添加初始化消息
+    AddConsoleLog("Console redirection initialized");
+}
+
+void Application::ShutdownConsoleRedirection()
+{
+    if (originalCoutBuffer && originalCerrBuffer) {
+        // 恢复原始的cout和cerr缓冲区
+        std::cout.rdbuf(originalCoutBuffer);
+        std::cerr.rdbuf(originalCerrBuffer);
+        
+        originalCoutBuffer = nullptr;
+        originalCerrBuffer = nullptr;
+    }
+    
+    // 清理重定向器
+    consoleRedirector.reset();
+}
+
+void Application::AddConsoleLog(const std::string& message)
+{
+    std::lock_guard<std::mutex> lock(consoleLogMutex);
+    
+    // 移除末尾的换行符
+    std::string cleanMessage = message;
+    if (!cleanMessage.empty() && cleanMessage.back() == '\n') {
+        cleanMessage.pop_back();
+    }
+    
+    // 只添加非空消息
+    if (!cleanMessage.empty()) {
+        consoleLog.push_back(cleanMessage);
+        
+        // 限制日志条数，避免内存溢出
+        const size_t maxLogEntries = 1000;
+        if (consoleLog.size() > maxLogEntries) {
+            consoleLog.erase(consoleLog.begin(), consoleLog.begin() + (consoleLog.size() - maxLogEntries));
+        }
+    }
+}
+
+std::vector<std::string> Application::GetConsoleLogs()
+{
+    std::lock_guard<std::mutex> lock(consoleLogMutex);
+    return consoleLog;
+}
+
+void Application::ClearConsoleLogs()
+{
+    std::lock_guard<std::mutex> lock(consoleLogMutex);
+    consoleLog.clear();
 }
