@@ -1722,40 +1722,178 @@ void EditorUI::ShowLightingSettings()
         
         ImGui::Spacing();
         
+        // 环境贴图导入功能
+        if (ImGui::Button(ConvertToUTF8(L"导入HDR环境贴图").c_str()))
+        {
+            auto hdrPath = FileDialog::OpenFile("Select HDR File", "HDR Files\0*.hdr\0All Files\0*.*\0");
+            if (!hdrPath.empty())
+            {
+                // 寻找可用的环境槽位
+                bool slotFound = false;
+                for (int slot = 2; slot < 10; ++slot) // 从槽位2开始，保留0和1给默认环境
+                {
+                    if (!renderer->IsEnvironmentSlotLoaded(slot))
+                    {
+                        renderer->LoadEnvironmentHDR(slot, hdrPath);
+                        renderer->SetCurrentEnvironment(slot);
+                        slotFound = true;
+                        break;
+                    }
+                }
+                if (!slotFound)
+                {
+                    // 如果没有空槽位，覆盖最后一个槽位
+                    renderer->LoadEnvironmentHDR(9, hdrPath);
+                    renderer->SetCurrentEnvironment(9);
+                }
+            }
+        }
+        DrawTooltip(ConvertToUTF8(L"导入HDR文件作为环境贴图，支持IBL照明").c_str());
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button(ConvertToUTF8(L"导入天空盒").c_str()))
+        {
+            // 重置天空盒面路径
+            for (auto& face : skyboxFaces) {
+                face.clear();
+            }
+            showSkyboxImportDialog = true;
+        }
+        DrawTooltip(ConvertToUTF8(L"导入立方体贴图天空盒（需要6张图片）").c_str());
+        
+        // 天空盒导入弹窗
+        if (showSkyboxImportDialog)
+        {
+            ImGui::OpenPopup(ConvertToUTF8(L"天空盒导入").c_str());
+        }
+        
+        if (ImGui::BeginPopupModal(ConvertToUTF8(L"天空盒导入").c_str(), &showSkyboxImportDialog, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::TextUnformatted(ConvertToUTF8(L"请为立方体贴图的每个面选择图片文件").c_str());
+            ImGui::Separator();
+            
+            // 定义6个面的名称
+            std::vector<std::string> faceNames = {
+                ConvertToUTF8(L"右面 (Right)"),
+                ConvertToUTF8(L"左面 (Left)"),
+                ConvertToUTF8(L"上面 (Top)"),
+                ConvertToUTF8(L"下面 (Bottom)"),
+                ConvertToUTF8(L"前面 (Front)"),
+                ConvertToUTF8(L"后面 (Back)")
+            };
+            
+            // 显示6个面的选择按钮
+            for (int i = 0; i < 6; i++)
+            {
+                ImGui::PushID(i);
+                
+                // 面名称标签
+                ImGui::TextUnformatted(faceNames[i].c_str());
+                ImGui::SameLine();
+                
+                // 选择文件按钮
+                if (ImGui::Button(ConvertToUTF8(L"选择文件").c_str(), ImVec2(80, 0)))
+                {
+                    auto filePath = FileDialog::OpenFile("Select Skybox Face", "Image Files\0*.jpg;*.png;*.bmp;*.tga;*.hdr\0All Files\0*.*\0");
+                    if (!filePath.empty())
+                    {
+                        skyboxFaces[i] = filePath;
+                    }
+                }
+                
+                ImGui::SameLine();
+                
+                // 显示已选择的文件名或提示
+                if (!skyboxFaces[i].empty())
+                {
+                    std::filesystem::path p(skyboxFaces[i]);
+                    ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "%s", p.filename().string().c_str());
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "%s", ConvertToUTF8(L"未选择").c_str());
+                }
+                
+                ImGui::PopID();
+            }
+            
+            ImGui::Separator();
+            
+            // 检查是否所有面都已选择
+            bool allFacesSelected = true;
+            for (const auto& face : skyboxFaces)
+            {
+                if (face.empty())
+                {
+                    allFacesSelected = false;
+                    break;
+                }
+            }
+            
+            // 导入按钮
+            if (!allFacesSelected)
+            {
+                ImGui::PushStyleVar(ImGuiStyleVar_Alpha, 0.5f);
+            }
+            
+            if (ImGui::Button(ConvertToUTF8(L"导入天空盒").c_str(), ImVec2(120, 0)) && allFacesSelected)
+            {
+                // 寻找可用的环境槽位
+                bool slotFound = false;
+                for (int slot = 2; slot < 10; ++slot) // 从槽位2开始，保留0和1给默认环境
+                {
+                    if (!renderer->IsEnvironmentSlotLoaded(slot))
+                    {
+                        renderer->LoadEnvironmentSkybox(slot, skyboxFaces);
+                        renderer->SetCurrentEnvironment(slot);
+                        slotFound = true;
+                        showSkyboxImportDialog = false;
+                        break;
+                    }
+                }
+                
+                if (!slotFound)
+                {
+                    // 如果没有空槽位，覆盖最后一个槽位
+                    renderer->LoadEnvironmentSkybox(9, skyboxFaces);
+                    renderer->SetCurrentEnvironment(9);
+                    showSkyboxImportDialog = false;
+                }
+            }
+            
+            if (!allFacesSelected)
+            {
+                ImGui::PopStyleVar();
+                ImGui::SameLine();
+                ImGui::TextColored(ImVec4(0.8f, 0.4f, 0.4f, 1.0f), "%s", ConvertToUTF8(L"请选择所有6个面").c_str());
+            }
+            
+            ImGui::SameLine();
+            
+            if (ImGui::Button(ConvertToUTF8(L"取消").c_str(), ImVec2(80, 0)))
+            {
+                showSkyboxImportDialog = false;
+            }
+            
+            ImGui::EndPopup();
+        }
+        
+        ImGui::Spacing();
+        
+        // 显示当前环境状态
         if (currentEnv == 0) // Skybox
         {
             ImGui::TextColored(ImVec4(0.6f, 0.9f, 0.6f, 1.0f), "Using traditional skybox");
-            ImGui::TextWrapped("Traditional cube map skybox for general scenes");
         }
         else if (currentEnv == 1) // Newport Loft HDR
         {
             ImGui::TextColored(ImVec4(0.9f, 0.7f, 0.4f, 1.0f), "Using Newport Loft HDR");
-            ImGui::TextWrapped("Newport Loft HDR environment for realistic indoor lighting");
         }
         else
         {
-            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "Environment slot empty");
-            ImGui::TextWrapped("This environment slot is not currently loaded");
+            ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), ConvertToUTF8(L"环境槽位 %d").c_str(), currentEnv);
         }
-    }
-    
-    // HDR环境贴图信息
-    if (ImGui::CollapsingHeader(ConvertToUTF8(L"环境贴图").c_str()))
-    {
-        ImGui::TextUnformatted("Current HDR: Newport Loft (Indoor)");
-        if (ImGui::IsItemHovered())
-        {
-            ImGui::BeginTooltip();
-            ImGui::TextUnformatted("This is an indoor HDR environment");
-            ImGui::TextUnformatted("Suitable for indoor scenes and metallic reflections");
-            ImGui::TextUnformatted("Recommend adding outdoor HDR maps for richer lighting");
-            ImGui::EndTooltip();
-        }
-        
-        ImGui::Spacing();
-        ImGui::TextWrapped("Note: Currently using indoor HDR environment. "
-                          "All PBR materials will reflect this indoor lighting. "
-                          "Consider adding outdoor HDR environments for better variety.");
     }
 }
 

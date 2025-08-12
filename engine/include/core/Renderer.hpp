@@ -231,6 +231,10 @@ class Renderer
     void LoadEnvironmentSkybox(int slot, const std::vector<std::string>& faces);
     void SetCurrentEnvironment(int slot);
     int GetCurrentEnvironment() const { return envmapnow; }
+    bool IsEnvironmentSlotLoaded(int slot) const;
+    
+    // IBL贴图生成（公共函数）
+    void GenerateIBLMaps(int slot);
 
     GLuint GetViewportTexture() const
     {

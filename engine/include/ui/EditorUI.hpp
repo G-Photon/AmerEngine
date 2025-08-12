@@ -14,8 +14,6 @@
 #include <codecvt>
 #include <locale>
 #include <unordered_map>
-#include <thread>
-#include <mutex>
 
 class Renderer;
 
@@ -170,6 +168,10 @@ private:
     // 渲染设置
     AntiAliasingType currentAAType = AntiAliasingType::NONE;
     int msaaSamples = 4;
+    
+    // 天空盒导入状态
+    bool showSkyboxImportDialog = false;
+    std::vector<std::string> skyboxFaces = {"", "", "", "", "", ""}; // 6个面的路径：右、左、上、下、前、后
     
     // UI状态
     bool isDockingSetup = false;

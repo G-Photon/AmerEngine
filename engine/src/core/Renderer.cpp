@@ -2442,11 +2442,32 @@ void Renderer::LoadEnvironmentHDR(int slot, const std::string& hdrPath) {
     unsigned int hdrTexture;
     glGenTextures(1, &hdrTexture);
     glBindTexture(GL_TEXTURE_2D, hdrTexture);
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB16F, width, height, 0, GL_RGB, GL_FLOAT, data);
+    
+    // 根据组件数量选择正确的格式
+    GLenum internalFormat = GL_RGB16F;
+    GLenum format = GL_RGB;
+    if (nrComponents == 4) {
+        internalFormat = GL_RGBA16F;
+        format = GL_RGBA;
+    } else if (nrComponents == 1) {
+        internalFormat = GL_R16F;
+        format = GL_RED;
+    }
+    
+    glTexImage2D(GL_TEXTURE_2D, 0, internalFormat, width, height, 0, format, GL_FLOAT, data);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    
+    // 检查HDR纹理创建错误
+    GLenum hdrError = glGetError();
+    if (hdrError != GL_NO_ERROR) {
+        std::cerr << "Error creating HDR texture: " << hdrError << std::endl;
+    }
+    
+    // 验证纹理数据
+    std::cout << "HDR texture ID: " << hdrTexture << ", format: " << format << std::endl;
     
     stbi_image_free(data);
     
@@ -2454,6 +2475,7 @@ void Renderer::LoadEnvironmentHDR(int slot, const std::string& hdrPath) {
     envCubemap[slot] = std::make_shared<Texture>();
     envCubemap[slot]->CreateCubemap(512, 512, GL_RGB16F);
     
+    // 转换HDR equirectangular到立方体贴图
     // 设置投影和视图矩阵
     glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
     glm::mat4 captureViews[] = {
@@ -2465,16 +2487,44 @@ void Renderer::LoadEnvironmentHDR(int slot, const std::string& hdrPath) {
         glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))  // -Z
     };
     
-    // 转换HDR equirectangular到立方体贴图
     equirectangularToCubemapShader->Use();
+    
+    // 验证shader程序是否有效
+    GLint shaderProgram;
+    glGetIntegerv(GL_CURRENT_PROGRAM, &shaderProgram);
+    if (shaderProgram == 0) {
+        std::cerr << "Error: No shader program bound!" << std::endl;
+        return;
+    }
+    std::cout << "Using shader program: " << shaderProgram << std::endl;
+    
     equirectangularToCubemapShader->SetInt("equirectangularMap", 0);
     equirectangularToCubemapShader->SetMat4("projection", captureProjection);
     glActiveTexture(GL_TEXTURE0);
     glBindTexture(GL_TEXTURE_2D, hdrTexture);
     
-    glViewport(0, 0, 512, 512);
+    // 检查shader是否有效
+    GLenum shaderError = glGetError();
+    if (shaderError != GL_NO_ERROR) {
+        std::cerr << "Error setting up equirectangular shader: " << shaderError << std::endl;
+    }
+    
+    // 确保framebuffer尺寸正确
+    iblCaptureBuffer->Resize(512, 512);
     iblCaptureBuffer->Bind();
     
+    // 检查framebuffer状态
+    GLenum fbStatus = glCheckFramebufferStatus(GL_FRAMEBUFFER);
+    if (fbStatus != GL_FRAMEBUFFER_COMPLETE) {
+        std::cerr << "Framebuffer not complete: " << fbStatus << std::endl;
+    }
+    
+    glViewport(0, 0, 512, 512);
+    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+
     for (unsigned int i = 0; i < 6; ++i) {
         equirectangularToCubemapShader->SetMat4("view", captureViews[i]);
         glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
@@ -2490,75 +2540,11 @@ void Renderer::LoadEnvironmentHDR(int slot, const std::string& hdrPath) {
     glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
     
-    // 生成辐照度贴图
-    irradianceMap[slot] = std::make_shared<Texture>();
-    irradianceMap[slot]->CreateCubemap(32, 32, GL_RGB16F);
-    
-    iblCaptureBuffer->Resize(32, 32);
-    iblCaptureBuffer->Bind();
-    
-    irradianceShader->Use();
-    irradianceShader->SetInt("environmentMap", 0);
-    irradianceShader->SetMat4("projection", captureProjection);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
-    
-    glViewport(0, 0, 32, 32);
-    for (unsigned int i = 0; i < 6; ++i) {
-        irradianceShader->SetMat4("view", captureViews[i]);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
-                               GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
-                               irradianceMap[slot]->GetID(), 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        RenderCube();
-    }
-    
-    iblCaptureBuffer->Unbind();
-    
-    // 生成预过滤贴图
-    prefilterMap[slot] = std::make_shared<Texture>();
-    prefilterMap[slot]->CreateCubemap(128, 128, GL_RGB16F);
-    
-    // 设置正确的参数以支持mipmapping
-    glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap[slot]->GetID());
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-    
-    prefilterShader->Use();
-    prefilterShader->SetInt("environmentMap", 0);
-    prefilterShader->SetMat4("projection", captureProjection);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
-    
-    unsigned int maxMipLevels = 5;
-    for (unsigned int mip = 0; mip < maxMipLevels; ++mip) {
-        unsigned int mipWidth = static_cast<unsigned int>(128 * std::pow(0.5, mip));
-        unsigned int mipHeight = static_cast<unsigned int>(128 * std::pow(0.5, mip));
-        iblCaptureBuffer->Resize(mipWidth, mipHeight);
-        iblCaptureBuffer->Bind();
-        
-        float roughness = (float)mip / (float)(maxMipLevels - 1);
-        prefilterShader->SetFloat("roughness", roughness);
-        
-        glViewport(0, 0, mipWidth, mipHeight);
-        for (unsigned int i = 0; i < 6; ++i) {
-            prefilterShader->SetMat4("view", captureViews[i]);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
-                                   GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
-                                   prefilterMap[slot]->GetID(), mip);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            RenderCube();
-        }
-        
-        iblCaptureBuffer->Unbind();
-    }
-    
-    // 清理
+    // 清理HDR纹理
     glDeleteTextures(1, &hdrTexture);
     
-    // 恢复状态
-    glBindFramebuffer(GL_FRAMEBUFFER, prevFramebuffer);
-    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    // 生成IBL贴图
+    GenerateIBLMaps(slot);
     
     std::cout << "HDR environment loaded to slot " << slot << std::endl;
 }
@@ -2571,97 +2557,16 @@ void Renderer::LoadEnvironmentSkybox(int slot, const std::vector<std::string>& f
     
     std::cout << "Loading skybox environment to slot " << slot << std::endl;
     
-    // 保存当前状态
-    GLint prevViewport[4];
-    glGetIntegerv(GL_VIEWPORT, prevViewport);
-    GLint prevFramebuffer;
-    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFramebuffer);
-    
     // 加载天空盒立方体贴图
     envCubemap[slot] = std::make_shared<Texture>();
     envCubemap[slot]->LoadCubemap(faces);
-    
-    // 设置投影和视图矩阵
-    glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
-    glm::mat4 captureViews[] = {
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // +X
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // -X
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)), // +Y
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)), // -Y
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // +Z
-        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))  // -Z
-    };
     
     // 为天空盒生成mipmaps以便IBL使用
     glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
     glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
     
-    // 生成辐照度贴图
-    irradianceMap[slot] = std::make_shared<Texture>();
-    irradianceMap[slot]->CreateCubemap(32, 32, GL_RGB16F);
-    
-    iblCaptureBuffer->Resize(32, 32);
-    iblCaptureBuffer->Bind();
-    
-    irradianceShader->Use();
-    irradianceShader->SetInt("environmentMap", 0);
-    irradianceShader->SetMat4("projection", captureProjection);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
-    
-    glViewport(0, 0, 32, 32);
-    for (unsigned int i = 0; i < 6; ++i) {
-        irradianceShader->SetMat4("view", captureViews[i]);
-        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
-                               GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
-                               irradianceMap[slot]->GetID(), 0);
-        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        RenderCube();
-    }
-    
-    iblCaptureBuffer->Unbind();
-    
-    // 生成预过滤贴图
-    prefilterMap[slot] = std::make_shared<Texture>();
-    prefilterMap[slot]->CreateCubemap(128, 128, GL_RGB16F);
-    
-    // 设置正确的参数以支持mipmapping
-    glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap[slot]->GetID());
-    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
-    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
-    
-    prefilterShader->Use();
-    prefilterShader->SetInt("environmentMap", 0);
-    prefilterShader->SetMat4("projection", captureProjection);
-    glActiveTexture(GL_TEXTURE0);
-    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
-    
-    unsigned int maxMipLevels = 5;
-    for (unsigned int mip = 0; mip < maxMipLevels; ++mip) {
-        unsigned int mipWidth = static_cast<unsigned int>(128 * std::pow(0.5, mip));
-        unsigned int mipHeight = static_cast<unsigned int>(128 * std::pow(0.5, mip));
-        iblCaptureBuffer->Resize(mipWidth, mipHeight);
-        iblCaptureBuffer->Bind();
-        
-        float roughness = (float)mip / (float)(maxMipLevels - 1);
-        prefilterShader->SetFloat("roughness", roughness);
-        
-        glViewport(0, 0, mipWidth, mipHeight);
-        for (unsigned int i = 0; i < 6; ++i) {
-            prefilterShader->SetMat4("view", captureViews[i]);
-            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
-                                   GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
-                                   prefilterMap[slot]->GetID(), mip);
-            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-            RenderCube();
-        }
-        
-        iblCaptureBuffer->Unbind();
-    }
-    
-    // 恢复状态
-    glBindFramebuffer(GL_FRAMEBUFFER, prevFramebuffer);
-    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    // 生成IBL贴图
+    GenerateIBLMaps(slot);
     
     std::cout << "Skybox environment loaded to slot " << slot << std::endl;
 }
@@ -2679,4 +2584,118 @@ void Renderer::SetCurrentEnvironment(int slot) {
     
     envmapnow = slot;
     std::cout << "Switched to environment slot " << slot << std::endl;
+}
+
+bool Renderer::IsEnvironmentSlotLoaded(int slot) const {
+    if (slot < 0 || slot >= envmapcount) {
+        return false;
+    }
+    return envCubemap[slot] != nullptr;
+}
+
+void Renderer::GenerateIBLMaps(int slot) {
+    if (slot < 0 || slot >= envmapcount || !envCubemap[slot]) {
+        std::cerr << "Invalid environment slot or empty cubemap for IBL generation: " << slot << std::endl;
+        return;
+    }
+    
+    std::cout << "Generating IBL maps for slot " << slot << std::endl;
+    
+    // 保存当前状态
+    GLint prevViewport[4];
+    glGetIntegerv(GL_VIEWPORT, prevViewport);
+    GLint prevFramebuffer;
+    glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFramebuffer);
+    GLboolean depthTestEnabled = glIsEnabled(GL_DEPTH_TEST);
+    GLboolean cullFaceEnabled = glIsEnabled(GL_CULL_FACE);
+    
+    // 设置渲染状态
+    glDisable(GL_DEPTH_TEST);
+    glDisable(GL_CULL_FACE);
+    
+    // 设置投影和视图矩阵
+    glm::mat4 captureProjection = glm::perspective(glm::radians(90.0f), 1.0f, 0.1f, 10.0f);
+    glm::mat4 captureViews[] = {
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // +X
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(-1.0f,  0.0f,  0.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // -X
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  1.0f,  0.0f), glm::vec3(0.0f,  0.0f,  1.0f)), // +Y
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f, -1.0f,  0.0f), glm::vec3(0.0f,  0.0f, -1.0f)), // -Y
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f,  1.0f), glm::vec3(0.0f, -1.0f,  0.0f)), // +Z
+        glm::lookAt(glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3( 0.0f,  0.0f, -1.0f), glm::vec3(0.0f, -1.0f,  0.0f))  // -Z
+    };
+    
+    // 确保环境贴图有mipmaps
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    
+    // 生成辐照度贴图
+    irradianceMap[slot] = std::make_shared<Texture>();
+    irradianceMap[slot]->CreateCubemap(32, 32, GL_RGB16F);
+    
+    iblCaptureBuffer->Resize(32, 32);
+    iblCaptureBuffer->Bind();
+    
+    irradianceShader->Use();
+    irradianceShader->SetInt("environmentMap", 0);
+    irradianceShader->SetMat4("projection", captureProjection);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
+    
+    glViewport(0, 0, 32, 32);
+    for (unsigned int i = 0; i < 6; ++i) {
+        irradianceShader->SetMat4("view", captureViews[i]);
+        glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
+                               GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
+                               irradianceMap[slot]->GetID(), 0);
+        glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+        RenderCube();
+    }
+    
+    iblCaptureBuffer->Unbind();
+    
+    // 生成预过滤贴图
+    prefilterMap[slot] = std::make_shared<Texture>();
+    prefilterMap[slot]->CreateCubemap(128, 128, GL_RGB16F);
+    
+    // 设置正确的参数以支持mipmapping
+    glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap[slot]->GetID());
+    glTexParameteri(GL_TEXTURE_CUBE_MAP, GL_TEXTURE_MIN_FILTER, GL_LINEAR_MIPMAP_LINEAR);
+    glGenerateMipmap(GL_TEXTURE_CUBE_MAP);
+    
+    prefilterShader->Use();
+    prefilterShader->SetInt("environmentMap", 0);
+    prefilterShader->SetMat4("projection", captureProjection);
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_CUBE_MAP, envCubemap[slot]->GetID());
+    
+    unsigned int maxMipLevels = 5;
+    for (unsigned int mip = 0; mip < maxMipLevels; ++mip) {
+        unsigned int mipWidth = static_cast<unsigned int>(128 * std::pow(0.5, mip));
+        unsigned int mipHeight = static_cast<unsigned int>(128 * std::pow(0.5, mip));
+        iblCaptureBuffer->Resize(mipWidth, mipHeight);
+        iblCaptureBuffer->Bind();
+        
+        float roughness = (float)mip / (float)(maxMipLevels - 1);
+        prefilterShader->SetFloat("roughness", roughness);
+        
+        glViewport(0, 0, mipWidth, mipHeight);
+        for (unsigned int i = 0; i < 6; ++i) {
+            prefilterShader->SetMat4("view", captureViews[i]);
+            glFramebufferTexture2D(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, 
+                                   GL_TEXTURE_CUBE_MAP_POSITIVE_X + i, 
+                                   prefilterMap[slot]->GetID(), mip);
+            glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+            RenderCube();
+        }
+        
+        iblCaptureBuffer->Unbind();
+    }
+    
+    // 恢复状态
+    glBindFramebuffer(GL_FRAMEBUFFER, prevFramebuffer);
+    glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
+    if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
+    if (cullFaceEnabled) glEnable(GL_CULL_FACE);
+    
+    std::cout << "IBL maps generated for slot " << slot << std::endl;
 }
