@@ -14,11 +14,6 @@
 #include <codecvt>
 #include <locale>
 #include <unordered_map>
-#include <thread>
-#include <mutex>
-#include <iostream>
-#include <sstream>
-#include <streambuf>
 
 class Renderer;
 

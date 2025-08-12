@@ -5,7 +5,6 @@
 #include <GLFW/glfw3.h>
 #include <memory>
 #include <iostream>
-#include <sstream>
 #include <streambuf>
 #include <vector>
 #include <string>
