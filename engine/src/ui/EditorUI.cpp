@@ -244,16 +244,32 @@ void EditorUI::CreateDefaultLayout()
 void EditorUI::ShowAssetsPanel()
 {
     ImGui::Begin(ConvertToUTF8(L"资源管理").c_str(), &showAssetsPanel);
-    
+
     // 顶部工具栏
-    if (ImGui::Button(ConvertToUTF8(L"刷新").c_str()))
-    {
-        RefreshAssetList();
-    }
-    ImGui::SameLine();
+    // 导入按钮
     if (ImGui::Button(ConvertToUTF8(L"导入").c_str()))
     {
-        // 导入资源对话框
+        // 支持多种类型导入
+        std::string filePath = FileDialog::OpenFile(
+            ConvertToUTF8(L"导入资源").c_str(),
+            "所有支持文件\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.hdr;*.obj;*.fbx;*.gltf;*.glb;*.dae;*.3ds;*.blend;*.pmx;*.vert;*.frag;*.geom;*.comp;*.glsl;*.wav;*.mp3;*.ogg\0图片\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.hdr\0模型\0*.obj;*.fbx;*.gltf;*.glb;*.dae;*.3ds;*.blend;*.pmx\0着色器\0*.vert;*.frag;*.geom;*.comp;*.glsl\0音频\0*.wav;*.mp3;*.ogg\0所有文件\0*.*\0"
+        );
+        if (!filePath.empty()) {
+            // 复制到资源目录
+            try {
+                std::filesystem::path src(filePath);
+                std::filesystem::path dst = std::filesystem::path(currentAssetPath) / src.filename();
+                if (!std::filesystem::equivalent(src, dst)) {
+                    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing);
+                    AddNotification(ConvertToUTF8(L"导入成功: ") + src.filename().string(), true);
+                } else {
+                    AddNotification(ConvertToUTF8(L"文件已存在: ") + src.filename().string(), false);
+                }
+            } catch (const std::exception& e) {
+                AddNotification(ConvertToUTF8(L"导入失败: ") + e.what(), false);
+            }
+            RefreshAssetList();
+        }
     }
     ImGui::SameLine();
     ImGui::Checkbox(ConvertToUTF8(L"预加载").c_str(), &enableAssetPreloading);
@@ -268,28 +284,91 @@ void EditorUI::ShowAssetsPanel()
         }
     }
     ImGui::Text(ConvertToUTF8(L"路径: %s").c_str(), currentAssetPath.c_str());
-    
+
     ImGui::Separator();
-    
-    // 资源过滤器
+
+    // 筛选器和排序
     static char filter[256] = "";
-    ImGui::InputText(ConvertToUTF8(L"过滤器").c_str(), filter, sizeof(filter));
-    
+    ImGui::InputText(ConvertToUTF8(L"名称过滤").c_str(), filter, sizeof(filter));
+    ImGui::SameLine();
+    static int typeFilter = 0;
+    static std::vector<std::string> typeItemsStr = {
+        ConvertToUTF8(L"全部"),
+        ConvertToUTF8(L"图片"),
+        ConvertToUTF8(L"模型"),
+        ConvertToUTF8(L"材质"),
+        ConvertToUTF8(L"着色器"),
+        ConvertToUTF8(L"音频"),
+        ConvertToUTF8(L"其它")
+    };
+    std::vector<const char*> typeItems;
+    for (const auto& s : typeItemsStr) typeItems.push_back(s.c_str());
+    ImGui::SetNextItemWidth(100);
+    ImGui::Combo("##TypeFilter", &typeFilter, typeItems.data(), (int)typeItems.size());
+    ImGui::SameLine();
+    static int sortMode = 0;
+    static std::vector<std::string> sortItemsStr = {
+        ConvertToUTF8(L"名称升序"),
+        ConvertToUTF8(L"名称降序"),
+        ConvertToUTF8(L"类型"),
+        ConvertToUTF8(L"时间")
+    };
+    std::vector<const char*> sortItems;
+    for (const auto& s : sortItemsStr) sortItems.push_back(s.c_str());
+    ImGui::SetNextItemWidth(100);
+    ImGui::Combo("##SortMode", &sortMode, sortItems.data(), (int)sortItems.size());
+
     ImGui::Separator();
-    
+
+    // 排序 assetItems
+    static std::vector<AssetItem> sortedAssets;
+    sortedAssets = assetItems;
+    // 类型筛选
+    auto typeMatch = [](AssetType type, int filter) {
+        switch (filter) {
+            case 0: return true;
+            case 1: return type == AssetType::TEXTURE;
+            case 2: return type == AssetType::MODEL;
+            case 3: return type == AssetType::MATERIAL;
+            case 4: return type == AssetType::SHADER;
+            case 5: return type == AssetType::AUDIO;
+            case 6: return type == AssetType::UNKNOWN;
+            default: return true;
+        }
+    };
+    // 名称过滤和类型筛选
+    sortedAssets.erase(
+        std::remove_if(sortedAssets.begin(), sortedAssets.end(), [&](const AssetItem& item) {
+            if (strlen(filter) > 0 && item.name.find(filter) == std::string::npos)
+                return true;
+            if (!typeMatch(item.type, typeFilter))
+                return true;
+            return false;
+        }),
+        sortedAssets.end()
+    );
+    // 排序
+    switch (sortMode) {
+        case 0:
+            std::sort(sortedAssets.begin(), sortedAssets.end(), [](const AssetItem& a, const AssetItem& b) { return a.name < b.name; });
+            break;
+        case 1:
+            std::sort(sortedAssets.begin(), sortedAssets.end(), [](const AssetItem& a, const AssetItem& b) { return a.name > b.name; });
+            break;
+        case 2:
+            std::sort(sortedAssets.begin(), sortedAssets.end(), [](const AssetItem& a, const AssetItem& b) { return a.type < b.type; });
+            break;
+        case 3:
+            std::sort(sortedAssets.begin(), sortedAssets.end(), [](const AssetItem& a, const AssetItem& b) { return a.lastWriteTime > b.lastWriteTime; });
+            break;
+    }
+
     // 资源列表
     ImGui::BeginChild("AssetList", ImVec2(0, 0), true);
-    
-    for (size_t i = 0; i < assetItems.size(); ++i)
+    for (size_t i = 0; i < sortedAssets.size(); ++i)
     {
-        const auto& asset = assetItems[i];
-        
-        // 应用过滤器
-        if (strlen(filter) > 0 && asset.name.find(filter) == std::string::npos)
-            continue;
-            
+        const auto& asset = sortedAssets[i];
         ImGui::PushID((int)i);
-        
         // 资源图标
         const char* icon = "[FILE]";
         switch (asset.type)
@@ -301,38 +380,42 @@ void EditorUI::ShowAssetsPanel()
             case AssetType::AUDIO: icon = "[AUD]"; break;
             default: icon = "[FILE]"; break;
         }
-        
-        bool isSelected = (selectedAssetIndex == (int)i);
+        // 选中逻辑
+        bool isSelected = (selectedAsset && asset.path == selectedAsset->path);
         if (ImGui::Selectable((std::string(icon) + " " + asset.name).c_str(), isSelected))
         {
-            selectedAssetIndex = (int)i;
-            selectedAsset = const_cast<AssetItem*>(&asset);
-            
-            // 如果启用预加载，则预加载资源
-            if (enableAssetPreloading && !asset.isPreloaded)
-            {
-                PreloadAsset(*selectedAsset);
+            // 重新定位到原始 assetItems 的索引
+            auto it = std::find_if(assetItems.begin(), assetItems.end(), [&](const AssetItem& item) { return item.path == asset.path; });
+            if (it != assetItems.end()) {
+                selectedAssetIndex = (int)std::distance(assetItems.begin(), it);
+                selectedAsset = &(*it);
+                if (enableAssetPreloading && !selectedAsset->isPreloaded)
+                {
+                    PreloadAsset(*selectedAsset);
+                }
             }
         }
-        
         // 双击打开预览窗口
         if (ImGui::IsItemHovered() && ImGui::IsMouseDoubleClicked(0))
         {
             showAssetPreview = true;
-            selectedAsset = const_cast<AssetItem*>(&asset);
-            if (enableAssetPreloading && !asset.isPreloaded)
-            {
-                PreloadAsset(*selectedAsset);
+            auto it = std::find_if(assetItems.begin(), assetItems.end(), [&](const AssetItem& item) { return item.path == asset.path; });
+            if (it != assetItems.end()) {
+                selectedAsset = &(*it);
+                if (enableAssetPreloading && !selectedAsset->isPreloaded)
+                {
+                    PreloadAsset(*selectedAsset);
+                }
             }
         }
-        
         // 右键菜单
         if (ImGui::BeginPopupContextItem())
         {
-            ShowAssetContextMenu(const_cast<AssetItem&>(asset));
+            auto it = std::find_if(assetItems.begin(), assetItems.end(), [&](const AssetItem& item) { return item.path == asset.path; });
+            if (it != assetItems.end())
+                ShowAssetContextMenu(*const_cast<AssetItem*>(&(*it)));
             ImGui::EndPopup();
         }
-        
         // 拖拽支持
         if (ImGui::BeginDragDropSource())
         {
@@ -340,10 +423,8 @@ void EditorUI::ShowAssetsPanel()
             ImGui::Text("%s", asset.name.c_str());
             ImGui::EndDragDropSource();
         }
-        
         ImGui::PopID();
     }
-    
     ImGui::EndChild();
     ImGui::End();
 }
@@ -430,7 +511,8 @@ void EditorUI::RefreshAssetList()
                     item.name = entry.path().filename().string();
                     item.type = DetermineAssetType(entry.path());
                     item.isLoaded = false;
-                    
+                    std::error_code ec;
+                    item.lastWriteTime = std::filesystem::last_write_time(entry.path(), ec);
                     assetItems.push_back(item);
                 }
             }

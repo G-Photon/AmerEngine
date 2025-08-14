@@ -49,7 +49,7 @@ struct AssetItem
     bool isLoaded = false;
     bool isPreloaded = false;       // 是否已预加载
     std::shared_ptr<Texture> previewTexture; // 预览纹理
-    
+    std::filesystem::file_time_type lastWriteTime{};
     // 缓存的资源数据
     union {
         struct {
