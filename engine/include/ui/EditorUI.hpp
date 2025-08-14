@@ -173,11 +173,50 @@ private:
     bool showSkyboxImportDialog = false;
     std::vector<std::string> skyboxFaces = {"", "", "", "", "", ""}; // 6个面的路径：右、左、上、下、前、后
     
+    // 场景层级编辑状态
+    bool isRenamingObject = false;
+    int renamingObjectIndex = -1;
+    char renameBuffer[256] = "";
+    
+    // 复制粘贴状态
+    struct CopiedObject {
+        enum Type { MODEL, PRIMITIVE, LIGHT } type;
+        int originalIndex;
+        bool isValid = false;
+        
+        // 几何体数据
+        struct PrimitiveData {
+            glm::vec3 position{0.0f}, rotation{0.0f}, scale{1.0f};
+            // 材质属性
+            glm::vec3 diffuse{0.8f}, specular{0.5f}, albedo{0.8f};
+            float shininess = 32.0f, metallic = 0.0f, roughness = 0.5f, ao = 1.0f;
+            MaterialType materialType = BLINN_PHONG;
+            bool useDiffuseMap = false, useSpecularMap = false, useNormalMap = false;
+            bool useAlbedoMap = false, useMetallicMap = false, useRoughnessMap = false, useAOMap = false;
+            // 纹理路径
+            std::string diffuseMapPath, specularMapPath, normalMapPath;
+            std::string albedoMapPath, metallicMapPath, roughnessMapPath, aoMapPath;
+        } primitiveData;
+        
+        // 光源数据
+        struct LightData {
+            glm::vec3 position{0.0f}, direction{0.0f, -1.0f, 0.0f};
+            glm::vec3 ambient{1.0f}, diffuse{1.0f}, specular{1.0f};
+            float constant = 1.0f, linear = 0.09f, quadratic = 0.032f;
+            float cutOff = 12.5f, outerCutOff = 17.5f;
+            int lightType = 0; // 0=点光源, 1=方向光, 2=聚光灯
+        } lightData;
+    };
+    CopiedObject copiedObject;
+    
     // UI状态
     bool isDockingSetup = false;
     float leftPanelWidth = 300.0f;
     float rightPanelWidth = 350.0f;
     float bottomPanelHeight = 200.0f;
+    
+    // 光源名称映射（用于重命名功能）
+    std::unordered_map<size_t, std::string> lightNames;
     
     // 控制台日志
     // 注意：控制台日志现在由Application管理

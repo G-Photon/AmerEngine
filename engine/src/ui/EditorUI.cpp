@@ -533,6 +533,7 @@ void EditorUI::ShowAssetContextMenu(AssetItem& item)
     if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str()))
     {
         // 重命名逻辑
+        // 这里可以弹出一个输入框让用户输入新名称
     }
     
     if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str()))
@@ -586,17 +587,6 @@ void EditorUI::ShowMainMenuBar()
             if (ImGui::MenuItem(ConvertToUTF8(L"退出").c_str(), "Alt+F4")) {
                 glfwSetWindowShouldClose(window, true);
             }
-            ImGui::EndMenu();
-        }
-
-        if (ImGui::BeginMenu(ConvertToUTF8(L"编辑").c_str()))
-        {
-            if (ImGui::MenuItem(ConvertToUTF8(L"撤销").c_str(), "Ctrl+Z")) {}
-            if (ImGui::MenuItem(ConvertToUTF8(L"重做").c_str(), "Ctrl+Y")) {}
-            ImGui::Separator();
-            if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str(), "Ctrl+C")) {}
-            if (ImGui::MenuItem(ConvertToUTF8(L"粘贴").c_str(), "Ctrl+V")) {}
-            if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str(), "Delete")) {}
             ImGui::EndMenu();
         }
 
@@ -684,14 +674,36 @@ void EditorUI::ShowMainMenuBar()
             }
             ImGui::EndMenu();
         }
-
+        static bool showAboutPopup = false;
         if (ImGui::BeginMenu(ConvertToUTF8(L"帮助").c_str()))
         {
-            if (ImGui::MenuItem(ConvertToUTF8(L"关于").c_str())) {}
+            if (ImGui::MenuItem(ConvertToUTF8(L"关于").c_str()))
+            {
+                showAboutPopup = true;
+            }
             ImGui::EndMenu();
         }
 
         ImGui::EndMainMenuBar();
+
+        if (showAboutPopup)
+        {
+            ImGui::OpenPopup(ConvertToUTF8(L"about").c_str());
+            showAboutPopup = false;
+        }
+
+        if (ImGui::BeginPopup(ConvertToUTF8(L"about").c_str(), ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::Text("%s", ConvertToUTF8(L"关于本软件的说明...").c_str());
+            ImGui::Text("%s", ConvertToUTF8(L"版本: 1.0.0").c_str());
+            ImGui::Text("%s", ConvertToUTF8(L"作者: G-Photon").c_str());
+            ImGui::Text("%s", ConvertToUTF8(L"感谢使用本软件！").c_str());
+            if (ImGui::Button(ConvertToUTF8(L"关闭").c_str()))
+            {
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
+        }
     }
 }
 
@@ -862,16 +874,49 @@ void EditorUI::ShowSceneHierarchy()
             ImGui::PushID(i);
             bool isSelected = (selectedObjectIndex == i);
             
-            if (ImGui::Selectable(name.c_str(), isSelected))
-            {
-                selectedObjectIndex = i;
+            // 检查是否正在重命名这个对象
+            if (isRenamingObject && renamingObjectIndex == i) {
+                // 显示重命名输入框
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputText("##Rename", renameBuffer, sizeof(renameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+                    // 应用重命名
+                    model->SetName(renameBuffer);
+                    isRenamingObject = false;
+                    renamingObjectIndex = -1;
+                }
+                
+                // 检查是否取消重命名
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                    isRenamingObject = false;
+                    renamingObjectIndex = -1;
+                }
+                
+                // 自动聚焦输入框
+                if (ImGui::IsItemActivated()) {
+                    ImGui::SetKeyboardFocusHere(-1);
+                }
+            } else {
+                // 正常显示对象名称
+                if (ImGui::Selectable(name.c_str(), isSelected))
+                {
+                    selectedObjectIndex = i;
+                }
             }
             
             // 右键菜单
             if (ImGui::BeginPopupContextItem())
             {
-                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {}
-                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {
+                    isRenamingObject = true;
+                    renamingObjectIndex = i;
+                    strncpy_s(renameBuffer, model->GetName().c_str(), sizeof(renameBuffer) - 1);
+                    renameBuffer[sizeof(renameBuffer) - 1] = '\0';
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {
+                    // 模型复制功能暂未实现
+                    Application::AddConsoleLog("Model duplication not yet implemented");
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str())) {
                     renderer->DeleteObject(i);
                     selectedObjectIndex = -1;
@@ -890,7 +935,14 @@ void EditorUI::ShowSceneHierarchy()
         auto &primitives = renderer->GetPrimitives();
         for (size_t i = 0; i < primitives.size(); ++i)
         {
-            std::string name = "[GEOM] " + ConvertToUTF8(Geometry::name[primitives[i].type]) + " " + std::to_string(i);
+            std::string name;
+            
+            // 检查几何体是否有自定义名称
+            if (primitives[i].mesh && !primitives[i].mesh->GetName().empty() && primitives[i].mesh->GetName() != "Mesh") {
+                name = "[GEOM] " + primitives[i].mesh->GetName();
+            } else {
+                name = "[GEOM] " + ConvertToUTF8(Geometry::name[primitives[i].type]) + " " + std::to_string(i);
+            }
             
             // 应用搜索过滤器
             if (strlen(searchFilter) > 0 && name.find(searchFilter) == std::string::npos)
@@ -899,16 +951,114 @@ void EditorUI::ShowSceneHierarchy()
             ImGui::PushID((int)(i + renderer->GetModelCount()));
             bool isSelected = (selectedObjectIndex == (int)(i + renderer->GetModelCount()));
             
-            if (ImGui::Selectable(name.c_str(), isSelected))
-            {
-                selectedObjectIndex = (int)(i + renderer->GetModelCount());
+            // 检查是否正在重命名这个对象
+            if (isRenamingObject && renamingObjectIndex == (int)(i + renderer->GetModelCount())) {
+                // 显示重命名输入框
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputText("##Rename", renameBuffer, sizeof(renameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+                    // 应用重命名 - 几何体重命名功能（可以在网格中设置名称）
+                    if (primitives[i].mesh) {
+                        primitives[i].mesh->SetName(renameBuffer);
+                        Application::AddConsoleLog("Geometry renamed to: " + std::string(renameBuffer));
+                    }
+                    isRenamingObject = false;
+                    renamingObjectIndex = -1;
+                }
+                
+                // 检查是否取消重命名
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                    isRenamingObject = false;
+                    renamingObjectIndex = -1;
+                }
+                
+                // 自动聚焦输入框
+                if (ImGui::IsItemActivated()) {
+                    ImGui::SetKeyboardFocusHere(-1);
+                }
+            } else {
+                // 正常显示对象名称
+                if (ImGui::Selectable(name.c_str(), isSelected))
+                {
+                    selectedObjectIndex = (int)(i + renderer->GetModelCount());
+                }
             }
             
             // 右键菜单
             if (ImGui::BeginPopupContextItem())
             {
-                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {}
-                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {
+                    isRenamingObject = true;
+                    renamingObjectIndex = (int)(i + renderer->GetModelCount());
+                    if (primitives[i].mesh && !primitives[i].mesh->GetName().empty() && 
+                        primitives[i].mesh->GetName() != "Mesh") {
+                        // 使用现有的自定义名称
+                        strncpy_s(renameBuffer, primitives[i].mesh->GetName().c_str(), sizeof(renameBuffer) - 1);
+                        renameBuffer[sizeof(renameBuffer) - 1] = '\0';
+                    } else {
+                        // 使用默认名称格式
+                        snprintf(renameBuffer, sizeof(renameBuffer), "%s %zu", 
+                                ConvertToUTF8(Geometry::name[primitives[i].type]).c_str(), i);
+                    }
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {
+                    // 直接复制几何体
+                    auto &originalPrimitive = primitives[i];
+                    
+                    // 获取原始材质
+                    auto originalMaterial = originalPrimitive.mesh->GetMaterial();
+                    auto newMaterial = std::make_shared<Material>(originalMaterial->type);
+                    
+                    // 复制所有材质属性
+                    newMaterial->diffuse = originalMaterial->diffuse;
+                    newMaterial->specular = originalMaterial->specular;
+                    newMaterial->shininess = originalMaterial->shininess;
+                    newMaterial->albedo = originalMaterial->albedo;
+                    newMaterial->metallic = originalMaterial->metallic;
+                    newMaterial->roughness = originalMaterial->roughness;
+                    newMaterial->ao = originalMaterial->ao;
+                    
+                    // 复制纹理使用标志
+                    newMaterial->useDiffuseMap = originalMaterial->useDiffuseMap;
+                    newMaterial->useSpecularMap = originalMaterial->useSpecularMap;
+                    newMaterial->useNormalMap = originalMaterial->useNormalMap;
+                    newMaterial->useAlbedoMap = originalMaterial->useAlbedoMap;
+                    newMaterial->useMetallicMap = originalMaterial->useMetallicMap;
+                    newMaterial->useRoughnessMap = originalMaterial->useRoughnessMap;
+                    newMaterial->useAOMap = originalMaterial->useAOMap;
+                    
+                    // 复制纹理
+                    if (originalMaterial->diffuseMap) {
+                        newMaterial->diffuseMap = std::make_shared<Texture>(originalMaterial->diffuseMap->GetPath());
+                    }
+                    if (originalMaterial->specularMap) {
+                        newMaterial->specularMap = std::make_shared<Texture>(originalMaterial->specularMap->GetPath());
+                    }
+                    if (originalMaterial->normalMap) {
+                        newMaterial->normalMap = std::make_shared<Texture>(originalMaterial->normalMap->GetPath());
+                    }
+                    if (originalMaterial->albedoMap) {
+                        newMaterial->albedoMap = std::make_shared<Texture>(originalMaterial->albedoMap->GetPath());
+                    }
+                    if (originalMaterial->metallicMap) {
+                        newMaterial->metallicMap = std::make_shared<Texture>(originalMaterial->metallicMap->GetPath());
+                    }
+                    if (originalMaterial->roughnessMap) {
+                        newMaterial->roughnessMap = std::make_shared<Texture>(originalMaterial->roughnessMap->GetPath());
+                    }
+                    if (originalMaterial->aoMap) {
+                        newMaterial->aoMap = std::make_shared<Texture>(originalMaterial->aoMap->GetPath());
+                    }
+                    
+                    // 在相同位置创建新几何体
+                    renderer->CreatePrimitive(originalPrimitive.type, 
+                                            originalPrimitive.position,
+                                            originalPrimitive.scale,
+                                            originalPrimitive.rotation, 
+                                            *newMaterial);
+                    
+                    Application::AddConsoleLog("Primitive duplicated with all properties");
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str())) {
                     renderer->DeleteObject((int)(i + renderer->GetModelCount()));
                     selectedObjectIndex = -1;
@@ -950,7 +1100,14 @@ void EditorUI::ShowSceneHierarchy()
                     break;
             }
             
-            std::string name = icon + " " + typeName + " " + std::to_string(i);
+            std::string name;
+            
+            // 检查是否有自定义名称
+            if (lightNames.find(i) != lightNames.end()) {
+                name = icon + " " + lightNames[i];
+            } else {
+                name = icon + " " + typeName + " " + std::to_string(i);
+            }
             
             // 应用搜索过滤器
             if (strlen(searchFilter) > 0 && name.find(searchFilter) == std::string::npos)
@@ -959,16 +1116,107 @@ void EditorUI::ShowSceneHierarchy()
             ImGui::PushID((int)(i + renderer->GetModelCount() + primitives.size()));
             bool isSelected = (selectedObjectIndex == (int)(i + renderer->GetModelCount() + primitives.size()));
             
-            if (ImGui::Selectable(name.c_str(), isSelected))
-            {
-                selectedObjectIndex = (int)(i + renderer->GetModelCount() + primitives.size());
+            // 检查是否正在重命名这个对象
+            if (isRenamingObject && renamingObjectIndex == (int)(i + renderer->GetModelCount() + primitives.size())) {
+                // 显示重命名输入框
+                ImGui::SetNextItemWidth(-1);
+                if (ImGui::InputText("##Rename", renameBuffer, sizeof(renameBuffer), ImGuiInputTextFlags_EnterReturnsTrue | ImGuiInputTextFlags_AutoSelectAll)) {
+                    // 应用重命名 - 保存光源自定义名称
+                    lightNames[i] = renameBuffer;
+                    Application::AddConsoleLog("Light renamed to: " + std::string(renameBuffer));
+                    isRenamingObject = false;
+                    renamingObjectIndex = -1;
+                }
+                
+                // 检查是否取消重命名
+                if (ImGui::IsKeyPressed(ImGuiKey_Escape)) {
+                    isRenamingObject = false;
+                    renamingObjectIndex = -1;
+                }
+                
+                // 自动聚焦输入框
+                if (ImGui::IsItemActivated()) {
+                    ImGui::SetKeyboardFocusHere(-1);
+                }
+            } else {
+                // 正常显示对象名称
+                if (ImGui::Selectable(name.c_str(), isSelected))
+                {
+                    selectedObjectIndex = (int)(i + renderer->GetModelCount() + primitives.size());
+                }
             }
             
             // 右键菜单
             if (ImGui::BeginPopupContextItem())
             {
-                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {}
-                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {}
+                if (ImGui::MenuItem(ConvertToUTF8(L"重命名").c_str())) {
+                    isRenamingObject = true;
+                    renamingObjectIndex = (int)(i + renderer->GetModelCount() + primitives.size());
+                    if (lightNames.find(i) != lightNames.end()) {
+                        // 使用现有的自定义名称
+                        strncpy_s(renameBuffer, lightNames[i].c_str(), sizeof(renameBuffer) - 1);
+                        renameBuffer[sizeof(renameBuffer) - 1] = '\0';
+                    } else {
+                        // 使用默认名称格式
+                        snprintf(renameBuffer, sizeof(renameBuffer), "%s %zu", typeName.c_str(), i);
+                    }
+                }
+                if (ImGui::MenuItem(ConvertToUTF8(L"复制").c_str())) {
+                    // 直接复制光源
+                    auto originalLight = lights[i];
+                    
+                    // 根据光源类型创建副本
+                    if (originalLight->getType() == 0) { // 点光源
+                        auto pointLight = std::dynamic_pointer_cast<PointLight>(originalLight);
+                        if (pointLight) {
+                            auto newLight = std::make_shared<PointLight>(
+                                pointLight->position,
+                                pointLight->ambient,
+                                pointLight->diffuse,
+                                pointLight->specular,
+                                pointLight->intensity
+                            );
+                            newLight->constant = pointLight->constant;
+                            newLight->linear = pointLight->linear;
+                            newLight->quadratic = pointLight->quadratic;
+                            renderer->AddLight(newLight);
+                            Application::AddConsoleLog("Point light duplicated");
+                        }
+                    } else if (originalLight->getType() == 1) { // 方向光
+                        auto dirLight = std::dynamic_pointer_cast<DirectionalLight>(originalLight);
+                        if (dirLight) {
+                            auto newLight = std::make_shared<DirectionalLight>(
+                                dirLight->direction,
+                                dirLight->ambient,
+                                dirLight->diffuse,
+                                dirLight->specular,
+                                dirLight->intensity
+                            );
+                            renderer->AddLight(newLight);
+                            Application::AddConsoleLog("Directional light duplicated");
+                        }
+                    } else if (originalLight->getType() == 2) { // 聚光灯
+                        auto spotLight = std::dynamic_pointer_cast<SpotLight>(originalLight);
+                        if (spotLight) {
+                            auto newLight = std::make_shared<SpotLight>(
+                                spotLight->position,
+                                spotLight->direction,
+                                spotLight->ambient,
+                                spotLight->diffuse,
+                                spotLight->specular,
+                                spotLight->intensity,
+                                spotLight->cutOff,
+                                spotLight->outerCutOff
+                            );
+                            newLight->constant = spotLight->constant;
+                            newLight->linear = spotLight->linear;
+                            newLight->quadratic = spotLight->quadratic;
+                            renderer->AddLight(newLight);
+                            Application::AddConsoleLog("Spot light duplicated");
+                        }
+                    }
+                }
+                ImGui::Separator();
                 if (ImGui::MenuItem(ConvertToUTF8(L"删除").c_str())) {
                     renderer->DeleteObject((int)(i + renderer->GetModelCount() + primitives.size()));
                     selectedObjectIndex = -1;
@@ -982,6 +1230,186 @@ void EditorUI::ShowSceneHierarchy()
     }
     
     ImGui::EndChild();
+    
+    // 处理键盘快捷键
+    if (ImGui::IsWindowFocused()) {
+        // Ctrl+C 复制选中对象（直接创建副本）
+        if (ImGui::IsKeyDown(ImGuiKey_LeftCtrl) && ImGui::IsKeyPressed(ImGuiKey_C) && selectedObjectIndex >= 0) {
+            int modelCount = renderer->GetModelCount();
+            int primitiveCount = renderer->GetPrimitives().size();
+            
+            if (selectedObjectIndex < modelCount) {
+                // 复制模型（暂未实现）
+                Application::AddConsoleLog("Model duplication not yet implemented");
+            } else if (selectedObjectIndex < modelCount + primitiveCount) {
+                // 直接复制几何体
+                auto &primitives = renderer->GetPrimitives();
+                int primitiveIndex = selectedObjectIndex - modelCount;
+                auto &originalPrimitive = primitives[primitiveIndex];
+                
+                // 获取原始材质
+                auto originalMaterial = originalPrimitive.mesh->GetMaterial();
+                auto newMaterial = std::make_shared<Material>(originalMaterial->type);
+                
+                // 复制所有材质属性
+                newMaterial->diffuse = originalMaterial->diffuse;
+                newMaterial->specular = originalMaterial->specular;
+                newMaterial->shininess = originalMaterial->shininess;
+                newMaterial->albedo = originalMaterial->albedo;
+                newMaterial->metallic = originalMaterial->metallic;
+                newMaterial->roughness = originalMaterial->roughness;
+                newMaterial->ao = originalMaterial->ao;
+                
+                // 复制纹理使用标志
+                newMaterial->useDiffuseMap = originalMaterial->useDiffuseMap;
+                newMaterial->useSpecularMap = originalMaterial->useSpecularMap;
+                newMaterial->useNormalMap = originalMaterial->useNormalMap;
+                newMaterial->useAlbedoMap = originalMaterial->useAlbedoMap;
+                newMaterial->useMetallicMap = originalMaterial->useMetallicMap;
+                newMaterial->useRoughnessMap = originalMaterial->useRoughnessMap;
+                newMaterial->useAOMap = originalMaterial->useAOMap;
+                
+                // 复制纹理
+                if (originalMaterial->diffuseMap) {
+                    newMaterial->diffuseMap = std::make_shared<Texture>(originalMaterial->diffuseMap->GetPath());
+                }
+                if (originalMaterial->specularMap) {
+                    newMaterial->specularMap = std::make_shared<Texture>(originalMaterial->specularMap->GetPath());
+                }
+                if (originalMaterial->normalMap) {
+                    newMaterial->normalMap = std::make_shared<Texture>(originalMaterial->normalMap->GetPath());
+                }
+                if (originalMaterial->albedoMap) {
+                    newMaterial->albedoMap = std::make_shared<Texture>(originalMaterial->albedoMap->GetPath());
+                }
+                if (originalMaterial->metallicMap) {
+                    newMaterial->metallicMap = std::make_shared<Texture>(originalMaterial->metallicMap->GetPath());
+                }
+                if (originalMaterial->roughnessMap) {
+                    newMaterial->roughnessMap = std::make_shared<Texture>(originalMaterial->roughnessMap->GetPath());
+                }
+                if (originalMaterial->aoMap) {
+                    newMaterial->aoMap = std::make_shared<Texture>(originalMaterial->aoMap->GetPath());
+                }
+                
+                // 在相同位置创建新几何体（完全相同的变换）
+                renderer->CreatePrimitive(originalPrimitive.type, 
+                                        originalPrimitive.position,
+                                        originalPrimitive.scale,
+                                        originalPrimitive.rotation, 
+                                        *newMaterial);
+                
+                Application::AddConsoleLog("Primitive duplicated with all properties");
+            } else {
+                // 直接复制光源
+                auto lights = renderer->GetLights();
+                int lightIndex = selectedObjectIndex - modelCount - primitiveCount;
+                if (lightIndex >= 0 && lightIndex < lights.size()) {
+                    auto originalLight = lights[lightIndex];
+                    
+                    // 根据光源类型创建副本
+                    if (originalLight->getType() == 0) { // 点光源
+                        auto pointLight = std::dynamic_pointer_cast<PointLight>(originalLight);
+                        if (pointLight) {
+                            auto newLight = std::make_shared<PointLight>(
+                                pointLight->position,
+                                pointLight->ambient,
+                                pointLight->diffuse,
+                                pointLight->specular,
+                                pointLight->intensity
+                            );
+                            newLight->constant = pointLight->constant;
+                            newLight->linear = pointLight->linear;
+                            newLight->quadratic = pointLight->quadratic;
+                            renderer->AddLight(newLight);
+                            Application::AddConsoleLog("Point light duplicated");
+                        }
+                    } else if (originalLight->getType() == 1) { // 方向光
+                        auto dirLight = std::dynamic_pointer_cast<DirectionalLight>(originalLight);
+                        if (dirLight) {
+                            auto newLight = std::make_shared<DirectionalLight>(
+                                dirLight->direction,
+                                dirLight->ambient,
+                                dirLight->diffuse,
+                                dirLight->specular,
+                                dirLight->intensity
+                            );
+                            renderer->AddLight(newLight);
+                            Application::AddConsoleLog("Directional light duplicated");
+                        }
+                    } else if (originalLight->getType() == 2) { // 聚光灯
+                        auto spotLight = std::dynamic_pointer_cast<SpotLight>(originalLight);
+                        if (spotLight) {
+                            auto newLight = std::make_shared<SpotLight>(
+                                spotLight->position,
+                                spotLight->direction,
+                                spotLight->ambient,
+                                spotLight->diffuse,
+                                spotLight->specular,
+                                spotLight->intensity,
+                                spotLight->cutOff,
+                                spotLight->outerCutOff
+                            );
+                            newLight->constant = spotLight->constant;
+                            newLight->linear = spotLight->linear;
+                            newLight->quadratic = spotLight->quadratic;
+                            renderer->AddLight(newLight);
+                            Application::AddConsoleLog("Spot light duplicated");
+                        }
+                    }
+                }
+            }
+        }
+        
+        // F2 重命名选中对象
+        if (ImGui::IsKeyPressed(ImGuiKey_F2) && selectedObjectIndex >= 0 && !isRenamingObject) {
+            isRenamingObject = true;
+            renamingObjectIndex = selectedObjectIndex;
+            
+            int modelCount = renderer->GetModelCount();
+            int primitiveCount = renderer->GetPrimitives().size();
+            
+            if (selectedObjectIndex < modelCount) {
+                // 重命名模型
+                auto model = renderer->GetModel(selectedObjectIndex);
+                strncpy_s(renameBuffer, model->GetName().c_str(), sizeof(renameBuffer) - 1);
+                renameBuffer[sizeof(renameBuffer) - 1] = '\0';
+            } else if (selectedObjectIndex < modelCount + primitiveCount) {
+                // 重命名几何体
+                auto &primitives = renderer->GetPrimitives();
+                int primitiveIndex = selectedObjectIndex - modelCount;
+                if (primitives[primitiveIndex].mesh && !primitives[primitiveIndex].mesh->GetName().empty() && 
+                    primitives[primitiveIndex].mesh->GetName() != "Mesh") {
+                    // 使用现有的自定义名称
+                    strncpy_s(renameBuffer, primitives[primitiveIndex].mesh->GetName().c_str(), sizeof(renameBuffer) - 1);
+                    renameBuffer[sizeof(renameBuffer) - 1] = '\0';
+                } else {
+                    // 使用默认名称格式
+                    snprintf(renameBuffer, sizeof(renameBuffer), "%s %d", 
+                            ConvertToUTF8(Geometry::name[primitives[primitiveIndex].type]).c_str(), primitiveIndex);
+                }
+            } else {
+                // 重命名光源
+                int lightIndex = selectedObjectIndex - modelCount - primitiveCount;
+                if (lightNames.find(lightIndex) != lightNames.end()) {
+                    // 使用现有的自定义名称
+                    strncpy_s(renameBuffer, lightNames[lightIndex].c_str(), sizeof(renameBuffer) - 1);
+                    renameBuffer[sizeof(renameBuffer) - 1] = '\0';
+                } else {
+                    // 使用默认名称格式
+                    snprintf(renameBuffer, sizeof(renameBuffer), "Light %d", lightIndex);
+                }
+            }
+        }
+        
+        // Delete 删除选中对象
+        if (ImGui::IsKeyPressed(ImGuiKey_Delete) && selectedObjectIndex >= 0) {
+            renderer->DeleteObject(selectedObjectIndex);
+            selectedObjectIndex = -1;
+            Application::AddConsoleLog("Object deleted");
+        }
+    }
+    
     ImGui::End();
 }
 
@@ -2216,17 +2644,17 @@ void EditorUI::ShowAssetPreviewWindow()
     // 资源信息
     ImGui::Text(ConvertToUTF8(L"名称: %s").c_str(), selectedAsset->name.c_str());
     ImGui::Text(ConvertToUTF8(L"路径: %s").c_str(), selectedAsset->path.string().c_str());
-    
-    const char* typeNames[] = { 
-        "纹理", 
-        "模型", 
-        "材质", 
-        "着色器", 
-        "音频", 
-        "未知"
+
+    const wchar_t* typeNames[] = { 
+        L"纹理", 
+        L"模型", 
+        L"材质", 
+        L"着色器", 
+        L"音频", 
+        L"未知"
     };
-    ImGui::Text(ConvertToUTF8(L"类型: %s").c_str(), typeNames[(int)selectedAsset->type]);
-    
+    ImGui::Text(ConvertToUTF8(L"类型: %s").c_str(), ConvertToUTF8(typeNames[(int)selectedAsset->type]).c_str());
+
     ImGui::Separator();
     
     // 预加载控制
