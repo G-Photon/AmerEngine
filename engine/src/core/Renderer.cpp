@@ -292,6 +292,7 @@ void Renderer::SaveScene(const std::string& path)
         {"msaaEnabled", msaaEnabled},
         {"fxaaEnabled", fxaaEnabled},
         {"gammaCorrection", gammaCorrection},
+        {"backgroundGammaCorrection", backgroundGammaCorrection},
         {"iblEnabled", iblEnabled},
         {"showLights", showLights},
         {"backgroundType", static_cast<int>(backgroundType)}
@@ -763,6 +764,7 @@ void Renderer::LoadScene(const std::string& path)
             }
             if (settings.contains("fxaaEnabled")) fxaaEnabled = settings["fxaaEnabled"];
             if (settings.contains("gammaCorrection")) SetGammaCorrection(settings["gammaCorrection"]);
+            if (settings.contains("backgroundGammaCorrection")) SetBackgroundGammaCorrection(settings["backgroundGammaCorrection"]);
             if (settings.contains("iblEnabled")) SetIBL(settings["iblEnabled"]);
             if (settings.contains("showLights")) showLights = settings["showLights"];
             if (settings.contains("backgroundType")) {
@@ -1696,7 +1698,8 @@ void Renderer::RenderSkybox()
     skyboxShader->SetMat4("view", view);
     skyboxShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
     
-    if (gammaCorrection)
+    // 使用背景贴图专用的gamma校正设置
+    if (backgroundGammaCorrection)
     {
         skyboxShader->SetBool("gammaEnabled", true);
     }

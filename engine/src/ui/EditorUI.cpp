@@ -246,32 +246,6 @@ void EditorUI::ShowAssetsPanel()
     ImGui::Begin(ConvertToUTF8(L"资源管理").c_str(), &showAssetsPanel);
 
     // 顶部工具栏
-    // 导入按钮
-    if (ImGui::Button(ConvertToUTF8(L"导入").c_str()))
-    {
-        // 支持多种类型导入
-        std::string filePath = FileDialog::OpenFile(
-            ConvertToUTF8(L"导入资源").c_str(),
-            "所有支持文件\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.hdr;*.obj;*.fbx;*.gltf;*.glb;*.dae;*.3ds;*.blend;*.pmx;*.vert;*.frag;*.geom;*.comp;*.glsl;*.wav;*.mp3;*.ogg\0图片\0*.png;*.jpg;*.jpeg;*.tga;*.bmp;*.hdr\0模型\0*.obj;*.fbx;*.gltf;*.glb;*.dae;*.3ds;*.blend;*.pmx\0着色器\0*.vert;*.frag;*.geom;*.comp;*.glsl\0音频\0*.wav;*.mp3;*.ogg\0所有文件\0*.*\0"
-        );
-        if (!filePath.empty()) {
-            // 复制到资源目录
-            try {
-                std::filesystem::path src(filePath);
-                std::filesystem::path dst = std::filesystem::path(currentAssetPath) / src.filename();
-                if (!std::filesystem::equivalent(src, dst)) {
-                    std::filesystem::copy_file(src, dst, std::filesystem::copy_options::overwrite_existing);
-                    AddNotification(ConvertToUTF8(L"导入成功: ") + src.filename().string(), true);
-                } else {
-                    AddNotification(ConvertToUTF8(L"文件已存在: ") + src.filename().string(), false);
-                }
-            } catch (const std::exception& e) {
-                AddNotification(ConvertToUTF8(L"导入失败: ") + e.what(), false);
-            }
-            RefreshAssetList();
-        }
-    }
-    ImGui::SameLine();
     ImGui::Checkbox(ConvertToUTF8(L"预加载").c_str(), &enableAssetPreloading);
     ImGui::SameLine();
     if (ImGui::Button(ConvertToUTF8(L"清除缓存").c_str()))
@@ -2233,6 +2207,14 @@ void EditorUI::ShowLightingSettings()
             renderer->SetCurrentEnvironment(currentEnv);
         }
         DrawTooltip(ConvertToUTF8(L"选择当前环境贴图：天空盒或HDR环境").c_str());
+        
+        // 背景贴图gamma校正设置
+        bool backgroundGamma = renderer->IsBackgroundGammaCorrectionEnabled();
+        if (ImGui::Checkbox(ConvertToUTF8(L"背景伽马校正").c_str(), &backgroundGamma))
+        {
+            renderer->SetBackgroundGammaCorrection(backgroundGamma);
+        }
+        DrawTooltip(ConvertToUTF8(L"启用背景贴图伽马校正，关闭时将对背景贴图进行反伽马校正").c_str());
         
         ImGui::Spacing();
         

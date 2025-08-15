@@ -140,6 +140,16 @@ class Renderer
     {
         return showLights;
     }
+    
+    // 背景gamma校正设置
+    void SetBackgroundGammaCorrection(bool enabled)
+    {
+        backgroundGammaCorrection = enabled;
+    }
+    bool IsBackgroundGammaCorrectionEnabled() const
+    {
+        return backgroundGammaCorrection;
+    }
 
     // 场景对象访问
     const std::vector<std::shared_ptr<Model>> &GetModels() const
@@ -356,6 +366,7 @@ class Renderer
 
     // 特效状态
     bool gammaCorrection = false;
+    bool backgroundGammaCorrection = true; // 背景贴图gamma校正，默认开启
     bool msaaEnabled = false;
     int msaaSamples = 4; // MSAA采样倍数
     bool hdrEnabled = false;
