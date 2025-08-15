@@ -168,6 +168,10 @@ void EditorUI::Render()
     if (showConsole)
         ShowConsole();
         
+    // 对话框
+    if (showMaterialApplicationDialog)
+        ShowMaterialApplicationDialog();
+        
     // 绘制通知
     DrawNotifications();
         
@@ -2845,25 +2849,260 @@ void EditorUI::ShowModelPreview(const AssetItem &item)
 
 void EditorUI::ApplyAssetToSelected(const AssetItem &item)
 {
-    if (selectedObjectIndex >= 0)
+    if (selectedObjectIndex < 0)
     {
-        switch (item.type)
+        AddNotification(ConvertToUTF8(L"请先选择一个对象"), false);
+        return;
+    }
+
+    // 检查选中的对象类型
+    int modelCount = renderer->GetModelCount();
+    int primitiveCount = renderer->GetPrimitives().size();
+    
+    // 如果选中的是光源，不能应用材质
+    if (selectedObjectIndex >= modelCount + primitiveCount)
+    {
+        AddNotification(ConvertToUTF8(L"无法将材质应用到光源"), false);
+        return;
+    }
+    
+    // 只处理纹理和材质类型的资源
+    if (item.type != AssetType::TEXTURE && item.type != AssetType::MATERIAL)
+    {
+        AddNotification(ConvertToUTF8(L"此资源类型无法应用到对象"), false);
+        return;
+    }
+    
+    // 保存待应用的资源信息
+    pendingAssetToApply = item;
+    selectedMeshIndex = -1;
+    selectedMaterialProperty = 0;
+    
+    // 显示材质应用对话框
+    showMaterialApplicationDialog = true;
+}
+
+void EditorUI::ShowMaterialApplicationDialog()
+{
+    if (!showMaterialApplicationDialog)
+        return;
+        
+    ImGui::OpenPopup(ConvertToUTF8(L"应用材质到对象").c_str());
+    
+    if (ImGui::BeginPopupModal(ConvertToUTF8(L"应用材质到对象").c_str(), &showMaterialApplicationDialog, ImGuiWindowFlags_AlwaysAutoResize))
+    {
+        int modelCount = renderer->GetModelCount();
+        int primitiveCount = renderer->GetPrimitives().size();
+        
+        // 确定选中对象的类型和信息
+        bool isModel = selectedObjectIndex < modelCount;
+        bool isPrimitive = selectedObjectIndex >= modelCount && selectedObjectIndex < modelCount + primitiveCount;
+        
+        ImGui::Text(ConvertToUTF8(L"资源: %s").c_str(), pendingAssetToApply.name.c_str());
+        ImGui::Separator();
+        
+        if (isModel)
         {
-            case AssetType::TEXTURE:
-                // 将纹理应用到选中对象的材质
-                AddNotification(ConvertToUTF8(L"纹理已应用到选中对象: ") + item.name, true);
-                break;
-            case AssetType::MATERIAL:
-                // 将材质应用到选中对象
-                AddNotification(ConvertToUTF8(L"材质已应用到选中对象: ") + item.name, true);
-                break;
-            default:
-                AddNotification(ConvertToUTF8(L"此资源类型无法应用到对象"), false);
-                break;
+            // 获取选中的模型
+            auto models = renderer->GetModels();
+            if (selectedObjectIndex < models.size())
+            {
+                auto model = models[selectedObjectIndex];
+                auto meshes = model->GetMeshes();
+                
+                ImGui::Text("%s", ConvertToUTF8(L"选择要应用的Mesh:").c_str());
+                
+                // 显示所有可用的mesh
+                for (int i = 0; i < meshes.size(); i++)
+                {
+                    ImGui::PushID(i);
+                    if (ImGui::RadioButton((ConvertToUTF8(L"Mesh ") + std::to_string(i + 1)).c_str(), selectedMeshIndex == i))
+                    {
+                        selectedMeshIndex = i;
+                    }
+                    ImGui::PopID();
+                }
+                
+                if (ImGui::RadioButton(ConvertToUTF8(L"应用到所有Mesh").c_str(), selectedMeshIndex == -1))
+                {
+                    selectedMeshIndex = -1;
+                }
+                
+                ImGui::Separator();
+            }
         }
+        else if (isPrimitive)
+        {
+            ImGui::Text("%s", ConvertToUTF8(L"对象类型: 简单几何体").c_str());
+            ImGui::Separator();
+        }
+        
+        // 材质属性选择
+        ImGui::Text("%s", ConvertToUTF8(L"选择要应用的材质属性:").c_str());
+        
+        if (pendingAssetToApply.type == AssetType::MATERIAL)
+        {
+            ImGui::RadioButton(ConvertToUTF8(L"整个材质").c_str(), &selectedMaterialProperty, 0);
+        }
+        else if (pendingAssetToApply.type == AssetType::TEXTURE)
+        {
+            ImGui::RadioButton(ConvertToUTF8(L"漫反射贴图").c_str(), &selectedMaterialProperty, 1);
+            ImGui::RadioButton(ConvertToUTF8(L"法线贴图").c_str(), &selectedMaterialProperty, 2);
+            ImGui::RadioButton(ConvertToUTF8(L"高光贴图").c_str(), &selectedMaterialProperty, 3);
+            ImGui::RadioButton(ConvertToUTF8(L"粗糙度贴图").c_str(), &selectedMaterialProperty, 4);
+            ImGui::RadioButton(ConvertToUTF8(L"金属度贴图").c_str(), &selectedMaterialProperty, 5);
+            ImGui::RadioButton(ConvertToUTF8(L"环境光遮蔽贴图").c_str(), &selectedMaterialProperty, 6);
+            ImGui::RadioButton(ConvertToUTF8(L"反照率贴图").c_str(), &selectedMaterialProperty, 7);
+        }
+        
+        ImGui::Separator();
+        
+        // 应用和取消按钮
+        if (ImGui::Button(ConvertToUTF8(L"应用").c_str(), ImVec2(120, 0)))
+        {
+            ApplyMaterialToObject();
+            showMaterialApplicationDialog = false;
+        }
+        
+        ImGui::SameLine();
+        
+        if (ImGui::Button(ConvertToUTF8(L"取消").c_str(), ImVec2(120, 0)))
+        {
+            showMaterialApplicationDialog = false;
+        }
+        
+        ImGui::EndPopup();
+    }
+}
+
+void EditorUI::ApplyMaterialToObject()
+{
+    int modelCount = renderer->GetModelCount();
+    int primitiveCount = renderer->GetPrimitives().size();
+    
+    bool isModel = selectedObjectIndex < modelCount;
+    bool isPrimitive = selectedObjectIndex >= modelCount && selectedObjectIndex < modelCount + primitiveCount;
+    
+    std::string successMessage;
+    
+    if (isModel)
+    {
+        // 处理模型对象
+        auto models = renderer->GetModels();
+        if (selectedObjectIndex < models.size())
+        {
+            auto model = models[selectedObjectIndex];
+            auto meshes = model->GetMeshes();
+            
+            if (selectedMeshIndex == -1)
+            {
+                // 应用到所有mesh
+                for (auto& mesh : meshes)
+                {
+                    ApplyAssetToMesh(mesh);
+                }
+                successMessage = ConvertToUTF8(L"已应用到模型的所有Mesh: ") + pendingAssetToApply.name;
+            }
+            else if (selectedMeshIndex < meshes.size())
+            {
+                // 应用到指定mesh
+                ApplyAssetToMesh(meshes[selectedMeshIndex]);
+                successMessage = ConvertToUTF8(L"已应用到Mesh ") + std::to_string(selectedMeshIndex + 1) + ": " + pendingAssetToApply.name;
+            }
+        }
+    }
+    else if (isPrimitive)
+    {
+        // 处理简单几何体
+        int primitiveIndex = selectedObjectIndex - modelCount;
+        auto& primitives = renderer->GetPrimitives();
+        
+        if (primitiveIndex < primitives.size())
+        {
+            ApplyAssetToPrimitive(primitives[primitiveIndex]);
+            successMessage = ConvertToUTF8(L"已应用到几何体: ") + pendingAssetToApply.name;
+        }
+    }
+    
+    if (!successMessage.empty())
+    {
+        AddNotification(successMessage, true);
     }
     else
     {
-        AddNotification(ConvertToUTF8(L"请先选择一个对象"), false);
+        AddNotification(ConvertToUTF8(L"应用材质失败"), false);
+    }
+}
+
+void EditorUI::ApplyAssetToMesh(std::shared_ptr<Mesh> mesh)
+{
+    if (!mesh) return;
+    
+    if (pendingAssetToApply.type == AssetType::MATERIAL)
+    {
+        // TODO: 加载并应用整个材质
+        // 这里需要实现材质文件的加载逻辑
+    }
+    else if (pendingAssetToApply.type == AssetType::TEXTURE)
+    {
+        // 获取mesh的当前材质，如果没有则创建一个新的
+        auto material = mesh->GetMaterial();
+        if (!material)
+        {
+            material = std::make_shared<Material>();
+            mesh->SetMaterial(material);
+        }
+        
+        // 根据选择的材质属性应用纹理
+        auto texture = std::make_shared<Texture>(pendingAssetToApply.path.string());
+        
+        switch (selectedMaterialProperty)
+        {
+            case 1: // 漫反射贴图
+                material->diffuseMap = texture;
+                material->useDiffuseMap = true;
+                break;
+            case 2: // 法线贴图
+                material->normalMap = texture;
+                material->useNormalMap = true;
+                break;
+            case 3: // 高光贴图
+                material->specularMap = texture;
+                material->useSpecularMap = true;
+                break;
+            case 4: // 粗糙度贴图
+                material->roughnessMap = texture;
+                material->useRoughnessMap = true;
+                break;
+            case 5: // 金属度贴图
+                material->metallicMap = texture;
+                material->useMetallicMap = true;
+                break;
+            case 6: // 环境光遮蔽贴图
+                material->aoMap = texture;
+                material->useAOMap = true;
+                break;
+            case 7: // 反照率贴图
+                material->albedoMap = texture;
+                material->useAlbedoMap = true;
+                break;
+        }
+    }
+}
+
+void EditorUI::ApplyAssetToPrimitive(Geometry::Primitive& primitive)
+{
+    if (pendingAssetToApply.type == AssetType::MATERIAL)
+    {
+        // TODO: 加载并应用整个材质到几何体
+        // 这里需要实现材质文件的加载逻辑
+    }
+    else if (pendingAssetToApply.type == AssetType::TEXTURE)
+    {
+        // 对于简单几何体，我们通过其mesh来应用材质
+        if (primitive.mesh)
+        {
+            ApplyAssetToMesh(primitive.mesh);
+        }
     }
 }

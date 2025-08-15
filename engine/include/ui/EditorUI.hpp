@@ -89,6 +89,7 @@ public:
     void ShowPrimitiveSelectionDialog();
     void ShowLightSelectionDialog();
     void ShowModelCreationDialog();
+    void ShowMaterialApplicationDialog(); // 材质应用对话框
     
     // 检视器GUI
     void OnLightInspectorGUI(Light &light);
@@ -98,6 +99,9 @@ private:
     void ShowMaterialEditor(Material &material);
     void TextureSelector(const std::string &label, std::shared_ptr<Texture> &texture,
                          const std::string &idSuffix = "");
+    void ApplyMaterialToObject(); // 应用材质到对象的具体实现
+    void ApplyAssetToMesh(std::shared_ptr<Mesh> mesh); // 应用资源到mesh
+    void ApplyAssetToPrimitive(Geometry::Primitive& primitive); // 应用资源到几何体
     void ShowAntiAliasingSettings();
     void ShowPostProcessSettings();
     void ShowShadowSettings();
@@ -177,6 +181,12 @@ private:
     bool isRenamingObject = false;
     int renamingObjectIndex = -1;
     char renameBuffer[256] = "";
+    
+    // 材质应用到选中对象的状态
+    bool showMaterialApplicationDialog = false;
+    AssetItem pendingAssetToApply;  // 待应用的资源
+    int selectedMeshIndex = -1;     // 选中的mesh索引
+    int selectedMaterialProperty = 0; // 选中的材质属性（0=整个材质，1=漫反射，2=粗糙度等）
     
     // 复制粘贴状态
     struct CopiedObject {
