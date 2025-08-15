@@ -410,6 +410,24 @@ void EditorUI::ShowAssetsPanel()
 void EditorUI::ShowViewport()
 {
     ImGui::Begin(ConvertToUTF8(L"视口").c_str(), &showViewport);
+    
+    // 获取视口窗口的屏幕位置和大小
+    ImVec2 windowPos = ImGui::GetWindowPos();
+    ImVec2 windowSize = ImGui::GetWindowSize();
+    ImVec2 contentRegionMin = ImGui::GetWindowContentRegionMin();
+    ImVec2 contentRegionMax = ImGui::GetWindowContentRegionMax();
+    
+    // 计算视口内容区域的实际屏幕坐标
+    viewportMin = ImVec2(windowPos.x + contentRegionMin.x, windowPos.y + contentRegionMin.y);
+    viewportMax = ImVec2(windowPos.x + contentRegionMax.x, windowPos.y + contentRegionMax.y);
+    
+    // 获取鼠标在屏幕上的位置
+    ImVec2 mousePos = ImGui::GetIO().MousePos;
+    
+    // 检查鼠标是否在视口内容区域内
+    isMouseInViewport = (mousePos.x >= viewportMin.x && mousePos.x <= viewportMax.x &&
+                         mousePos.y >= viewportMin.y && mousePos.y <= viewportMax.y);
+    
     // 获取可用空间
     ImVec2 viewportSize = ImGui::GetContentRegionAvail();
 

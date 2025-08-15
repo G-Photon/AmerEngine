@@ -110,10 +110,18 @@ void Application::Initialize()
         auto app = static_cast<Application *>(glfwGetWindowUserPointer(window));
         ImGuiIO &io = ImGui::GetIO();
         
-        // 只有在右键按下时才进行摄像头控制，忽略ImGui的WantCaptureMouse
+        // 只有在右键按下且鼠标在视口内时才进行摄像头控制
         if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) != GLFW_PRESS)
         {
             // 如果不是鼠标右键按下，则不处理鼠标移动
+            app->firstMouse = true; // 重置鼠标位置
+            return;
+        }
+        
+        // 检查鼠标是否在视口内
+        if (!app->editorUI->IsMouseInViewport())
+        {
+            // 鼠标不在视口内，不处理摄像头控制
             app->firstMouse = true; // 重置鼠标位置
             return;
         }
@@ -133,7 +141,12 @@ void Application::Initialize()
     glfwSetScrollCallback(window, [](GLFWwindow *window, double xoffset, double yoffset) {
         ImGui_ImplGlfw_ScrollCallback(window, xoffset, yoffset);
         auto app = static_cast<Application *>(glfwGetWindowUserPointer(window));
-        app->renderer->GetCamera()->ProcessMouseScroll(static_cast<float>(yoffset));
+        
+        // 只有在鼠标在视口内时才处理摄像头缩放
+        if (app->editorUI->IsMouseInViewport())
+        {
+            app->renderer->GetCamera()->ProcessMouseScroll(static_cast<float>(yoffset));
+        }
     });
 }
 
@@ -160,9 +173,9 @@ void Application::ProcessInput(float deltaTime)
     if (glfwGetKey(window, GLFW_KEY_ESCAPE) == GLFW_PRESS)
         glfwSetWindowShouldClose(window, true);
 
-    // 摄像机控制
+    // 摄像机控制 - 只有在鼠标在视口内时才允许
     static bool rightMousePressed = false;
-    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS)
+    if (glfwGetMouseButton(window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS && editorUI->IsMouseInViewport())
     {
         if (!rightMousePressed)
         {

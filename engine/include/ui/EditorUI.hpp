@@ -91,6 +91,9 @@ public:
     void ShowModelCreationDialog();
     void ShowMaterialApplicationDialog(); // 材质应用对话框
     
+    // 视口鼠标控制
+    bool IsMouseInViewport() const { return isMouseInViewport; }
+    
     // 检视器GUI
     void OnLightInspectorGUI(Light &light);
 
@@ -187,6 +190,10 @@ private:
     AssetItem pendingAssetToApply;  // 待应用的资源
     int selectedMeshIndex = -1;     // 选中的mesh索引
     int selectedMaterialProperty = 0; // 选中的材质属性（0=整个材质，1=漫反射，2=粗糙度等）
+    
+    // 视口鼠标控制状态
+    bool isMouseInViewport = false;  // 鼠标是否在视口内
+    ImVec2 viewportMin, viewportMax; // 视口区域边界
     
     // 复制粘贴状态
     struct CopiedObject {
