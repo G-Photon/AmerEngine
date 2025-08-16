@@ -468,6 +468,18 @@ void EditorUI::ShowConsole()
     }
     ImGui::SameLine();
     
+    if (ImGui::Button(ConvertToUTF8(L"复制所有").c_str()))
+    {
+        auto logCopy = Application::GetConsoleLogs();
+        std::string allText;
+        for (const auto& log : logCopy)
+        {
+            allText += log + "\n";
+        }
+        ImGui::SetClipboardText(allText.c_str());
+    }
+    ImGui::SameLine();
+    
     static bool autoscroll = true;
     ImGui::Checkbox(ConvertToUTF8(L"自动滚动").c_str(), &autoscroll);
     
@@ -479,9 +491,19 @@ void EditorUI::ShowConsole()
     // 获取控制台日志
     auto logCopy = Application::GetConsoleLogs();
     
-    for (const auto& log : logCopy)
+    for (size_t i = 0; i < logCopy.size(); ++i)
     {
-        ImGui::TextWrapped("%s", log.c_str());
+        // 创建可选择的文本
+        ImGui::PushID(i);
+        if (ImGui::Selectable(logCopy[i].c_str(), false, ImGuiSelectableFlags_AllowDoubleClick))
+        {
+            if (ImGui::IsMouseDoubleClicked(0))
+            {
+                // 双击复制单行
+                ImGui::SetClipboardText(logCopy[i].c_str());
+            }
+        }
+        ImGui::PopID();
     }
     
     if (autoscroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())

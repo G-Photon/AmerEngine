@@ -41,15 +41,22 @@ void Renderer::SaveScene(const std::string& path)
     
     // 保存模型
     j["models"] = json::array();
+    // 获取resources目录作为基准
+    std::filesystem::path resourcesDir = std::filesystem::current_path() / "resources";
+    auto toRelative = [&](const std::string& absPath) -> std::string {
+        if (absPath.empty()) return "";
+        std::filesystem::path abs(absPath);
+        if (abs.is_relative()) return absPath;
+        return std::filesystem::relative(abs, resourcesDir).string();
+    };
     for (const auto& model : models) {
         json modelJson = {
             {"name", model->GetName()},
-            {"path", model->GetPath()},
+            {"path", toRelative(model->GetPath())},
             {"position", {model->GetPosition().x, model->GetPosition().y, model->GetPosition().z}},
             {"rotation", {model->GetRotation().x, model->GetRotation().y, model->GetRotation().z}},
             {"scale", {model->GetScale().x, model->GetScale().y, model->GetScale().z}}
         };
-        
         // 保存模型的材质信息
         modelJson["materials"] = json::array();
         const auto& meshes = model->GetMeshes();
@@ -75,41 +82,38 @@ void Renderer::SaveScene(const std::string& path)
                     {"useDiffuseMap", material.useDiffuseMap},
                     {"useSpecularMap", material.useSpecularMap}
                 };
-                
                 // 保存贴图路径和flipY状态
                 if (material.albedoMap) {
-                    materialJson["albedoMapPath"] = material.albedoMap->GetPath();
+                    materialJson["albedoMapPath"] = toRelative(material.albedoMap->GetPath());
                     materialJson["albedoMapFlipY"] = material.albedoMap->flipY;
                 }
                 if (material.metallicMap) {
-                    materialJson["metallicMapPath"] = material.metallicMap->GetPath();
+                    materialJson["metallicMapPath"] = toRelative(material.metallicMap->GetPath());
                     materialJson["metallicMapFlipY"] = material.metallicMap->flipY;
                 }
                 if (material.roughnessMap) {
-                    materialJson["roughnessMapPath"] = material.roughnessMap->GetPath();
+                    materialJson["roughnessMapPath"] = toRelative(material.roughnessMap->GetPath());
                     materialJson["roughnessMapFlipY"] = material.roughnessMap->flipY;
                 }
                 if (material.normalMap) {
-                    materialJson["normalMapPath"] = material.normalMap->GetPath();
+                    materialJson["normalMapPath"] = toRelative(material.normalMap->GetPath());
                     materialJson["normalMapFlipY"] = material.normalMap->flipY;
                 }
                 if (material.aoMap) {
-                    materialJson["aoMapPath"] = material.aoMap->GetPath();
+                    materialJson["aoMapPath"] = toRelative(material.aoMap->GetPath());
                     materialJson["aoMapFlipY"] = material.aoMap->flipY;
                 }
                 if (material.diffuseMap) {
-                    materialJson["diffuseMapPath"] = material.diffuseMap->GetPath();
+                    materialJson["diffuseMapPath"] = toRelative(material.diffuseMap->GetPath());
                     materialJson["diffuseMapFlipY"] = material.diffuseMap->flipY;
                 }
                 if (material.specularMap) {
-                    materialJson["specularMapPath"] = material.specularMap->GetPath();
+                    materialJson["specularMapPath"] = toRelative(material.specularMap->GetPath());
                     materialJson["specularMapFlipY"] = material.specularMap->flipY;
                 }
-                
                 modelJson["materials"].push_back(materialJson);
             }
         }
-        
         j["models"].push_back(modelJson);
     }
     
@@ -164,25 +168,26 @@ void Renderer::SaveScene(const std::string& path)
     // 保存几何体
     j["primitives"] = json::array();
     for (const auto& primitive : primitives) {
+        auto mat = primitive.mesh->GetMaterial();
         json primitiveJson = {
             {"type", static_cast<int>(primitive.type)},
             {"position", {primitive.position.x, primitive.position.y, primitive.position.z}},
             {"rotation", {primitive.rotation.x, primitive.rotation.y, primitive.rotation.z}},
             {"scale", {primitive.scale.x, primitive.scale.y, primitive.scale.z}},
             {"material", {
-                {"type", static_cast<int>(primitive.mesh->GetMaterial()->type)},
-                {"diffuse", {primitive.mesh->GetMaterial()->diffuse.r, primitive.mesh->GetMaterial()->diffuse.g, primitive.mesh->GetMaterial()->diffuse.b}},
-                {"specular", {primitive.mesh->GetMaterial()->specular.r, primitive.mesh->GetMaterial()->specular.g, primitive.mesh->GetMaterial()->specular.b}},
-                {"shininess", primitive.mesh->GetMaterial()->shininess},
-                {"useDiffuseMap", primitive.mesh->GetMaterial()->useDiffuseMap},
-                {"useSpecularMap", primitive.mesh->GetMaterial()->useSpecularMap},
-                {"useNormalMap", primitive.mesh->GetMaterial()->useNormalMap},
-                {"diffuseMapPath", primitive.mesh->GetMaterial()->diffuseMap ? primitive.mesh->GetMaterial()->diffuseMap->GetPath() : ""},
-                {"specularMapPath", primitive.mesh->GetMaterial()->specularMap ? primitive.mesh->GetMaterial()->specularMap->GetPath() : ""},
-                {"normalMapPath", primitive.mesh->GetMaterial()->normalMap ? primitive.mesh->GetMaterial()->normalMap->GetPath() : ""},
-                {"diffuseMapFlipY", primitive.mesh->GetMaterial()->diffuseMap ? primitive.mesh->GetMaterial()->diffuseMap->flipY : true},
-                {"specularMapFlipY", primitive.mesh->GetMaterial()->specularMap ? primitive.mesh->GetMaterial()->specularMap->flipY : true},
-                {"normalMapFlipY", primitive.mesh->GetMaterial()->normalMap ? primitive.mesh->GetMaterial()->normalMap->flipY : true}
+                {"type", static_cast<int>(mat->type)},
+                {"diffuse", {mat->diffuse.r, mat->diffuse.g, mat->diffuse.b}},
+                {"specular", {mat->specular.r, mat->specular.g, mat->specular.b}},
+                {"shininess", mat->shininess},
+                {"useDiffuseMap", mat->useDiffuseMap},
+                {"useSpecularMap", mat->useSpecularMap},
+                {"useNormalMap", mat->useNormalMap},
+                {"diffuseMapPath", mat->diffuseMap ? toRelative(mat->diffuseMap->GetPath()) : ""},
+                {"specularMapPath", mat->specularMap ? toRelative(mat->specularMap->GetPath()) : ""},
+                {"normalMapPath", mat->normalMap ? toRelative(mat->normalMap->GetPath()) : ""},
+                {"diffuseMapFlipY", mat->diffuseMap ? mat->diffuseMap->flipY : true},
+                {"specularMapFlipY", mat->specularMap ? mat->specularMap->flipY : true},
+                {"normalMapFlipY", mat->normalMap ? mat->normalMap->flipY : true}
             }}
         };
         
@@ -282,7 +287,7 @@ void Renderer::SaveScene(const std::string& path)
         };
     }
     
-    // 保存渲染设置
+    // 保存渲染设置和当前背景槽位
     j["renderSettings"] = {
         {"renderMode", static_cast<int>(currentMode)},
         {"shadowEnabled", shadowEnabled},
@@ -295,7 +300,8 @@ void Renderer::SaveScene(const std::string& path)
         {"backgroundGammaCorrection", backgroundGammaCorrection},
         {"iblEnabled", iblEnabled},
         {"showLights", showLights},
-        {"backgroundType", static_cast<int>(backgroundType)}
+        {"backgroundType", static_cast<int>(backgroundType)},
+        {"backgroundSlot", GetCurrentEnvironment()}
     };
     
     std::ofstream ofs(path);
@@ -328,11 +334,24 @@ void Renderer::LoadScene(const std::string& path)
     
     NewScene(); // 清空当前场景
     
+    // 路径转换函数：将相对路径转换为以resources为基准的绝对路径
+    auto toAbsolutePath = [](const std::string& relativePath) -> std::string {
+        if (relativePath.empty()) return "";
+        std::filesystem::path relPath(relativePath);
+        if (relPath.is_absolute()) return relativePath;
+        
+        // 以resources目录为基准
+        std::filesystem::path resourcesDir = std::filesystem::current_path() / "resources";
+        std::filesystem::path absolutePath = resourcesDir / relPath;
+        return absolutePath.lexically_normal().string();
+    };
+    
     // 加载模型
     if (j.contains("models")) {
         for (const auto& m : j["models"]) {
             try {
-                auto model = std::make_shared<Model>(m["path"].get<std::string>());
+                std::string modelPath = toAbsolutePath(m["path"].get<std::string>());
+                auto model = std::make_shared<Model>(modelPath);
                 if (m.contains("name")) {
                     model->SetName(m["name"].get<std::string>());
                 }
@@ -409,43 +428,43 @@ void Renderer::LoadScene(const std::string& path)
                                     // 加载贴图（如果路径存在且不为空）
                                     if (materialData.contains("albedoMapPath") && 
                                         !materialData["albedoMapPath"].get<std::string>().empty()) {
-                                        std::string texturePath = materialData["albedoMapPath"].get<std::string>();
+                                        std::string texturePath = toAbsolutePath(materialData["albedoMapPath"].get<std::string>());
                                         bool flipY = materialData.contains("albedoMapFlipY") ? materialData["albedoMapFlipY"].get<bool>() : true;
                                         materialPtr->albedoMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("metallicMapPath") && 
                                         !materialData["metallicMapPath"].get<std::string>().empty()) {
-                                        std::string texturePath = materialData["metallicMapPath"].get<std::string>();
+                                        std::string texturePath = toAbsolutePath(materialData["metallicMapPath"].get<std::string>());
                                         bool flipY = materialData.contains("metallicMapFlipY") ? materialData["metallicMapFlipY"].get<bool>() : true;
                                         materialPtr->metallicMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("roughnessMapPath") && 
                                         !materialData["roughnessMapPath"].get<std::string>().empty()) {
-                                        std::string texturePath = materialData["roughnessMapPath"].get<std::string>();
+                                        std::string texturePath = toAbsolutePath(materialData["roughnessMapPath"].get<std::string>());
                                         bool flipY = materialData.contains("roughnessMapFlipY") ? materialData["roughnessMapFlipY"].get<bool>() : true;
                                         materialPtr->roughnessMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("normalMapPath") && 
                                         !materialData["normalMapPath"].get<std::string>().empty()) {
-                                        std::string texturePath = materialData["normalMapPath"].get<std::string>();
+                                        std::string texturePath = toAbsolutePath(materialData["normalMapPath"].get<std::string>());
                                         bool flipY = materialData.contains("normalMapFlipY") ? materialData["normalMapFlipY"].get<bool>() : true;
                                         materialPtr->normalMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("aoMapPath") && 
                                         !materialData["aoMapPath"].get<std::string>().empty()) {
-                                        std::string texturePath = materialData["aoMapPath"].get<std::string>();
+                                        std::string texturePath = toAbsolutePath(materialData["aoMapPath"].get<std::string>());
                                         bool flipY = materialData.contains("aoMapFlipY") ? materialData["aoMapFlipY"].get<bool>() : true;
                                         materialPtr->aoMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("diffuseMapPath") && 
                                         !materialData["diffuseMapPath"].get<std::string>().empty()) {
-                                        std::string texturePath = materialData["diffuseMapPath"].get<std::string>();
+                                        std::string texturePath = toAbsolutePath(materialData["diffuseMapPath"].get<std::string>());
                                         bool flipY = materialData.contains("diffuseMapFlipY") ? materialData["diffuseMapFlipY"].get<bool>() : true;
                                         materialPtr->diffuseMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
                                     if (materialData.contains("specularMapPath") && 
                                         !materialData["specularMapPath"].get<std::string>().empty()) {
-                                        std::string texturePath = materialData["specularMapPath"].get<std::string>();
+                                        std::string texturePath = toAbsolutePath(materialData["specularMapPath"].get<std::string>());
                                         bool flipY = materialData.contains("specularMapFlipY") ? materialData["specularMapFlipY"].get<bool>() : true;
                                         materialPtr->specularMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                                     }
@@ -605,19 +624,19 @@ void Renderer::LoadScene(const std::string& path)
                     if (mat.contains("useNormalMap")) defaultMaterial.useNormalMap = mat["useNormalMap"];
                     if (mat.contains("diffuseMapPath") && !mat["diffuseMapPath"].get<std::string>().empty())
                     {
-                        std::string texturePath = mat["diffuseMapPath"].get<std::string>();
+                        std::string texturePath = toAbsolutePath(mat["diffuseMapPath"].get<std::string>());
                         bool flipY = mat.contains("diffuseMapFlipY") ? mat["diffuseMapFlipY"].get<bool>() : true;
                         std::cout << "正在加载几何体diffuse贴图: " << texturePath << " (flipY=" << flipY << ")" << std::endl;
                         defaultMaterial.diffuseMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                     }
                     if (mat.contains("specularMapPath") && !mat["specularMapPath"].get<std::string>().empty()) {
-                        std::string texturePath = mat["specularMapPath"].get<std::string>();
+                        std::string texturePath = toAbsolutePath(mat["specularMapPath"].get<std::string>());
                         bool flipY = mat.contains("specularMapFlipY") ? mat["specularMapFlipY"].get<bool>() : true;
                         std::cout << "正在加载几何体specular贴图: " << texturePath << " (flipY=" << flipY << ")" << std::endl;
                         defaultMaterial.specularMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                     }
                     if (mat.contains("normalMapPath") && !mat["normalMapPath"].get<std::string>().empty()) {
-                        std::string texturePath = mat["normalMapPath"].get<std::string>();
+                        std::string texturePath = toAbsolutePath(mat["normalMapPath"].get<std::string>());
                         bool flipY = mat.contains("normalMapFlipY") ? mat["normalMapFlipY"].get<bool>() : true;
                         defaultMaterial.normalMap = TextureManager::GetInstance().GetTexture(texturePath, flipY);
                     }
@@ -769,6 +788,9 @@ void Renderer::LoadScene(const std::string& path)
             if (settings.contains("showLights")) showLights = settings["showLights"];
             if (settings.contains("backgroundType")) {
                 SetBackgroundType(static_cast<BackgroundType>(settings["backgroundType"].get<int>()));
+            }
+            if (settings.contains("backgroundSlot")) {
+                SetCurrentEnvironment(settings["backgroundSlot"].get<int>());
             }
         } catch (const std::exception& e) {
             std::cerr << "加载渲染设置失败: " << e.what() << std::endl;

@@ -2,24 +2,24 @@
     "camera": {
         "fov": 45.0,
         "front": [
-            -0.6714418530464172,
-            -0.5562997460365295,
-            -0.4895881116390228
+            -0.9781535863876343,
+            0.0017402946250513196,
+            -0.2078765481710434
         ],
         "mouseSensitivity": 0.10000000149011612,
         "movementSpeed": 5.0,
-        "pitch": -33.80028533935547,
+        "pitch": 0.0997115895152092,
         "position": [
-            9.161382675170898,
-            7.74999475479126,
-            9.972516059875488
+            35.09352111816406,
+            16.390911102294922,
+            4.822155475616455
         ],
         "up": [
-            -0.44949594140052795,
-            0.8309817314147949,
-            -0.3277541697025299
+            0.0017022778047248721,
+            0.9999985098838806,
+            0.00036176698631606996
         ],
-        "yaw": -143.90199279785156
+        "yaw": -168.00204467773438
     },
     "directionalLights": [
         {
@@ -57,26 +57,26 @@
                         0.5882353186607361
                     ],
                     "albedoMapFlipY": false,
-                    "albedoMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_A.tga",
+                    "albedoMapPath": "..\\..\\..\\..\\..\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_A.tga",
                     "ao": 1.0,
                     "aoMapFlipY": false,
-                    "aoMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Raw\\Cerberus_AO.tga",
+                    "aoMapPath": "..\\..\\..\\..\\..\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Raw\\Cerberus_AO.tga",
                     "diffuse": [
                         0.800000011920929,
                         0.800000011920929,
                         0.800000011920929
                     ],
-                    "diffuseMapFlipY": true,
-                    "diffuseMapPath": "D:/Adata/study/opengl/engine/resources/model/Cerberus_by_Andrew_Maximov/Textures/Cerberus_A.tga",
+                    "diffuseMapFlipY": false,
+                    "diffuseMapPath": "..\\..\\..\\..\\..\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_A.tga",
                     "meshIndex": 0,
                     "metallic": 0.0,
                     "metallicMapFlipY": false,
-                    "metallicMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_M.tga",
+                    "metallicMapPath": "..\\..\\..\\..\\..\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_M.tga",
                     "normalMapFlipY": false,
-                    "normalMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Raw\\Cerberus_N.tga",
+                    "normalMapPath": "..\\..\\..\\..\\..\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Raw\\Cerberus_N.tga",
                     "roughness": 0.8585786819458008,
                     "roughnessMapFlipY": false,
-                    "roughnessMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_R.tga",
+                    "roughnessMapPath": "..\\..\\..\\..\\..\\resources\\model\\Cerberus_by_Andrew_Maximov\\Textures\\Cerberus_R.tga",
                     "shininess": 32.0,
                     "specular": [
                         0.5,
@@ -94,10 +94,10 @@
                 }
             ],
             "name": "Cerberus_LP.FBX",
-            "path": "D:\\Adata\\study\\opengl\\engine\\resources\\model\\Cerberus_by_Andrew_Maximov\\Cerberus_LP.FBX",
+            "path": "..\\..\\..\\..\\..\\resources\\model\\Cerberus_by_Andrew_Maximov\\Cerberus_LP.FBX",
             "position": [
                 0.0,
-                16.899999618530273,
+                29.399999618530273,
                 0.0
             ],
             "rotation": [
@@ -106,9 +106,9 @@
                 0.0
             ],
             "scale": [
-                0.10000000149011612,
-                0.10000000149011612,
-                0.10000000149011612
+                0.20000000298023224,
+                0.20000000298023224,
+                0.20000000298023224
             ]
         }
     ],
@@ -150,7 +150,7 @@
                     0.800000011920929
                 ],
                 "diffuseMapFlipY": true,
-                "diffuseMapPath": "D:\\Adata\\study\\opengl\\engine\\resources\\textures\\container.jpg",
+                "diffuseMapPath": "",
                 "normalMapFlipY": true,
                 "normalMapPath": "",
                 "shininess": 32.0,
@@ -373,6 +373,8 @@
         }
     ],
     "renderSettings": {
+        "backgroundGammaCorrection": true,
+        "backgroundSlot": 1,
         "backgroundType": 0,
         "bloomEnabled": true,
         "fxaaEnabled": true,
@@ -386,7 +388,7 @@
         "ssaoEnabled": true
     },
     "sceneInfo": {
-        "createdTime": 1754923457,
+        "createdTime": 1755356612,
         "name": "Scene",
         "version": "1.0"
     },

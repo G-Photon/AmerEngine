@@ -1,0 +1,13 @@
+"filename", "language", "XMake", "C++", "GLSL", "Ini", "comment", "blank", "total"
+"d:\Adata\study\opengl\engine\imgui.ini", "Ini", 0, 0, 0, 9, 0, 2, 11
+"d:\Adata\study\opengl\engine\include\core\Application.hpp", "C++", 0, 32, 0, 0, 2, 6, 40
+"d:\Adata\study\opengl\engine\include\core\Renderer.hpp", "C++", 0, 12, 0, 0, 3, 3, 18
+"d:\Adata\study\opengl\engine\include\core\Texture.hpp", "C++", 0, 1, 0, 0, 0, 0, 1
+"d:\Adata\study\opengl\engine\include\ui\EditorUI.hpp", "C++", 0, 38, 0, 0, 12, 8, 58
+"d:\Adata\study\opengl\engine\resources\shaders\utility\skybox.frag", "GLSL", 0, 0, 5, 0, -5, 0, 0
+"d:\Adata\study\opengl\engine\src\core\Application.cpp", "C++", 0, 81, 0, 0, 16, 20, 117
+"d:\Adata\study\opengl\engine\src\core\Renderer.cpp", "C++", 0, 27, 0, 0, 4, 23, 54
+"d:\Adata\study\opengl\engine\src\core\Texture.cpp", "C++", 0, 29, 0, 0, 1, 6, 36
+"d:\Adata\study\opengl\engine\src\ui\EditorUI.cpp", "C++", 0, 719, 0, 0, 97, 80, 896
+"d:\Adata\study\opengl\engine\xmake.lua", "XMake", 1, 0, 0, 0, 0, 0, 1
+"Total", "-", 1, 939, 5, 9, 130, 148, 1232
