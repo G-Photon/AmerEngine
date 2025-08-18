@@ -67,7 +67,7 @@ void main() {
     
     // 存储反照率
     gAlbedo = vec4(material.useDiffuseMap ? 
-        texture(material.diffuseMap, TexCoords).rgb : material.diffuse, 0.0);
+        texture(material.diffuseMap, TexCoords).rgb : material.diffuse, 1.0);
     
     // 存储金属度、粗糙度和AO
     gSpecular = vec4(material.useSpecularMap ? 
@@ -77,7 +77,7 @@ void main() {
     gRoughness = vec4(material.useRoughnessMap ?
         texture(material.roughnessMap, TexCoords).r : material.roughness, 0.0, 0.0, 1.0);
     gAo = vec4(material.useAoMap ?
-        texture(material.aoMap, TexCoords).r : 1.0, 0.0, 0.0, 1.0);
+        texture(material.aoMap, TexCoords).r : 1.0, 0.0, 0.0, 0.0);
     gAmbient = vec4(material.useDiffuseMap ?
         texture(material.diffuseMap, TexCoords).rgb : material.diffuse, 1.0);
 }

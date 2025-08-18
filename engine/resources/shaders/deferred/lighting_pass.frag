@@ -161,7 +161,7 @@ void main() {
 
     vec4 albedoData = texture(gAlbedo, TexCoords);
     vec3 albedo = albedoData.rgb;
-    float materialType = albedoData.a; // 0.0 = Blinn-Phong, 1.0 = PBR
+    float materialType = texture(gAo, TexCoords).a; // 0.0 = Blinn-Phong, 1.0 = PBR
     
     vec3 specularColor = texture(gSpecular, TexCoords).rgb;
     float metallic = texture(gMetallic, TexCoords).r;

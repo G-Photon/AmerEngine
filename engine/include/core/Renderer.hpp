@@ -251,6 +251,24 @@ class Renderer
         return viewportBuffer->GetColorTexture(0); // 假设你有这个函数
     }
 
+    // 调试视口：获取各个渲染步骤的纹理
+    GLuint GetGBufferPositionTexture() const { return gBuffer ? gBuffer->GetColorTexture(0) : 0; }
+    GLuint GetGBufferNormalTexture() const { return gBuffer ? gBuffer->GetColorTexture(1) : 0; }
+    GLuint GetGBufferAlbedoTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; }
+    GLuint GetGBufferDiffuseTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; }  // 漫反射（与反照率相同）
+    GLuint GetGBufferAlbedoDepthTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; }  // gAlbedo第四维度的深度
+    GLuint GetGBufferSpecularTexture() const { return gBuffer ? gBuffer->GetColorTexture(3) : 0; }
+    GLuint GetGBufferMetallicTexture() const { return gBuffer ? gBuffer->GetColorTexture(4) : 0; }
+    GLuint GetGBufferRoughnessTexture() const { return gBuffer ? gBuffer->GetColorTexture(5) : 0; }
+    GLuint GetGBufferAOTexture() const { return gBuffer ? gBuffer->GetColorTexture(6) : 0; }
+    GLuint GetGBufferAmbientTexture() const { return gBuffer ? gBuffer->GetColorTexture(7) : 0; }
+    GLuint GetGBufferDepthTexture() const { return gBuffer ? gBuffer->GetDepthTexture() : 0; }
+    GLuint GetShadowMapTexture() const { return shadowBuffer ? shadowBuffer->GetDepthTexture() : 0; }
+    GLuint GetSSAOTexture() const { return ssaoBuffer ? ssaoBuffer->GetColorTexture(0) : 0; }
+    GLuint GetSSAOBlurTexture() const { return ssaoBlurBuffer ? ssaoBlurBuffer->GetColorTexture(0) : 0; }
+    GLuint GetHDRTexture() const { return hdrBuffer ? hdrBuffer->GetColorTexture(0) : 0; }
+    GLuint GetBloomTexture() const { return bloomPrefilterBuffer ? bloomPrefilterBuffer->GetColorTexture(0) : 0; }
+
     void NewScene();
     void SaveScene(const std::string &path);
     void LoadScene(const std::string &path);

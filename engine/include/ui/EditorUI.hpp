@@ -84,6 +84,7 @@ public:
     void ShowMaterialEditor();
     void ShowConsole(); // 控制台面板
     void ShowAssetPreviewWindow(); // 资源预览窗口
+    void ShowDebugViewport(); // 调试视口
 
     // 对话框
     void ShowPrimitiveSelectionDialog();
@@ -156,6 +157,7 @@ private:
     bool showMaterialEditor = true;
     bool showConsole = true;
     bool showAssetPreview = false; // 资源预览窗口
+    bool showDebugViewport = false; // 调试视口
 
     // 选择状态
     int selectedObjectIndex = -1;

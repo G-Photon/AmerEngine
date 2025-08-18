@@ -159,6 +159,8 @@ void EditorUI::Render()
     
     if (showAssetPreview && selectedAsset)
         ShowAssetPreviewWindow();
+    if (showDebugViewport)
+        ShowDebugViewport();
     if (showViewport)
         ShowViewport();
     if (showRendererSettings)
@@ -697,6 +699,7 @@ void EditorUI::ShowMainMenuBar()
             ImGui::MenuItem(ConvertToUTF8(L"资源管理").c_str(), NULL, &showAssetsPanel);
             ImGui::MenuItem(ConvertToUTF8(L"资源预览").c_str(), NULL, &showAssetPreview);
             ImGui::MenuItem(ConvertToUTF8(L"视口").c_str(), NULL, &showViewport);
+            ImGui::MenuItem(ConvertToUTF8(L"调试视口").c_str(), NULL, &showDebugViewport);
             ImGui::MenuItem(ConvertToUTF8(L"渲染器设置").c_str(), NULL, &showRendererSettings);
             ImGui::MenuItem(ConvertToUTF8(L"材质编辑器").c_str(), NULL, &showMaterialEditor);
             ImGui::MenuItem(ConvertToUTF8(L"控制台").c_str(), NULL, &showConsole);
@@ -2116,7 +2119,7 @@ void EditorUI::ShowAntiAliasingSettings()
         // 性能提示
         if (renderer->GetMSAASamples() >= 8)
         {
-            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), ConvertToUTF8(L"高采样率可能影响性能").c_str());
+            ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), "%s", ConvertToUTF8(L"高采样率可能影响性能").c_str());
         }
         
         // 快速切换按钮
@@ -2817,6 +2820,318 @@ void EditorUI::ShowAssetPreviewWindow()
         {
             renderer->LoadModel(selectedAsset->path.string());
             AddNotification(ConvertToUTF8(L"模型已添加到场景: ") + selectedAsset->name, true);
+        }
+    }
+    
+    ImGui::End();
+}
+
+void EditorUI::ShowDebugViewport()
+{
+    ImGui::Begin(ConvertToUTF8(L"调试视口").c_str(), &showDebugViewport, ImGuiWindowFlags_MenuBar);
+    
+    // 只有当调试视口窗口打开时才渲染调试纹理（节省性能）
+    if (!showDebugViewport)
+    {
+        ImGui::End();
+        return;
+    }
+    
+    // 菜单栏
+    if (ImGui::BeginMenuBar())
+    {
+        if (ImGui::BeginMenu(ConvertToUTF8(L"显示选项").c_str()))
+        {
+            static bool showFinalResult = true;
+            static bool showGBuffer = true;
+            static bool showSSAO = true;
+            static bool showPostProcess = true;
+            
+            ImGui::MenuItem(ConvertToUTF8(L"最终结果").c_str(), nullptr, &showFinalResult);
+            ImGui::MenuItem(ConvertToUTF8(L"G-Buffer").c_str(), nullptr, &showGBuffer);
+            ImGui::MenuItem(ConvertToUTF8(L"SSAO").c_str(), nullptr, &showSSAO);
+            ImGui::MenuItem(ConvertToUTF8(L"后处理效果").c_str(), nullptr, &showPostProcess);
+            ImGui::EndMenu();
+        }
+        ImGui::EndMenuBar();
+    }
+    
+    // 可调节的纹理显示大小
+    static float textureScale = 0.3f;
+    ImGui::SliderFloat(ConvertToUTF8(L"纹理缩放").c_str(), &textureScale, 0.1f, 0.8f);
+    
+    ImVec2 baseSize = ImGui::GetContentRegionAvail();
+    ImVec2 textureSize(200.0f * textureScale, 150.0f * textureScale); // 固定长宽比
+    
+    // 获取渲染模式
+    Renderer::RenderMode renderMode = renderer->GetRenderMode();
+    
+    // 渲染模式信息
+    ImGui::Text("%s", ConvertToUTF8(L"当前渲染模式: ").c_str());
+    ImGui::SameLine();
+    if (renderMode == Renderer::FORWARD)
+    {
+        ImGui::TextColored(ImVec4(0.2f, 0.8f, 0.2f, 1.0f), "%s", ConvertToUTF8(L"前向渲染").c_str());
+    }
+    else
+    {
+        ImGui::TextColored(ImVec4(0.2f, 0.6f, 1.0f, 1.0f), "%s", ConvertToUTF8(L"延迟渲染").c_str());
+    }
+    
+    ImGui::Separator();
+    
+    // 获取显示选项状态（为了在静态函数外访问）
+    static bool showFinalResult = true;
+    static bool showGBuffer = true;
+    static bool showSSAO = true;
+    static bool showPostProcess = true;
+    
+    // ===== 最终渲染结果 =====
+    if (showFinalResult)
+    {
+        if (ImGui::CollapsingHeader(ConvertToUTF8(L"最终渲染结果").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            GLuint viewportTexture = renderer->GetViewportTexture();
+            if (viewportTexture != 0)
+            {
+                ImGui::Image((void*)(intptr_t)viewportTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无可用纹理").c_str());
+            }
+        }
+    }
+    
+    // ===== G-Buffer 数据（仅延迟渲染）=====
+    if (renderMode == Renderer::DEFERRED && showGBuffer)
+    {
+        if (ImGui::CollapsingHeader(ConvertToUTF8(L"G-Buffer 数据").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            // 创建一个子窗口来容纳G-Buffer纹理
+            ImGui::BeginChild("GBufferChild", ImVec2(0, 0), true);
+            
+            // PBR 材质组
+            if (ImGui::TreeNode(ConvertToUTF8(L"PBR 材质数据").c_str()))
+            {
+                int itemsPerRow = (int)(ImGui::GetContentRegionAvail().x / (textureSize.x + 20));
+                if (itemsPerRow < 1) itemsPerRow = 1;
+                
+                // 漫反射/反照率
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"漫反射/反照率").c_str());
+                GLuint albedoTexture = renderer->GetGBufferAlbedoTexture();
+                if (albedoTexture != 0)
+                {
+                    ImGui::Image((void*)(intptr_t)albedoTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                }
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::SameLine();
+                
+                // 金属度
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"金属度").c_str());
+                GLuint metallicTexture = renderer->GetGBufferMetallicTexture();
+                if (metallicTexture != 0)
+                    ImGui::Image((void*)(intptr_t)metallicTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::SameLine();
+                
+                // 粗糙度
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"粗糙度").c_str());
+                GLuint roughnessTexture = renderer->GetGBufferRoughnessTexture();
+                if (roughnessTexture != 0)
+                    ImGui::Image((void*)(intptr_t)roughnessTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::TreePop();
+            }
+            
+            // Blinn-Phong 材质组
+            if (ImGui::TreeNode(ConvertToUTF8(L"Blinn-Phong 材质数据").c_str()))
+            {
+                // 漫反射/反照率
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"漫反射/反照率").c_str());
+                GLuint albedoTexture = renderer->GetGBufferAlbedoTexture();
+                if (albedoTexture != 0)
+                {
+                    ImGui::Image((void*)(intptr_t)albedoTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                }
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::SameLine();
+                
+                // 镜面反射
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"镜面反射").c_str());
+                GLuint specularTexture = renderer->GetGBufferSpecularTexture();
+                if (specularTexture != 0)
+                    ImGui::Image((void*)(intptr_t)specularTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::SameLine();
+                
+                // 环境光
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"环境光").c_str());
+                GLuint ambientTexture = renderer->GetGBufferAmbientTexture();
+                if (ambientTexture != 0)
+                {
+                    ImGui::Image((void*)(intptr_t)ambientTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                }
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::TreePop();
+            }
+            
+            // 几何数据组
+            if (ImGui::TreeNode(ConvertToUTF8(L"几何数据").c_str()))
+            {
+                // 世界位置
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"世界位置").c_str());
+                GLuint positionTexture = renderer->GetGBufferPositionTexture();
+                if (positionTexture != 0)
+                    ImGui::Image((void*)(intptr_t)positionTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::SameLine();
+                
+                // 法线
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"世界法线").c_str());
+                GLuint normalTexture = renderer->GetGBufferNormalTexture();
+                if (normalTexture != 0)
+                    ImGui::Image((void*)(intptr_t)normalTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                else
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                ImGui::EndGroup();
+                
+                ImGui::TreePop();
+            }
+            
+            ImGui::EndChild();
+        }
+    }
+    
+    // ===== SSAO效果（仅延迟渲染）=====
+    if (renderMode == Renderer::DEFERRED && renderer->IsSSAOEnabled() && showSSAO)
+    {
+        if (ImGui::CollapsingHeader(ConvertToUTF8(L"SSAO 效果").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            // SSAO 原始
+            ImGui::BeginGroup();
+            ImGui::Text("%s", ConvertToUTF8(L"SSAO 原始").c_str());
+            GLuint ssaoTexture = renderer->GetSSAOTexture();
+            if (ssaoTexture != 0)
+            {
+                ImGui::Image((void*)(intptr_t)ssaoTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+            }
+            ImGui::EndGroup();
+            
+            ImGui::SameLine();
+            
+            // SSAO 模糊
+            ImGui::BeginGroup();
+            ImGui::Text("%s", ConvertToUTF8(L"SSAO 模糊").c_str());
+            GLuint ssaoBlurTexture = renderer->GetSSAOBlurTexture();
+            if (ssaoBlurTexture != 0)
+            {
+                ImGui::Image((void*)(intptr_t)ssaoBlurTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+            }
+            else
+            {
+                ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+            }
+            ImGui::EndGroup();
+        }
+    }
+    
+    // ===== 后处理效果 =====
+    if (showPostProcess)
+    {
+        if (ImGui::CollapsingHeader(ConvertToUTF8(L"后处理效果").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            bool hasPostProcess = false;
+            
+            // HDR缓冲区
+            if (renderer->IsHDREnabled())
+            {
+                hasPostProcess = true;
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"HDR 缓冲区").c_str());
+                GLuint hdrTexture = renderer->GetHDRTexture();
+                if (hdrTexture != 0)
+                {
+                    ImGui::Image((void*)(intptr_t)hdrTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                }
+                ImGui::EndGroup();
+                
+                // Bloom效果（如果启用）
+                if (renderer->IsBloomEnabled())
+                {
+                    ImGui::SameLine();
+                    ImGui::BeginGroup();
+                    ImGui::Text("%s", ConvertToUTF8(L"Bloom 预过滤").c_str());
+                    GLuint bloomTexture = renderer->GetBloomTexture();
+                    if (bloomTexture != 0)
+                    {
+                        ImGui::Image((void*)(intptr_t)bloomTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                    }
+                    else
+                    {
+                        ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                    }
+                    ImGui::EndGroup();
+                }
+            }
+            else if (renderer->IsBloomEnabled())
+            {
+                hasPostProcess = true;
+                ImGui::BeginGroup();
+                ImGui::Text("%s", ConvertToUTF8(L"Bloom 预过滤").c_str());
+                GLuint bloomTexture = renderer->GetBloomTexture();
+                if (bloomTexture != 0)
+                {
+                    ImGui::Image((void*)(intptr_t)bloomTexture, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                }
+                else
+                {
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "%s", ConvertToUTF8(L"无数据").c_str());
+                }
+                ImGui::EndGroup();
+            }
+            
+            if (!hasPostProcess)
+            {
+                ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", ConvertToUTF8(L"当前未启用后处理效果").c_str());
+            }
         }
     }
     
