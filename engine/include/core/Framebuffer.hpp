@@ -67,7 +67,7 @@ class Framebuffer
     void Resize(int newWidth, int newHeight);
 
     // 清理并设置背景色
-    void Clear(const glm::vec4 &color = {0.0f, 0.0f, 0.0f, 1.0f});
+    void Clear(const glm::vec4 &color = {0.0f, 0.0f, 0.0f, 0.0f});
 
     void reset()
     {

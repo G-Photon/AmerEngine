@@ -161,7 +161,8 @@ void main() {
 
     vec4 albedoData = texture(gAlbedo, TexCoords);
     vec3 albedo = albedoData.rgb;
-    float materialType = texture(gAo, TexCoords).a; // 0.0 = Blinn-Phong, 1.0 = PBR
+    // 使用gAlbedo的alpha通道区分材质类型：0.0 = Blinn-Phong, 1.0 = PBR
+    float materialType = albedoData.a;
     
     vec3 specularColor = texture(gSpecular, TexCoords).rgb;
     float metallic = texture(gMetallic, TexCoords).r;
@@ -169,9 +170,9 @@ void main() {
     float ao = texture(gAo, TexCoords).r;
     vec3 ambient = texture(gAmbient, TexCoords).rgb;
     float ssaoOcclusion = ssaoEnabled > 0 ? texture(ssao, TexCoords).r : 1.0;
-    ao= ao * ssaoOcclusion; // 应用SSAO遮挡
+    ao = ao * ssaoOcclusion; // 应用SSAO遮挡
 
-    vec3 result = vec3(0.0);
+    vec3 result = vec3(materialType);
     
     // 检测材质类型并选择相应的光照模型
     if (materialType > 0.5) {
@@ -201,6 +202,9 @@ void main() {
                 break;
         }
     }
+
+    // 保险措施：避免由于数值问题出现NaN/Inf导致的全黑
+    result = max(result, vec3(0.0));
 
     FragColor = vec4(result, 1.0);
 }

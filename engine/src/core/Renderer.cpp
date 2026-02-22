@@ -896,7 +896,7 @@ Renderer::~Renderer()
 void Renderer::BeginFrame()
 {
     glViewport(0, 0, width, height);
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 }
 
@@ -988,6 +988,18 @@ void Renderer::Initialize()
 
     brdfShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/postprocess/quad.vert"),
                                           FileSystem::GetPath("resources/shaders/ibl/brdf_lut.frag"));
+
+    // 统一初始化 IBL 相关采样器所使用的纹理单元，避免默认都指向 0 导致
+    // 与 G-Buffer 的 sampler2D 发生“不同采样器类型共享同一单元”的未定义行为。
+    pbrShader->Use();
+    pbrShader->SetInt("irradianceMap", 20);
+    pbrShader->SetInt("prefilterMap", 21);
+    pbrShader->SetInt("brdfLUT", 22);
+
+    deferredLightingShader->Use();
+    deferredLightingShader->SetInt("irradianceMap", 20);
+    deferredLightingShader->SetInt("prefilterMap", 21);
+    deferredLightingShader->SetInt("brdfLUT", 22);
 
     // 初始化环境贴图数组
     envmapnow = 0;
@@ -1270,26 +1282,39 @@ void Renderer::RenderForward()
         }
     }
 
-    // 设置IBL
+    // 设置IBL（带安全回退）
     pbrShader->SetBool("iblEnabled", iblEnabled);
-    if (iblEnabled && irradianceMap[envmapnow] && prefilterMap[envmapnow])
+
+    // 选择实际使用的环境槽位：优先当前槽位，其次槽位0
+    int iblSlot = envmapnow;
+    if (iblSlot < 0 || iblSlot >= envmapcount || !irradianceMap[iblSlot] || !prefilterMap[iblSlot])
+    {
+        iblSlot = 0;
+    }
+
+    if (iblEnabled && iblSlot >= 0 && iblSlot < envmapcount &&
+        irradianceMap[iblSlot] && prefilterMap[iblSlot])
     {
         glActiveTexture(GL_TEXTURE20);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap[envmapnow]->GetID());
+        glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap[iblSlot]->GetID());
         pbrShader->SetInt("irradianceMap", 20);
 
         glActiveTexture(GL_TEXTURE21);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap[envmapnow]->GetID());
+        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap[iblSlot]->GetID());
         pbrShader->SetInt("prefilterMap", 21);
-
-        glActiveTexture(GL_TEXTURE22);
-        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture->GetID());
-        pbrShader->SetInt("brdfLUT", 22);
     }
     else
     {
         // 禁用IBL如果贴图不可用
         pbrShader->SetBool("iblEnabled", false);
+    }
+
+    // BRDF LUT 始终绑定（初始化时就会生成）
+    if (brdfLUTTexture)
+    {
+        glActiveTexture(GL_TEXTURE22);
+        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture->GetID());
+        pbrShader->SetInt("brdfLUT", 22);
     }
 
     // 渲染PBR材质的模型
@@ -1398,26 +1423,41 @@ void Renderer::RenderDeferred()
     // 设置全局阴影开关
     deferredLightingShader->SetBool("shadowEnabled", shadowEnabled);
 
-    // 设置IBL参数
+    // 设置IBL参数（带安全回退）
+    deferredLightingShader->Use();
     deferredLightingShader->SetBool("iblEnabled", iblEnabled);
-    if (iblEnabled && irradianceMap[envmapnow] && prefilterMap[envmapnow])
+
+    // 选择实际使用的环境槽位：优先当前槽位，其次槽位0
+    int iblSlotDeferred = envmapnow;
+    if (iblSlotDeferred < 0 || iblSlotDeferred >= envmapcount ||
+        !irradianceMap[iblSlotDeferred] || !prefilterMap[iblSlotDeferred])
+    {
+        iblSlotDeferred = 0;
+    }
+
+    if (iblEnabled && iblSlotDeferred >= 0 && iblSlotDeferred < envmapcount &&
+        irradianceMap[iblSlotDeferred] && prefilterMap[iblSlotDeferred])
     {
         glActiveTexture(GL_TEXTURE20);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap[envmapnow]->GetID());
+        glBindTexture(GL_TEXTURE_CUBE_MAP, irradianceMap[iblSlotDeferred]->GetID());
         deferredLightingShader->SetInt("irradianceMap", 20);
 
         glActiveTexture(GL_TEXTURE21);
-        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap[envmapnow]->GetID());
+        glBindTexture(GL_TEXTURE_CUBE_MAP, prefilterMap[iblSlotDeferred]->GetID());
         deferredLightingShader->SetInt("prefilterMap", 21);
-
-        glActiveTexture(GL_TEXTURE22);
-        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture->GetID());
-        deferredLightingShader->SetInt("brdfLUT", 22);
     }
     else
     {
         // 禁用IBL如果贴图不可用
         deferredLightingShader->SetBool("iblEnabled", false);
+    }
+
+    // BRDF LUT 始终绑定（初始化时就会生成）
+    if (brdfLUTTexture)
+    {
+        glActiveTexture(GL_TEXTURE22);
+        glBindTexture(GL_TEXTURE_2D, brdfLUTTexture->GetID());
+        deferredLightingShader->SetInt("brdfLUT", 22);
     }
 
     const int texSlots[8] = {0, 1, 2, 3, 4, 5, 6, 7};
@@ -2545,7 +2585,7 @@ void Renderer::LoadEnvironmentHDR(int slot, const std::string& hdrPath) {
     }
     
     glViewport(0, 0, 512, 512);
-    glClearColor(1.0f, 0.0f, 1.0f, 1.0f);
+    glClearColor(0.0f, 0.0f, 0.0f, 0.0f);
 
     glDisable(GL_DEPTH_TEST);
     glDisable(GL_CULL_FACE);
