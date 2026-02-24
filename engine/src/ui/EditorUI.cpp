@@ -2,6 +2,7 @@
 #include "core/Application.hpp"
 #include "glm/gtc/type_ptr.hpp"
 #include "imgui.h"
+#include "imgui_internal.h"
 #include "utils/FileDialog.hpp"
 #include "utils/FileSystem.hpp"
 #include <cstdio>
@@ -26,9 +27,29 @@ void EditorUI::Initialize()
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     
-    // 加载中文字体
-    io.Fonts->AddFontFromFileTTF(FileSystem::GetPath("resources/fonts/HarmonyOS_Sans_SC_Medium.ttf").c_str(), 16.0f,
-                                 NULL, io.Fonts->GetGlyphRangesChineseSimplifiedCommon());
+    // 加载默认字体（英文）
+    io.Fonts->AddFontDefault();
+    
+    // 加载中文字体，使用完整的中文范围
+    ImFontConfig fontCfg;
+    fontCfg.MergeMode = true; // 合并模式，不替换默认字体
+    fontCfg.PixelSnapH = true;
+    
+    ImWchar ranges[] = {
+        0x0020, 0x00FF, // 基本拉丁文
+        0x2000, 0x206F, // 常用符号
+        0x3000, 0x30FF, // CJK符号和标点符号 + 日文平假名和片假名
+        0x31F0, 0x31FF, // 片假名拼音扩展
+        0x4E00, 0x9FFF, // CJK统一表意文字
+        0,
+    };
+    
+    io.Fonts->AddFontFromFileTTF(
+        FileSystem::GetPath("resources/fonts/HarmonyOS_Sans_SC_Medium.ttf").c_str(), 
+        16.0f,
+        &fontCfg, 
+        ranges
+    );
     
     // 启用停靠和多视口
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -61,9 +82,9 @@ void EditorUI::SetupModernStyle()
     style.GrabRounding = 4.0f;
     style.TabRounding = 4.0f;
     
-    style.WindowPadding = ImVec2(12.0f, 12.0f);
+    style.WindowPadding = ImVec2(8.0f, 8.0f);
     style.FramePadding = ImVec2(8.0f, 6.0f);
-    style.ItemSpacing = ImVec2(8.0f, 6.0f);
+    style.ItemSpacing = ImVec2(8.0f, 3.0f);  // 减少垂直间距从6.0f到3.0f
     style.ItemInnerSpacing = ImVec2(8.0f, 6.0f);
     style.IndentSpacing = 20.0f;
     style.ScrollbarSize = 16.0f;
@@ -147,8 +168,8 @@ void EditorUI::Render()
     ImGui_ImplGlfw_NewFrame();
     ImGui::NewFrame();
 
-    ShowDockSpace();
     ShowMainMenuBar();
+    ShowDockSpace();
     
     if (showSceneHierarchy)
         ShowSceneHierarchy();
@@ -167,6 +188,8 @@ void EditorUI::Render()
         ShowRendererSettings();
     if (showMaterialEditor)
         ShowMaterialEditor();
+    if (showPerformanceStats)
+        ShowPerformanceStats();
     if (showConsole)
         ShowConsole();
         
@@ -196,7 +219,7 @@ void EditorUI::ShowDockSpace()
     static bool opt_padding = false;
     static ImGuiDockNodeFlags dockspace_flags = ImGuiDockNodeFlags_None;
 
-    ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
+    ImGuiWindowFlags window_flags = ImGuiWindowFlags_NoDocking;
     if (opt_fullscreen)
     {
         const ImGuiViewport* viewport = ImGui::GetMainViewport();
@@ -243,8 +266,24 @@ void EditorUI::ShowDockSpace()
 
 void EditorUI::CreateDefaultLayout()
 {
-    // 这里可以设置默认的停靠布局
-    // 由于ImGui的限制，我们暂时让用户手动布局
+    ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+
+    ImGui::DockBuilderRemoveNode(dockspace_id);
+    ImGui::DockBuilderAddNode(dockspace_id, ImGuiDockNodeFlags_DockSpace);
+    ImGui::DockBuilderSetNodeSize(dockspace_id, ImGui::GetMainViewport()->Size);
+
+    ImGuiID dock_main_id = dockspace_id;
+    ImGuiID dock_right_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
+    ImGuiID dock_left_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.20f, nullptr, &dock_main_id);
+    ImGuiID dock_bottom_id = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.30f, nullptr, &dock_main_id);
+
+    ImGui::DockBuilderDockWindow(ConvertToUTF8(L"视口").c_str(), dock_main_id);
+    ImGui::DockBuilderDockWindow(ConvertToUTF8(L"检视器").c_str(), dock_right_id);
+    ImGui::DockBuilderDockWindow(ConvertToUTF8(L"场景层级").c_str(), dock_left_id);
+    ImGui::DockBuilderDockWindow(ConvertToUTF8(L"资源管理").c_str(), dock_bottom_id);
+    ImGui::DockBuilderDockWindow(ConvertToUTF8(L"控制台").c_str(), dock_bottom_id);
+
+    ImGui::DockBuilderFinish(dockspace_id);
 }
 
 void EditorUI::ShowAssetsPanel()
@@ -411,7 +450,9 @@ void EditorUI::ShowAssetsPanel()
 
 void EditorUI::ShowViewport()
 {
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0.0f, 0.0f));
     ImGui::Begin(ConvertToUTF8(L"视口").c_str(), &showViewport);
+    ImGui::PopStyleVar();
     
     // 获取视口窗口的屏幕位置和大小
     ImVec2 windowPos = ImGui::GetWindowPos();
@@ -702,6 +743,7 @@ void EditorUI::ShowMainMenuBar()
             ImGui::MenuItem(ConvertToUTF8(L"调试视口").c_str(), NULL, &showDebugViewport);
             ImGui::MenuItem(ConvertToUTF8(L"渲染器设置").c_str(), NULL, &showRendererSettings);
             ImGui::MenuItem(ConvertToUTF8(L"材质编辑器").c_str(), NULL, &showMaterialEditor);
+            ImGui::MenuItem(ConvertToUTF8(L"性能统计").c_str(), NULL, &showPerformanceStats);
             ImGui::MenuItem(ConvertToUTF8(L"控制台").c_str(), NULL, &showConsole);
             ImGui::EndMenu();
         }
@@ -3460,4 +3502,36 @@ void EditorUI::ApplyAssetToPrimitive(Geometry::Primitive& primitive)
             ApplyAssetToMesh(primitive.mesh);
         }
     }
+}
+
+void EditorUI::ShowPerformanceStats()
+{
+    ImGui::SetNextWindowSize(ImVec2(400, 300), ImGuiCond_FirstUseEver);
+    ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(8.0f, 8.0f));
+    if (ImGui::Begin(ConvertToUTF8(L"性能统计").c_str(), &showPerformanceStats))
+    {
+        const auto& perfStats = renderer->GetPerformanceStats();
+
+        ImGui::Text(ConvertToUTF8(L"=== 视锥剔除 ===").c_str());
+        ImGui::Text(ConvertToUTF8(L"可见模型数: %d").c_str(), perfStats.visibleModelCount);
+        ImGui::Text(ConvertToUTF8(L"被剔除模型数: %d").c_str(), perfStats.culledModelCount);
+        ImGui::Text(ConvertToUTF8(L"可见几何体数: %d").c_str(), perfStats.visiblePrimitiveCount);
+        ImGui::Text(ConvertToUTF8(L"被剔除几何体数: %d").c_str(), perfStats.culledPrimitiveCount);
+        
+        ImGui::Spacing();
+        ImGui::Text(ConvertToUTF8(L"=== Draw Call 优化 ===").c_str());
+        ImGui::Text(ConvertToUTF8(L"总 Draw Call 数: %d").c_str(), perfStats.totalDrawCalls);
+        
+        // 计算剔除率（包括模型和几何体）
+        int totalVisible = perfStats.visibleModelCount + perfStats.visiblePrimitiveCount;
+        int totalCulled = perfStats.culledModelCount + perfStats.culledPrimitiveCount;
+        int totalObjects = totalVisible + totalCulled;
+        float cullRatio = totalObjects > 0 ? (float)totalCulled / totalObjects * 100.0f : 0.0f;
+        ImGui::Text(ConvertToUTF8(L"剔除率: %.1f%%").c_str(), cullRatio);
+        
+        float fps = perfStats.lastFrameTime > 0 ? 1000.0f / perfStats.lastFrameTime : 0.0f;
+        ImGui::Text(ConvertToUTF8(L"FPS: %.1f").c_str(), fps);
+    }
+    ImGui::End();
+    ImGui::PopStyleVar();
 }

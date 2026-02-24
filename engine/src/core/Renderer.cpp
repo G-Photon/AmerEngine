@@ -1,11 +1,14 @@
 #include "core/Renderer.hpp"
 #include "core/Camera.hpp"
 #include "core/Framebuffer.hpp"
+#include "core/Frustum.hpp"
 #include <fstream>
 #include <nlohmann/json.hpp>
 using json = nlohmann::json;
 #include <iostream>
 #include <random>
+#include <chrono>
+#include <algorithm>
 #include "utils/FileSystem.hpp"
 #include "core/Texture.hpp"
 #include "core/TextureManager.hpp"
@@ -1122,6 +1125,25 @@ void Renderer::SetupSkybox()
 
 void Renderer::RenderScene()
 {
+    // 记录当前帧的开始时间
+    static auto lastFrameStart = std::chrono::high_resolution_clock::now();
+    auto currentFrameStart = std::chrono::high_resolution_clock::now();
+    
+    // 计算上一帧的总时间（毫秒）
+    auto frameDuration = std::chrono::duration_cast<std::chrono::microseconds>(currentFrameStart - lastFrameStart);
+    perfStats.lastFrameTime = frameDuration.count() / 1000.0f; // 转换为毫秒
+    lastFrameStart = currentFrameStart;
+    
+    // 更新视锥体用于剔除
+    UpdateFrustum();
+    
+    // 重置性能统计
+    perfStats.visibleModelCount = 0;
+    perfStats.visiblePrimitiveCount = 0;
+    perfStats.totalDrawCalls = 0;
+    perfStats.culledModelCount = 0;
+    perfStats.culledPrimitiveCount = 0;
+
     if (shadowEnabled)
     {
         RenderShadows();
@@ -1162,22 +1184,69 @@ void Renderer::RenderForward()
     glEnable(GL_CULL_FACE);
 
     // 分别处理Blinn-Phong材质和PBR材质的物体
-    
-    // 1. 渲染Blinn-Phong材质的物体
-    forwardShader->Use();
-    // 设置相机、光照等uniform
     glm::mat4 view = mainCamera->GetViewMatrix();
     glm::mat4 projection = mainCamera->GetProjectionMatrix(static_cast<float>(width) / height);
+
+    // === 视锥剔除：收集可见对象 ===
+    std::vector<std::pair<std::shared_ptr<Model>, int>> visibleModels;      // <model, materialType>
+    std::vector<std::pair<Geometry::Primitive*, int>> visiblePrimitives;     // <primitive, materialType>
+
+    // 收集可见的模型
+    for (auto& model : models)
+    {
+        auto [boundingCenter, boundingRadius] = model->GetBoundingSphere();
+        if (currentFrustum.IsSphereInFrustum(boundingCenter, boundingRadius))
+        {
+            perfStats.visibleModelCount++;
+            const auto& meshes = model->GetMeshes();
+            for (const auto& mesh : meshes)
+            {
+                int matType = mesh->GetMaterial()->type;
+                visibleModels.push_back({model, matType});
+            }
+        }
+        else
+        {
+            perfStats.culledModelCount++;
+        }
+    }
+
+    // 收集可见的几何体
+    for (auto& primitive : primitives)
+    {
+        glm::vec3 primPos = primitive.position;
+        glm::vec3 primScale = primitive.scale;
+        float maxScale = std::max({primScale.x, primScale.y, primScale.z});
+        float boundingRadius = 2.0f * maxScale;
+        if (currentFrustum.IsSphereInFrustum(primPos, boundingRadius))
+        {
+            perfStats.visiblePrimitiveCount++;
+            int matType = primitive.mesh->GetMaterial()->type;
+            visiblePrimitives.push_back({&primitive, matType});
+        }
+        else
+        {
+            perfStats.culledPrimitiveCount++;
+        }
+    }
+
+    // 按材质排序，减少状态切换
+    std::sort(visibleModels.begin(), visibleModels.end(),
+        [](const auto& a, const auto& b) {
+            return a.second < b.second;
+        });
+
+    // 1. 渲染Blinn-Phong材质的物体
+    forwardShader->Use();
     forwardShader->SetMat4("view", view);
     forwardShader->SetMat4("projection", projection);
     forwardShader->SetVec3("viewPos", mainCamera->Position);
 
     // 设置光源
-    forwardShader->SetInt("numLights[0]", directionalLights.size()); // 方向光数量
-    forwardShader->SetInt("numLights[1]", pointLights.size());       // 点光
-    forwardShader->SetInt("numLights[2]", spotLights.size());        // 聚光灯数量
+    forwardShader->SetInt("numLights[0]", directionalLights.size());
+    forwardShader->SetInt("numLights[1]", pointLights.size());
+    forwardShader->SetInt("numLights[2]", spotLights.size());
     
-    // 启用阴影
     if (shadowEnabled)
     {
         forwardShader->SetBool("shadowEnabled", true);
@@ -1199,38 +1268,39 @@ void Renderer::RenderForward()
         spotLights[i]->SetupShader(*forwardShader, i, shadowEnabled);
     }
     
-    // 渲染Blinn-Phong材质的模型
-    for (auto &model : models)
+    // 渲染Blinn-Phong材质的模型（已通过视锥剔除）
+    for (const auto& [model, matType] : visibleModels)
     {
-        model->DrawWithMaterialType(*forwardShader, BLINN_PHONG);
+        if (matType == BLINN_PHONG)
+        {
+            model->DrawWithMaterialType(*forwardShader, BLINN_PHONG);
+            perfStats.totalDrawCalls++;
+        }
     }
 
-    // 渲染Blinn-Phong材质的几何体
-    for (auto &primitive : primitives)
+    // 渲染Blinn-Phong材质的几何体（已通过视锥剔除）
+    for (const auto& [primitive, matType] : visiblePrimitives)
     {
-        if (primitive.mesh->GetMaterial()->type == BLINN_PHONG)
+        if (matType == BLINN_PHONG)
         {
-            primitive.mesh->Draw(*forwardShader);
+            primitive->mesh->Draw(*forwardShader);
+            perfStats.totalDrawCalls++;
         }
     }
 
     // 2. 渲染PBR材质的物体
     pbrShader->Use();
     
-    // 设置相机矩阵
     pbrShader->SetMat4("view", view);
     pbrShader->SetMat4("projection", projection);
     pbrShader->SetVec3("viewPos", mainCamera->Position);
 
-    // 设置光源数量
     pbrShader->SetInt("numLights[0]", directionalLights.size());
     pbrShader->SetInt("numLights[1]", pointLights.size());
     pbrShader->SetInt("numLights[2]", spotLights.size());
     
-    // 设置阴影
     pbrShader->SetBool("shadowEnabled", shadowEnabled);
     
-    // 设置光源参数
     for (size_t i = 0; i < directionalLights.size(); ++i)
     {
         auto& light = directionalLights[i];
@@ -1242,7 +1312,6 @@ void Renderer::RenderForward()
         if (light->HasShadows() && shadowEnabled)
         {
             pbrShader->SetMat4(base + ".lightSpaceMatrix", light->GetLightSpaceMatrix());
-            // 绑定阴影贴图
             glActiveTexture(GL_TEXTURE10 + i);
             glBindTexture(GL_TEXTURE_2D, light->GetShadowMap());
             pbrShader->SetInt(base + ".shadowMap", 10 + i);
@@ -1282,10 +1351,8 @@ void Renderer::RenderForward()
         }
     }
 
-    // 设置IBL（带安全回退）
     pbrShader->SetBool("iblEnabled", iblEnabled);
 
-    // 选择实际使用的环境槽位：优先当前槽位，其次槽位0
     int iblSlot = envmapnow;
     if (iblSlot < 0 || iblSlot >= envmapcount || !irradianceMap[iblSlot] || !prefilterMap[iblSlot])
     {
@@ -1305,11 +1372,9 @@ void Renderer::RenderForward()
     }
     else
     {
-        // 禁用IBL如果贴图不可用
         pbrShader->SetBool("iblEnabled", false);
     }
 
-    // BRDF LUT 始终绑定（初始化时就会生成）
     if (brdfLUTTexture)
     {
         glActiveTexture(GL_TEXTURE22);
@@ -1317,18 +1382,23 @@ void Renderer::RenderForward()
         pbrShader->SetInt("brdfLUT", 22);
     }
 
-    // 渲染PBR材质的模型
-    for (auto &model : models)
+    // 渲染PBR材质的模型（已通过视锥剔除）
+    for (const auto& [model, matType] : visibleModels)
     {
-        model->DrawWithMaterialType(*pbrShader, PBR);
+        if (matType == PBR)
+        {
+            model->DrawWithMaterialType(*pbrShader, PBR);
+            perfStats.totalDrawCalls++;
+        }
     }
 
-    // 渲染PBR材质的几何体
-    for (auto &primitive : primitives)
+    // 渲染PBR材质的几何体（已通过视锥剔除）
+    for (const auto& [primitive, matType] : visiblePrimitives)
     {
-        if (primitive.mesh->GetMaterial()->type == PBR)
+        if (matType == PBR)
         {
-            primitive.mesh->Draw(*pbrShader);
+            primitive->mesh->Draw(*pbrShader);
+            perfStats.totalDrawCalls++;
         }
     }
 
@@ -1349,45 +1419,108 @@ void Renderer::RenderDeferred()
     auto view = mainCamera->GetViewMatrix();
     auto projection = mainCamera->GetProjectionMatrix(static_cast<float>(width) / height);
 
-    // 1. 渲染Blinn-Phong材质的物体
+    // === 视锥剔除：收集可见对象 ===
+    std::vector<std::pair<std::shared_ptr<Model>, int>> visibleModels;      // <model, materialType>
+    std::vector<std::pair<Geometry::Primitive*, int>> visiblePrimitives;     // <primitive, materialType>
+
+    // 收集可见的模型（Blinn-Phong和PBR分别处理）
+    for (auto& model : models)
+    {
+        // 获取模型的精确包围球
+        auto [boundingCenter, boundingRadius] = model->GetBoundingSphere();
+
+        if (currentFrustum.IsSphereInFrustum(boundingCenter, boundingRadius))
+        {
+            perfStats.visibleModelCount++;
+            // 收集该模型的所有网格的材质类型
+            const auto& meshes = model->GetMeshes();
+            for (const auto& mesh : meshes)
+            {
+                int matType = mesh->GetMaterial()->type;
+                visibleModels.push_back({model, matType});
+            }
+        }
+        else
+        {
+            perfStats.culledModelCount++;
+        }
+    }
+
+    // 收集可见的几何体
+    for (auto& primitive : primitives)
+    {
+        glm::vec3 primPos = primitive.position;
+        glm::vec3 primScale = primitive.scale;
+        float maxScale = std::max({primScale.x, primScale.y, primScale.z});
+        float boundingRadius = 2.0f * maxScale;
+
+        if (currentFrustum.IsSphereInFrustum(primPos, boundingRadius))
+        {
+            perfStats.visiblePrimitiveCount++;
+            int matType = primitive.mesh->GetMaterial()->type;
+            visiblePrimitives.push_back({&primitive, matType});
+        }
+        else
+        {
+            perfStats.culledPrimitiveCount++;
+        }
+    }
+
+    // === Blinn-Phong 材质渲染（with State Sorting） ===
     deferredGeometryShader->Use();
     deferredGeometryShader->SetMat4("view", view);
     deferredGeometryShader->SetMat4("projection", projection);
     deferredGeometryShader->SetVec3("viewPos", mainCamera->Position);
 
-    // 渲染Blinn-Phong材质的模型
-    for (auto &model : models)
-    {
-        model->DrawWithMaterialType(*deferredGeometryShader, BLINN_PHONG);
-    }
+    // 按材质排序Blinn-Phong模型，减少状态切换
+    std::sort(visibleModels.begin(), visibleModels.end(),
+        [](const auto& a, const auto& b) {
+            return a.second < b.second; // 按材质类型排序
+        });
 
-    // 渲染Blinn-Phong材质的几何体
-    for (auto &primitive : primitives)
+    // 渲染Blinn-Phong材质的模型（已排序）
+    for (const auto& [model, matType] : visibleModels)
     {
-        if (primitive.mesh->GetMaterial()->type == BLINN_PHONG)
+        if (matType == BLINN_PHONG)
         {
-            primitive.mesh->Draw(*deferredGeometryShader);
+            model->DrawWithMaterialType(*deferredGeometryShader, BLINN_PHONG);
+            perfStats.totalDrawCalls++;
         }
     }
 
-    // 2. 渲染PBR材质的物体
+    // 渲染Blinn-Phong材质的几何体
+    for (const auto& [primitive, matType] : visiblePrimitives)
+    {
+        if (matType == BLINN_PHONG)
+        {
+            primitive->mesh->Draw(*deferredGeometryShader);
+            perfStats.totalDrawCalls++;
+        }
+    }
+
+    // === PBR 材质渲染（with State Sorting） ===
     pbrDeferredGeometryShader->Use();
     pbrDeferredGeometryShader->SetMat4("view", view);
     pbrDeferredGeometryShader->SetMat4("projection", projection);
     pbrDeferredGeometryShader->SetVec3("viewPos", mainCamera->Position);
 
-    // 渲染PBR材质的模型
-    for (auto &model : models)
+    // 渲染PBR材质的模型（已排序）
+    for (const auto& [model, matType] : visibleModels)
     {
-        model->DrawWithMaterialType(*pbrDeferredGeometryShader, PBR);
+        if (matType == PBR)
+        {
+            model->DrawWithMaterialType(*pbrDeferredGeometryShader, PBR);
+            perfStats.totalDrawCalls++;
+        }
     }
 
     // 渲染PBR材质的几何体
-    for (auto &primitive : primitives)
+    for (const auto& [primitive, matType] : visiblePrimitives)
     {
-        if (primitive.mesh->GetMaterial()->type == PBR)
+        if (matType == PBR)
         {
-            primitive.mesh->Draw(*pbrDeferredGeometryShader);
+            primitive->mesh->Draw(*pbrDeferredGeometryShader);
+            perfStats.totalDrawCalls++;
         }
     }
 
@@ -2761,6 +2894,14 @@ void Renderer::GenerateIBLMaps(int slot) {
     glViewport(prevViewport[0], prevViewport[1], prevViewport[2], prevViewport[3]);
     if (depthTestEnabled) glEnable(GL_DEPTH_TEST);
     if (cullFaceEnabled) glEnable(GL_CULL_FACE);
-    
-    std::cout << "IBL maps generated for slot " << slot << std::endl;
+}
+
+void Renderer::UpdateFrustum()
+{
+    if (!mainCamera)
+        return;
+
+    glm::mat4 view = mainCamera->GetViewMatrix();
+    glm::mat4 projection = mainCamera->GetProjectionMatrix(static_cast<float>(width) / height);
+    currentFrustum.ExtractFromMatrices(view, projection);
 }

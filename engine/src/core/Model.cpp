@@ -4,6 +4,7 @@
 #include <assimp/scene.h>
 #include <iostream>
 #include <filesystem>
+#include <limits>
 
 Model::Model(const std::string &path)
 {
@@ -289,4 +290,52 @@ std::vector<std::shared_ptr<Texture>> Model::LoadMaterialTextures(aiMaterial *ma
     }
 
     return textures;
+}
+
+void Model::GetLocalAABB(glm::vec3 &outMin, glm::vec3 &outMax) const
+{
+    if (meshes.empty())
+    {
+        outMin = glm::vec3(0.0f);
+        outMax = glm::vec3(0.0f);
+        return;
+    }
+
+    outMin = glm::vec3(std::numeric_limits<float>::max());
+    outMax = glm::vec3(std::numeric_limits<float>::lowest());
+
+    // 遍历所有mesh的所有顶点来计算AABB
+    for (const auto &mesh : meshes)
+    {
+        const auto &vertices = mesh->GetVertices();
+        for (const auto &vertex : vertices)
+        {
+            outMin = glm::min(outMin, vertex.Position);
+            outMax = glm::max(outMax, vertex.Position);
+        }
+    }
+}
+
+std::pair<glm::vec3, float> Model::GetBoundingSphere() const
+{
+    glm::vec3 localMin, localMax;
+    GetLocalAABB(localMin, localMax);
+
+    // AABB的中心
+    glm::vec3 aabbCenter = (localMin + localMax) * 0.5f;
+    
+    // AABB的半径
+    glm::vec3 halfExtent = (localMax - localMin) * 0.5f;
+    float aabbRadius = glm::length(halfExtent);
+
+    // 将局部中心变换到世界坐标系
+    // 简化版本：只考虑位置，不考虑旋转（适合大多数游戏引擎场景）
+    // 完整版本应该使用变换矩阵
+    glm::vec3 worldCenter = position + aabbCenter * scale;
+    
+    // 包围球半径需要乘以最大的scale分量
+    float maxScale = std::max({scale.x, scale.y, scale.z});
+    float boundingRadius = aabbRadius * maxScale;
+
+    return {worldCenter, boundingRadius};
 }

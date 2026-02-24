@@ -53,6 +53,13 @@ class Model
         return path;
     }
 
+    // 计算模型的包围球（世界坐标系）
+    // 返回 {center, radius}
+    std::pair<glm::vec3, float> GetBoundingSphere() const;
+    
+    // 计算模型的AABB（局部坐标系）
+    void GetLocalAABB(glm::vec3 &outMin, glm::vec3 &outMax) const;
+
   private:
     void LoadModel(const std::string &path);
     void ProcessNode(aiNode *node, const aiScene *scene);

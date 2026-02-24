@@ -2,6 +2,7 @@
 
 #include "Camera.hpp"
 #include "Framebuffer.hpp"
+#include "Frustum.hpp"
 #include "Geometry.hpp"
 #include "Light.hpp"
 #include "Material.hpp"
@@ -273,6 +274,23 @@ class Renderer
     void SaveScene(const std::string &path);
     void LoadScene(const std::string &path);
 
+    // 视锥剔除相关
+    const Frustum& GetCurrentFrustum() const { return currentFrustum; }
+    void UpdateFrustum();
+    
+    // 性能统计
+    struct PerformanceStats
+    {
+        int visibleModelCount = 0;      // 可见模型数
+        int visiblePrimitiveCount = 0;  // 可见几何体数
+        int totalDrawCalls = 0;         // 总 draw call 数
+        int culledModelCount = 0;       // 被剔除的模型数
+        int culledPrimitiveCount = 0;   // 被剔除的几何体数
+        float lastFrameTime = 0.0f;     // 上一帧时间（毫秒）
+    };
+    
+    const PerformanceStats& GetPerformanceStats() const { return perfStats; }
+
   private:
     void RenderForward();
     void RenderDeferred();
@@ -397,4 +415,10 @@ class Renderer
     
     // 背景类型
     BackgroundType backgroundType = SKYBOX;
+
+    // 视锥剔除
+    Frustum currentFrustum;
+    
+    // 性能统计
+    PerformanceStats perfStats;
 };
