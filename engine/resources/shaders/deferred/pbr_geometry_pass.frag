@@ -1,13 +1,8 @@
 #version 330 core
 
-layout (location = 0) out vec3 gPosition;
-layout (location = 1) out vec3 gNormal;
-layout (location = 2) out vec4 gAlbedo;
-layout (location = 3) out vec3 gSpecular;
-layout (location = 4) out float gMetallic;
-layout (location = 5) out float gRoughness;
-layout (location = 6) out float gAo;
-layout (location = 7) out vec3 gAmbient;
+layout (location = 0) out vec4 gAlbedoSpec;      // RGB: Albedo, A: MaterialID
+layout (location = 1) out vec4 gNormalRoughness; // RGB: Normal, A: Roughness
+layout (location = 2) out vec4 gMRA;             // R: Metallic, G: AO, B: Unused
 
 in VS_OUT {
     vec3 FragPos;
@@ -47,24 +42,17 @@ vec3 getNormalFromMap()
 
 void main()
 {
-    // 位置 (世界空间)
-    gPosition = fs_in.FragPos;
+    // 法线 (世界空间) + 粗糙度 -> RT1
+    vec3 N = material.useNormalMap ? getNormalFromMap() : normalize(fs_in.Normal);
+    float roughness = material.useRoughnessMap ? texture(material.roughnessMap, fs_in.TexCoord).r : material.roughness;
+    gNormalRoughness = vec4(N, roughness);
+
+    // 反照率 + ID -> RT0 (ID=1.0 for PBR)
+    vec3 albedo = material.useAlbedoMap ? texture(material.albedoMap, fs_in.TexCoord).rgb : material.albedo;
+    gAlbedoSpec = vec4(albedo, 1.0);
     
-    // 法线 (世界空间)
-    gNormal = material.useNormalMap ? getNormalFromMap() : normalize(fs_in.Normal);
-    
-    // 反照率
-    gAlbedo.rgb = material.useAlbedoMap ? texture(material.albedoMap, fs_in.TexCoord).rgb : material.albedo;
-    gAlbedo.a = 1.0; // 标记为PBR材质
-    
-    // 对于PBR，高光颜色设置为0，我们将使用金属度和粗糙度
-    gSpecular = vec3(0.0);
-    
-    // PBR参数
-    gMetallic = material.useMetallicMap ? texture(material.metallicMap, fs_in.TexCoord).r : material.metallic;
-    gRoughness = material.useRoughnessMap ? texture(material.roughnessMap, fs_in.TexCoord).r : material.roughness;
-    gAo = material.useAOMap ? texture(material.aoMap, fs_in.TexCoord).r : material.ao;
-    
-    // 环境光，暂时设为默认值
-    gAmbient = vec3(0.1);
+    // 金属度 + AO -> RT2 (R=Metallic, G=AO)
+    float metallic = material.useMetallicMap ? texture(material.metallicMap, fs_in.TexCoord).r : material.metallic;
+    float ao = material.useAOMap ? texture(material.aoMap, fs_in.TexCoord).r : material.ao;
+    gMRA = vec4(metallic, ao, 0.0, 1.0);
 }

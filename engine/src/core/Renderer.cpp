@@ -1044,17 +1044,18 @@ void Renderer::SetupGBuffer()
 {
     gBuffer = std::make_unique<Framebuffer>(width, height);
 
-    // 位置、法线、反照率、金属度/粗糙度/ao、漫反射/镜面反射贴图
-    gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);      // 位置 + 深度
-    gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);      // 法线
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 漫反射贴图
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 镜面反射贴图
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 金属度
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 粗糙度
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // AO
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE); // 环境光贴图
+    // 优化的 G-Buffer 布局:
+    // RT0: Albedo.rgb + MaterialType (a)
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
+    
+    // RT1: Normal.rgb + Roughness (a)
+    gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
+    
+    // RT2: Metallic (r) + AO (g) + (Reserved)
+    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
 
-    gBuffer->AddDepthBuffer();
+    // 使用纹理作为深度缓冲，以便进行采样（位置重建）
+    gBuffer->AddDepthTexture();
     gBuffer->CheckComplete();
 }
 
@@ -1602,13 +1603,34 @@ void Renderer::RenderDeferred()
         deferredLightingShader->SetInt("brdfLUT", 22);
     }
 
-    const int texSlots[8] = {0, 1, 2, 3, 4, 5, 6, 7};
-    const char *texNames[8] = {"gPosition", "gNormal", "gAlbedo", "gSpecular", "gMetallic", "gRoughness", "gAo", "gAmbient"};
-    for (int i = 0; i < 8; ++i)
-    {
-        deferredLightingShader->SetInt(texNames[i], texSlots[i]);
-        gBuffer->BindTexture(i, texSlots[i]);
-    }
+    // 绑定优化后的 G-Buffer (Slot 0-2: Color, Slot 3: Depth)
+    
+    // 0: Albedo + MaterialID
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, gBuffer->GetColorTexture(0));
+    deferredLightingShader->SetInt("gAlbedoSpec", 0);
+
+    // 1: Normal + Roughness
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gBuffer->GetColorTexture(1));
+    deferredLightingShader->SetInt("gNormalRoughness", 1);
+
+    // 2: Metallic + AO
+    glActiveTexture(GL_TEXTURE2);
+    glBindTexture(GL_TEXTURE_2D, gBuffer->GetColorTexture(2));
+    deferredLightingShader->SetInt("gMRA", 2);
+
+    // 3: Depth (用于位置重建)
+    glActiveTexture(GL_TEXTURE3);
+    glBindTexture(GL_TEXTURE_2D, gBuffer->GetDepthTexture());
+    deferredLightingShader->SetInt("gDepth", 3);
+
+    // 传递逆矩阵用于位置重建
+    glm::mat4 invProj = glm::inverse(cameraProj);
+    glm::mat4 invView = glm::inverse(cameraView);
+    deferredLightingShader->SetMat4("invProjection", invProj);
+    deferredLightingShader->SetMat4("invView", invView);
+
     deferredLightingShader->SetBool("ssaoEnabled", ssaoEnabled);
     if (ssaoEnabled)
     {
@@ -2140,10 +2162,19 @@ void Renderer::RenderSSAO()
     ssaoShader->Use();
 
     // 绑定GBuffer纹理
-    gBuffer->BindTexture(0, 0); // 位置
-    gBuffer->BindTexture(1, 1); // 法线
-    ssaoShader->SetInt("gPosition", 0);
-    ssaoShader->SetInt("gNormal", 1);
+    // Slot 0: 深度 (用于位置重建)
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, gBuffer->GetDepthTexture()); 
+    ssaoShader->SetInt("gDepth", 0);
+
+    // Slot 1: 法线
+    glActiveTexture(GL_TEXTURE1);
+    glBindTexture(GL_TEXTURE_2D, gBuffer->GetColorTexture(1)); 
+    ssaoShader->SetInt("gNormalRoughness", 1);
+
+    // 传递逆投影矩阵用于位置重建
+    glm::mat4 invProj = glm::inverse(mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
+    ssaoShader->SetMat4("invProjection", invProj);
 
     // 绑定噪声纹理
     glActiveTexture(GL_TEXTURE2);

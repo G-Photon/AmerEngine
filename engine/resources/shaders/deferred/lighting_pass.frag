@@ -1,15 +1,15 @@
 #version 460 core
 out vec4 FragColor;
 
-// G-Buffer 纹理
-uniform sampler2D gPosition;
-uniform sampler2D gNormal;
-uniform sampler2D gAlbedo;
-uniform sampler2D gSpecular;
-uniform sampler2D gMetallic;
-uniform sampler2D gRoughness;
-uniform sampler2D gAo;
-uniform sampler2D gAmbient;
+// G-Buffer 纹理 (优化后)
+uniform sampler2D gAlbedoSpec;      // RGB: Albedo, A: MaterialID
+uniform sampler2D gNormalRoughness; // RGB: Normal, A: Roughness
+uniform sampler2D gMRA;             // R: Metallic, G: AO, B: Specular(Blinn)/Extended, A: Available
+uniform sampler2D gDepth;           // Depth Buffer
+
+uniform mat4 invProjection;
+uniform mat4 invView;
+
 uniform sampler2D ssao;
 uniform int ssaoEnabled; // 是否启用SSAO
 
@@ -266,6 +266,15 @@ vec3 calculatePBRDirectionalLight(vec3 fragPos, vec3 normal, vec3 albedo, float 
 vec3 calculatePBRPointLight(vec3 fragPos, vec3 normal, vec3 albedo, float metallic, float roughness, float ao);
 vec3 calculatePBRSpotLight(vec3 fragPos, vec3 normal, vec3 albedo, float metallic, float roughness, float ao);
 
+vec3 ReconstructWorldPos(vec2 texCoords, float depth) {
+    if (depth >= 1.0) depth = 0.99999;
+    vec4 ndcPos = vec4(texCoords * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
+    vec4 viewPos = invProjection * ndcPos;
+    viewPos /= viewPos.w;
+    vec4 worldPos = invView * viewPos;
+    return worldPos.xyz;
+}
+
 vec2 CalcTexCoord()
 {
    return gl_FragCoord.xy / screenSize;
@@ -274,21 +283,39 @@ vec2 CalcTexCoord()
 void main() {
     // 从G缓冲中获取数据
     vec2 TexCoords = CalcTexCoord();
-    vec3 fragPos = texture(gPosition, TexCoords).rgb;
-    vec3 normal = normalize(texture(gNormal, TexCoords).rgb);
-
-    vec4 albedoData = texture(gAlbedo, TexCoords);
-    vec3 albedo = albedoData.rgb;
-    // 使用gAlbedo的alpha通道区分材质类型：0.0 = Blinn-Phong, 1.0 = PBR
-    float materialType = albedoData.a;
     
-    vec3 specularColor = texture(gSpecular, TexCoords).rgb;
-    float metallic = texture(gMetallic, TexCoords).r;
-    float roughness = texture(gRoughness, TexCoords).r;
-    float ao = texture(gAo, TexCoords).r;
-    vec3 ambient = texture(gAmbient, TexCoords).rgb;
+    // 深度重构位置
+    float depth = texture(gDepth, TexCoords).r;
+    vec3 fragPos = ReconstructWorldPos(TexCoords, depth);
+
+    vec4 albedoData = texture(gAlbedoSpec, TexCoords);
+    vec3 albedo = albedoData.rgb;
+    float materialType = albedoData.a; // 0.0=BP, 1.0=PBR
+
+    vec4 normalData = texture(gNormalRoughness, TexCoords);
+    vec3 normal = normalize(normalData.rgb);
+    float roughness = normalData.a;
+
+    vec4 mraData = texture(gMRA, TexCoords);
+    
+    float metallic = 0.0;
+    float ao = 1.0;
+    vec3 specularColor = vec3(0.0);
+    vec3 ambient = vec3(0.1) * albedo; // Simplified ambient
+
+    if (materialType > 0.5) {
+        // PBR: R=Metallic, G=AO
+        metallic = mraData.r;
+        ao = mraData.g;
+    } else {
+        // Blinn-Phong: R=SpecR, G=SpecG, B=SpecB
+        // 如果之前 gSpecular 是 vec3，这里可以利用 gMRA 的 RGB 通道
+        specularColor = mraData.rgb; 
+        ao = 1.0; // BP通常不使用AO贴图，或者也可以存
+    }
+
     float ssaoOcclusion = ssaoEnabled > 0 ? texture(ssao, TexCoords).r : 1.0;
-    ao = ao * ssaoOcclusion; // 应用SSAO遮挡
+    ao = ao * ssaoOcclusion; 
 
     vec3 result = vec3(materialType);
     

@@ -1,12 +1,7 @@
 #version 460 core
-layout (location = 0) out vec4 gPosition;
-layout (location = 1) out vec4 gNormal;
-layout (location = 2) out vec4 gAlbedo;
-layout (location = 3) out vec4 gSpecular;
-layout (location = 4) out vec4 gMetallic; // 金属度
-layout (location = 5) out vec4 gRoughness; // 粗糙度
-layout (location = 6) out vec4 gAo; // 环境光遮蔽
-layout (location = 7) out vec4 gAmbient; // 环境光
+layout (location = 0) out vec4 gAlbedoSpec;      // RGB: Albedo, A: MaterialID (0.0 for BP)
+layout (location = 1) out vec4 gNormalRoughness; // RGB: Normal, A: Unused
+layout (location = 2) out vec4 gMRA;             // RGB: Specular Color, A: Unused
 
 in vec2 TexCoords;
 in vec3 FragPos;
@@ -47,37 +42,25 @@ float LinearizeDepth(float depth)
 }
 
 void main() {
-    // 存储片段位置向量和深度
-    gPosition = vec4(FragPos,  LinearizeDepth(gl_FragCoord.z));
-    
-    // 存储法线向量
+    // 法线计算 (世界空间)
     vec3 N = normalize(Normal);
     if (material.useNormalMap) {
-        // 从法线贴图获取法线
-        vec3 tangentNormal = texture(material.normalMap, TexCoords).xyz * 2.0 - 1.0;
-        
-        // 创建TBN矩阵
-        vec3 T = normalize(Tangent);
-        vec3 B = normalize(Bitangent);
-        mat3 TBN = mat3(T, B, N);
-        N = normalize(TBN * tangentNormal);
+         // 从法线贴图获取法线
+         vec3 tangentNormal = texture(material.normalMap, TexCoords).xyz * 2.0 - 1.0;
+         
+         // 创建TBN矩阵
+         vec3 T = normalize(Tangent);
+         vec3 B = normalize(Bitangent);
+         mat3 TBN = mat3(T, B, N);
+         N = normalize(TBN * tangentNormal);
     }
+    gNormalRoughness = vec4(N, 0.0); // Roughness unused (0.0)
+
+    // RT0: 反照率 + ID (ID=0.0 for Blinn-Phong)
+    vec3 albedo = material.useDiffuseMap ? texture(material.diffuseMap, TexCoords).rgb : material.diffuse;
+    gAlbedoSpec = vec4(albedo, 0.0);
     
-    gNormal = vec4(N, 1.0);
-    
-    // 存储反照率，并在alpha通道标记材质类型（0 = Blinn-Phong）
-    gAlbedo = vec4(material.useDiffuseMap ? 
-        texture(material.diffuseMap, TexCoords).rgb : material.diffuse, 0.0);
-    
-    // 存储金属度、粗糙度和AO
-    gSpecular = vec4(material.useSpecularMap ? 
-        texture(material.specularMap, TexCoords).rgb : material.specular, 1.0);
-    gMetallic = vec4(material.useMetallicMap ? 
-        texture(material.metallicMap, TexCoords).r : material.metallic, 0.0, 0.0, 1.0);
-    gRoughness = vec4(material.useRoughnessMap ?
-        texture(material.roughnessMap, TexCoords).r : material.roughness, 0.0, 0.0, 1.0);
-    gAo = vec4(material.useAoMap ?
-        texture(material.aoMap, TexCoords).r : 1.0, 0.0, 0.0, 0.0);
-    gAmbient = vec4(material.useDiffuseMap ?
-        texture(material.diffuseMap, TexCoords).rgb : material.diffuse, 1.0);
+    // RT2: 高光颜色 (RGB) + Unused (A)
+    vec3 specular = material.useSpecularMap ? texture(material.specularMap, TexCoords).rgb : material.specular;
+    gMRA = vec4(specular, 1.0);
 }
