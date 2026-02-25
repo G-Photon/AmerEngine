@@ -4,6 +4,7 @@
 #include "glm/glm.hpp"
 #include "glm/gtc/matrix_transform.hpp"
 #include "Geometry.hpp"
+#include "Framebuffer.hpp"  // Added Framebuffer include
 #include <imgui.h>
 #include <memory>
 
@@ -80,14 +81,29 @@ class PointLight : public Light
     // 阴影相关方法
     bool HasShadows() const override { return shadowEnabled; }
     glm::mat4 GetLightSpaceMatrix() const override;
-    unsigned int GetShadowMap() const override { return shadowMap; }
+    unsigned int GetShadowMap() const override { return shadowBuffer ? shadowBuffer->GetDepthTexture() : 0; }
     void SetShadowMap(unsigned int shadowMap) override { this->shadowMap = shadowMap; }
     void SetShadowEnabled(bool enabled) override { shadowEnabled = enabled; }
     bool IsShadowEnabled() const override { return shadowEnabled; }
     int GetShadowMapIndex() const override { return number; }
+    
+    // 初始化阴影缓冲
+    void InitShadowBuffer() {
+        if (!shadowBuffer) {
+            shadowBuffer = std::make_unique<Framebuffer>(1024, 1024);
+            shadowBuffer->AddDepthTexture();
+            shadowBuffer->CheckComplete();
+        }
+    }
+    
+    // 获取阴影缓冲
+    Framebuffer* GetShadowBuffer() const { return shadowBuffer.get(); }
 
     int number;
     static int count;
+    
+    // 阴影缓冲拥有权
+    std::unique_ptr<Framebuffer> shadowBuffer;
 
     glm::vec3 position;
     glm::vec3 ambient;
@@ -193,14 +209,28 @@ class SpotLight : public Light
     // 阴影相关方法
     bool HasShadows() const override { return shadowEnabled; }
     glm::mat4 GetLightSpaceMatrix() const override;
-    unsigned int GetShadowMap() const override { return shadowMap; }
+    unsigned int GetShadowMap() const override { return shadowBuffer ? shadowBuffer->GetDepthTexture() : 0; }
     void SetShadowMap(unsigned int shadowMap) override { this->shadowMap = shadowMap; }
     void SetShadowEnabled(bool enabled) override { shadowEnabled = enabled; }
     bool IsShadowEnabled() const override { return shadowEnabled; }
     int GetShadowMapIndex() const override { return number; }
+    
+     // 初始化阴影缓冲
+    void InitShadowBuffer() {
+        if (!shadowBuffer) {
+            shadowBuffer = std::make_unique<Framebuffer>(1024, 1024);
+            shadowBuffer->AddDepthTexture();
+            shadowBuffer->CheckComplete();
+        }
+    }
+     // 获取阴影缓冲
+    Framebuffer* GetShadowBuffer() const { return shadowBuffer.get(); }
 
     int number;
     static int count;
+
+    // 阴影缓冲
+    std::unique_ptr<Framebuffer> shadowBuffer;
 
     glm::vec3 position;
     glm::vec3 direction;

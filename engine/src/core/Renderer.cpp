@@ -1858,58 +1858,53 @@ void Renderer::RenderShadows()
         auto &pointLight = pointLights[i];
         if (pointLight->HasShadows())
         {
-            // 为每个点光源创建独立的阴影缓冲区
-            std::unique_ptr<Framebuffer> lightShadowBuffer = std::make_unique<Framebuffer>(1024, 1024);
-            lightShadowBuffer->AddDepthTexture();
-            lightShadowBuffer->CheckComplete();
+            // 初始化或获取现有的阴影缓冲 - 修复每帧重复创建 FBO 问题
+            pointLight->InitShadowBuffer();
+            auto* lightShadowBuffer = pointLight->GetShadowBuffer();
 
-            lightShadowBuffer->Bind();
-            glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
-            glClear(GL_DEPTH_BUFFER_BIT);
-
-            // 设置光源空间矩阵（使用透视投影）
-            glm::mat4 lightSpaceMatrix = pointLight->GetLightSpaceMatrix();
-            shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
-
-            // 渲染所有模型和几何体
-            for (auto &model : models)
+            if (lightShadowBuffer)
             {
-                // 构建模型矩阵
-                glm::mat4 modelMatrix = glm::mat4(1.0f);
-                modelMatrix = glm::translate(modelMatrix, model->GetPosition());
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
-                modelMatrix = glm::scale(modelMatrix, model->GetScale());
-                
-                shadowDepthShader->SetMat4("model", modelMatrix);
-                model->Draw(*shadowDepthShader);
-            }
+                lightShadowBuffer->Bind();
+                glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
+                glClear(GL_DEPTH_BUFFER_BIT);
 
-            for (auto &primitive : primitives)
-            {
-                // 构建几何体矩阵
-                glm::mat4 modelMatrix = glm::mat4(1.0f);
-                modelMatrix = glm::translate(modelMatrix, primitive.position);
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-                modelMatrix = glm::scale(modelMatrix, primitive.scale);
-                
-                shadowDepthShader->SetMat4("model", modelMatrix);
-                primitive.mesh->Draw(*shadowDepthShader);
-            }
+                // 设置光源空间矩阵（使用透视投影）
+                glm::mat4 lightSpaceMatrix = pointLight->GetLightSpaceMatrix();
+                shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
 
-            // 将阴影贴图绑定到光源
-            unsigned int shadowMap = lightShadowBuffer->GetDepthTexture();
-            pointLight->SetShadowMap(shadowMap);
-            
-            // 保存缓冲区，使用偏移索引以避免与定向光冲突
-            size_t bufferIndex = directionalLights.size() + i;
-            if (lightShadowBuffers.size() <= bufferIndex) {
-                lightShadowBuffers.resize(bufferIndex + 1);
+                // 渲染所有模型和几何体
+                for (auto &model : models)
+                {
+                    // 构建模型矩阵
+                    glm::mat4 modelMatrix = glm::mat4(1.0f);
+                    modelMatrix = glm::translate(modelMatrix, model->GetPosition());
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
+                    modelMatrix = glm::scale(modelMatrix, model->GetScale());
+                    
+                    shadowDepthShader->SetMat4("model", modelMatrix);
+                    model->Draw(*shadowDepthShader);
+                }
+
+                for (auto &primitive : primitives)
+                {
+                    // 构建几何体矩阵
+                    glm::mat4 modelMatrix = glm::mat4(1.0f);
+                    modelMatrix = glm::translate(modelMatrix, primitive.position);
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+                    modelMatrix = glm::scale(modelMatrix, primitive.scale);
+                    
+                    shadowDepthShader->SetMat4("model", modelMatrix);
+                    primitive.mesh->Draw(*shadowDepthShader);
+                }
+                
+                // 将阴影贴图绑定到光源 (通过 SetShadowMap 只是设置ID，也可以省略，因为我们重写了 GetShadowMap)
+                // 但为了保持兼容性或者如果有别的地方直接用 map ID 存
+                pointLight->SetShadowMap(lightShadowBuffer->GetDepthTexture());
             }
-            lightShadowBuffers[bufferIndex] = std::move(lightShadowBuffer);
         }
     }
 
@@ -1919,58 +1914,52 @@ void Renderer::RenderShadows()
         auto &spotLight = spotLights[i];
         if (spotLight->HasShadows())
         {
-            // 为每个聚光灯创建独立的阴影缓冲区
-            std::unique_ptr<Framebuffer> lightShadowBuffer = std::make_unique<Framebuffer>(1024, 1024);
-            lightShadowBuffer->AddDepthTexture();
-            lightShadowBuffer->CheckComplete();
-
-            lightShadowBuffer->Bind();
-            glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
-            glClear(GL_DEPTH_BUFFER_BIT);
-
-            // 设置光源空间矩阵
-            glm::mat4 lightSpaceMatrix = spotLight->GetLightSpaceMatrix();
-            shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
-
-            // 渲染所有模型和几何体
-            for (auto &model : models)
-            {
-                // 构建模型矩阵
-                glm::mat4 modelMatrix = glm::mat4(1.0f);
-                modelMatrix = glm::translate(modelMatrix, model->GetPosition());
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
-                modelMatrix = glm::scale(modelMatrix, model->GetScale());
-                
-                shadowDepthShader->SetMat4("model", modelMatrix);
-                model->Draw(*shadowDepthShader);
-            }
-
-            for (auto &primitive : primitives)
-            {
-                // 构建几何体矩阵
-                glm::mat4 modelMatrix = glm::mat4(1.0f);
-                modelMatrix = glm::translate(modelMatrix, primitive.position);
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-                modelMatrix = glm::scale(modelMatrix, primitive.scale);
-                
-                shadowDepthShader->SetMat4("model", modelMatrix);
-                primitive.mesh->Draw(*shadowDepthShader);
-            }
-
-            // 将阴影贴图绑定到光源
-            unsigned int shadowMap = lightShadowBuffer->GetDepthTexture();
-            spotLight->SetShadowMap(shadowMap);
+            // 初始化或获取现有的阴影缓冲 - 修复每帧重复创建 FBO 问题
+            spotLight->InitShadowBuffer();
+            auto* lightShadowBuffer = spotLight->GetShadowBuffer();
             
-            // 保存缓冲区，使用偏移索引
-            size_t bufferIndex = directionalLights.size() + pointLights.size() + i;
-            if (lightShadowBuffers.size() <= bufferIndex) {
-                lightShadowBuffers.resize(bufferIndex + 1);
+            if (lightShadowBuffer)
+            {
+                lightShadowBuffer->Bind();
+                glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
+                glClear(GL_DEPTH_BUFFER_BIT);
+
+                // 设置光源空间矩阵
+                glm::mat4 lightSpaceMatrix = spotLight->GetLightSpaceMatrix();
+                shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
+
+                // 渲染所有模型和几何体
+                for (auto &model : models)
+                {
+                    // 构建模型矩阵
+                    glm::mat4 modelMatrix = glm::mat4(1.0f);
+                    modelMatrix = glm::translate(modelMatrix, model->GetPosition());
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
+                    modelMatrix = glm::scale(modelMatrix, model->GetScale());
+                    
+                    shadowDepthShader->SetMat4("model", modelMatrix);
+                    model->Draw(*shadowDepthShader);
+                }
+
+                for (auto &primitive : primitives)
+                {
+                    // 构建几何体矩阵
+                    glm::mat4 modelMatrix = glm::mat4(1.0f);
+                    modelMatrix = glm::translate(modelMatrix, primitive.position);
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+                    modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+                    modelMatrix = glm::scale(modelMatrix, primitive.scale);
+                    
+                    shadowDepthShader->SetMat4("model", modelMatrix);
+                    primitive.mesh->Draw(*shadowDepthShader);
+                }
+                
+                 // 将阴影贴图绑定到光源
+                spotLight->SetShadowMap(lightShadowBuffer->GetDepthTexture());
             }
-            lightShadowBuffers[bufferIndex] = std::move(lightShadowBuffer);
         }
     }
 

@@ -33,6 +33,12 @@ struct Material {
 
 uniform Material material;
 
+// Octahedron-normal vectors encoding
+vec2 octEncode(vec3 v) {
+    v /= (abs(v.x) + abs(v.y) + abs(v.z));
+    return (v.z >= 0.0) ? v.xy : (1.0 - abs(v.yx)) * sign(v.xy);
+}
+
 // 获取法线贴图的法线
 vec3 getNormalFromMap()
 {
@@ -44,8 +50,9 @@ void main()
 {
     // 法线 (世界空间) + 粗糙度 -> RT1
     vec3 N = material.useNormalMap ? getNormalFromMap() : normalize(fs_in.Normal);
+    vec2 packedNormal = octEncode(N);
     float roughness = material.useRoughnessMap ? texture(material.roughnessMap, fs_in.TexCoord).r : material.roughness;
-    gNormalRoughness = vec4(N, roughness);
+    gNormalRoughness = vec4(packedNormal, roughness, 0.0);
 
     // 反照率 + ID -> RT0 (ID=1.0 for PBR)
     vec3 albedo = material.useAlbedoMap ? texture(material.albedoMap, fs_in.TexCoord).rgb : material.albedo;

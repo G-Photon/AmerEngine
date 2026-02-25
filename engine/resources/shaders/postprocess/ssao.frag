@@ -16,6 +16,13 @@ uniform mat4 projection;
 uniform mat4 invProjection;
 uniform vec2 noiseScale;
 
+// Octahedron-normal vectors decoding
+vec3 octDecode(vec2 e) {
+    vec3 v = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+    if (v.z < 0.0) v.xy = (1.0 - abs(v.yx)) * sign(v.xy);
+    return normalize(v);
+}
+
 vec3 ReconstructViewPos(vec2 texCoords, float depth) {
     vec4 clipSpacePosition = vec4(texCoords * 2.0 - 1.0, depth * 2.0 - 1.0, 1.0);
     vec4 viewSpacePosition = invProjection * clipSpacePosition;
@@ -32,7 +39,7 @@ void main() {
     vec3 fragPos = ReconstructViewPos(TexCoords, depth);
     
     // 获取视图空间法线
-    vec3 worldNormal = texture(gNormalRoughness, TexCoords).rgb;
+    vec3 worldNormal = octDecode(texture(gNormalRoughness, TexCoords).rg);
     vec3 normal = normalize(vec3(view * vec4(worldNormal, 0.0))); 
     
     // 重建TBN矩阵

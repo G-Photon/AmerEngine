@@ -275,6 +275,12 @@ vec3 ReconstructWorldPos(vec2 texCoords, float depth) {
     return worldPos.xyz;
 }
 
+vec3 octDecode(vec2 e) {
+    vec3 v = vec3(e.xy, 1.0 - abs(e.x) - abs(e.y));
+    if (v.z < 0.0) v.xy = (1.0 - abs(v.yx)) * sign(v.xy);
+    return normalize(v);
+}
+
 vec2 CalcTexCoord()
 {
    return gl_FragCoord.xy / screenSize;
@@ -293,8 +299,8 @@ void main() {
     float materialType = albedoData.a; // 0.0=BP, 1.0=PBR
 
     vec4 normalData = texture(gNormalRoughness, TexCoords);
-    vec3 normal = normalize(normalData.rgb);
-    float roughness = normalData.a;
+    vec3 normal = octDecode(normalData.rg);
+    float roughness = normalData.b; // Now roughness is in B channel
 
     vec4 mraData = texture(gMRA, TexCoords);
     

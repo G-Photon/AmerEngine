@@ -35,6 +35,13 @@ struct Material {
 uniform Material material;
 uniform float NEAR= 0.1;
 uniform float FAR= 100.0;
+
+// Octahedron-normal vectors encoding
+vec2 octEncode(vec3 v) {
+    v /= (abs(v.x) + abs(v.y) + abs(v.z));
+    return (v.z >= 0.0) ? v.xy : (1.0 - abs(v.yx)) * sign(v.xy);
+}
+
 float LinearizeDepth(float depth)
 {
     float z = depth * 2.0 - 1.0; // 回到NDC
@@ -54,7 +61,7 @@ void main() {
          mat3 TBN = mat3(T, B, N);
          N = normalize(TBN * tangentNormal);
     }
-    gNormalRoughness = vec4(N, 0.0); // Roughness unused (0.0)
+    gNormalRoughness = vec4(octEncode(N), 0.0, 0.0); // Roughness unused (0.0)
 
     // RT0: 反照率 + ID (ID=0.0 for Blinn-Phong)
     vec3 albedo = material.useDiffuseMap ? texture(material.diffuseMap, TexCoords).rgb : material.diffuse;
