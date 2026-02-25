@@ -9,6 +9,8 @@ using json = nlohmann::json;
 #include <random>
 #include <chrono>
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include "utils/FileSystem.hpp"
 #include "core/Texture.hpp"
 #include "core/TextureManager.hpp"
@@ -933,6 +935,8 @@ void Renderer::Update(float deltaTime)
 
 void Renderer::Initialize()
 {
+    glGetIntegerv(GL_MAX_TEXTURE_IMAGE_UNITS, &maxTextureUnits);
+
     // 加载着色器
     forwardShader = std::make_unique<Shader>(FileSystem::GetPath("resources/shaders/forward/blinn_phong.vert"),
                                              FileSystem::GetPath("resources/shaders/forward/blinn_phong.frag"));
@@ -1255,6 +1259,7 @@ void Renderer::RenderForward()
     {
         forwardShader->SetBool("shadowEnabled", false);
     }
+    BindCSMUniformsForward(*forwardShader);
     for (size_t i = 0; i < pointLights.size(); ++i)
     {
         pointLights[i]->SetupShader(*forwardShader, i, shadowEnabled);
@@ -1300,6 +1305,7 @@ void Renderer::RenderForward()
     pbrShader->SetInt("numLights[2]", spotLights.size());
     
     pbrShader->SetBool("shadowEnabled", shadowEnabled);
+    BindCSMUniformsForward(*pbrShader);
     
     for (size_t i = 0; i < directionalLights.size(); ++i)
     {
@@ -1548,8 +1554,11 @@ void Renderer::RenderDeferred()
     // 绑定GBuffer纹理并设置uniform
 
     // 设置相机
-    deferredLightingShader->SetMat4("view", mainCamera->GetViewMatrix());
-    deferredLightingShader->SetMat4("projection", mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
+    glm::mat4 cameraView = mainCamera->GetViewMatrix();
+    glm::mat4 cameraProj = mainCamera->GetProjectionMatrix(static_cast<float>(width) / height);
+    deferredLightingShader->SetMat4("view", cameraView);
+    deferredLightingShader->SetMat4("projection", cameraProj);
+    deferredLightingShader->SetMat4("cameraView", cameraView);
     deferredLightingShader->SetVec3("viewPos", mainCamera->Position);
     deferredLightingShader->SetVec2("screenSize", glm::vec2(width, height));
     
@@ -1607,8 +1616,24 @@ void Renderer::RenderDeferred()
         deferredLightingShader->SetInt("ssao", 8);
     }
 
+    size_t dirLightIndex = 0;
     for (const auto &light : GetLights())
     {
+        if (light->getType() == 1)
+        {
+            BindCSMUniformsForLight(*deferredLightingShader, dirLightIndex);
+            ++dirLightIndex;
+
+            // 方向光通过全屏Quad做屏幕空间光照，使用单位矩阵避免被相机VP再次变换
+            deferredLightingShader->SetMat4("view", glm::mat4(1.0f));
+            deferredLightingShader->SetMat4("projection", glm::mat4(1.0f));
+        }
+        else
+        {
+            deferredLightingShader->SetBool("dirCSMEnabled", false);
+            deferredLightingShader->SetMat4("view", cameraView);
+            deferredLightingShader->SetMat4("projection", cameraProj);
+        }
         if (light->getType() != 1)
         {
             // 调试输出：记录光源类型
@@ -1687,64 +1712,121 @@ void Renderer::RenderShadows()
     glGetIntegerv(GL_FRAMEBUFFER_BINDING, &prevFramebuffer);
 
     shadowDepthShader->Use();
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
 
-    // 渲染定向光阴影
-    for (size_t i = 0; i < directionalLights.size(); ++i)
-    {
-        auto &dirLight = directionalLights[i];
-        if (dirLight->HasShadows())
+    auto renderShadowCasters = [&](Shader& shader) {
+        for (auto &model : models)
         {
-            // 为每个光源创建独立的阴影缓冲区
-            std::unique_ptr<Framebuffer> lightShadowBuffer = std::make_unique<Framebuffer>(2048, 2048);
-            lightShadowBuffer->AddDepthTexture();
-            lightShadowBuffer->CheckComplete();
-            
-            lightShadowBuffer->Bind();
-            glViewport(0, 0, lightShadowBuffer->GetWidth(), lightShadowBuffer->GetHeight());
-            glClear(GL_DEPTH_BUFFER_BIT);
+            glm::mat4 modelMatrix = glm::mat4(1.0f);
+            modelMatrix = glm::translate(modelMatrix, model->GetPosition());
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
+            modelMatrix = glm::scale(modelMatrix, model->GetScale());
+            shader.SetMat4("model", modelMatrix);
+            model->Draw(shader);
+        }
 
-            // 设置光源空间矩阵
-            glm::mat4 lightSpaceMatrix = dirLight->GetLightSpaceMatrix();
-            shadowDepthShader->SetMat4("lightSpaceMatrix", lightSpaceMatrix);
+        for (auto &primitive : primitives)
+        {
+            glm::mat4 modelMatrix = glm::mat4(1.0f);
+            modelMatrix = glm::translate(modelMatrix, primitive.position);
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
+            modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
+            modelMatrix = glm::scale(modelMatrix, primitive.scale);
+            shader.SetMat4("model", modelMatrix);
+            primitive.mesh->Draw(shader);
+        }
+    };
 
-            // 渲染所有模型和几何体
-            for (auto &model : models)
+    // 渲染定向光阴影（CSM）
+    if (directionalLights.size() > 0)
+    {
+        if (dirLightCSMData.size() < directionalLights.size())
+        {
+            dirLightCSMData.resize(directionalLights.size());
+        }
+
+        const float aspect = static_cast<float>(width) / static_cast<float>(height);
+        const float nearPlane = mainCamera->GetNearPlane();
+        const float farPlane = mainCamera->GetFarPlane();
+        const glm::mat4 view = mainCamera->GetViewMatrix();
+        auto splits = CalculateCSMSplits(nearPlane, farPlane);
+
+        for (size_t i = 0; i < directionalLights.size(); ++i)
+        {
+            auto &dirLight = directionalLights[i];
+            if (!dirLight->HasShadows())
+                continue;
+
+            auto &csmData = dirLightCSMData[i];
+            csmData.cascadeSplits = splits;
+
+            for (int c = 0; c < csmCascadeCount; ++c)
             {
-                // 构建模型矩阵
-                glm::mat4 modelMatrix = glm::mat4(1.0f);
-                modelMatrix = glm::translate(modelMatrix, model->GetPosition());
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().x), glm::vec3(1.0f, 0.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().y), glm::vec3(0.0f, 1.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(model->GetRotation().z), glm::vec3(0.0f, 0.0f, 1.0f));
-                modelMatrix = glm::scale(modelMatrix, model->GetScale());
-                
-                shadowDepthShader->SetMat4("model", modelMatrix);
-                model->Draw(*shadowDepthShader);
-            }
+                if (!csmData.buffers[c] || csmData.buffers[c]->GetWidth() != csmShadowMapSize)
+                {
+                    csmData.buffers[c] = std::make_unique<Framebuffer>(csmShadowMapSize, csmShadowMapSize);
+                    csmData.buffers[c]->AddDepthTexture();
+                    csmData.buffers[c]->CheckComplete();
+                }
 
-            for (auto &primitive : primitives)
-            {
-                // 构建几何体矩阵
-                glm::mat4 modelMatrix = glm::mat4(1.0f);
-                modelMatrix = glm::translate(modelMatrix, primitive.position);
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.x), glm::vec3(1.0f, 0.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.y), glm::vec3(0.0f, 1.0f, 0.0f));
-                modelMatrix = glm::rotate(modelMatrix, glm::radians(primitive.rotation.z), glm::vec3(0.0f, 0.0f, 1.0f));
-                modelMatrix = glm::scale(modelMatrix, primitive.scale);
-                
-                shadowDepthShader->SetMat4("model", modelMatrix);
-                primitive.mesh->Draw(*shadowDepthShader);
-            }
+                float splitNear = (c == 0) ? nearPlane : splits[c - 1];
+                float splitFar = splits[c];
+                glm::mat4 proj = glm::perspective(glm::radians(mainCamera->GetFov()), aspect, splitNear, splitFar);
 
-            // 将阴影贴图绑定到光源
-            unsigned int shadowMap = lightShadowBuffer->GetDepthTexture();
-            dirLight->SetShadowMap(shadowMap);
-            
-            // 将缓冲区保存到管理容器中（临时方案）
-            if (lightShadowBuffers.size() <= i) {
-                lightShadowBuffers.resize(i + 1);
-            }
-            lightShadowBuffers[i] = std::move(lightShadowBuffer);
+                auto corners = GetFrustumCornersWorldSpace(proj, view);
+                glm::vec3 center(0.0f);
+                for (const auto& v : corners)
+                {
+                    center += glm::vec3(v);
+                }
+                center /= static_cast<float>(corners.size());
+
+                glm::vec3 lightDir = dirLight->direction;
+                if (glm::length(lightDir) < 1e-4f)
+                {
+                    lightDir = glm::vec3(-0.2f, -1.0f, -0.3f);
+                }
+                lightDir = glm::normalize(lightDir);
+
+                glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+                if (std::abs(glm::dot(lightDir, up)) > 0.99f)
+                {
+                    up = glm::vec3(0.0f, 0.0f, 1.0f);
+                }
+
+                glm::mat4 lightView = glm::lookAt(center - lightDir * 100.0f, center, up);
+
+                glm::vec3 minExtents( std::numeric_limits<float>::max());
+                glm::vec3 maxExtents(-std::numeric_limits<float>::max());
+                for (const auto& v : corners)
+                {
+                    glm::vec4 tr = lightView * v;
+                    minExtents = glm::min(minExtents, glm::vec3(tr));
+                    maxExtents = glm::max(maxExtents, glm::vec3(tr));
+                }
+
+                const float zPadding = 50.0f;
+                minExtents.z -= zPadding;
+                maxExtents.z += zPadding;
+
+                glm::mat4 lightProj =
+                    glm::ortho(minExtents.x, maxExtents.x, minExtents.y, maxExtents.y, -maxExtents.z, -minExtents.z);
+                csmData.lightSpaceMatrices[c] = lightProj * lightView;
+
+                csmData.buffers[c]->Bind();
+                glViewport(0, 0, csmData.buffers[c]->GetWidth(), csmData.buffers[c]->GetHeight());
+                glClear(GL_DEPTH_BUFFER_BIT);
+
+                shadowDepthShader->SetMat4("lightSpaceMatrix", csmData.lightSpaceMatrices[c]);
+                renderShadowCasters(*shadowDepthShader);
+            }                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        
+
+            // 保持兼容：将第0级级联作为默认阴影贴图
+            dirLight->SetShadowMap(csmData.buffers[0]->GetDepthTexture());
         }
     }
 
@@ -1913,6 +1995,141 @@ void Renderer::RenderSkybox()
     glDepthFunc(GL_LESS);
     glDepthMask(GL_TRUE);
     glEnable(GL_CULL_FACE);
+}
+
+std::array<float, Renderer::CSM_CASCADE_COUNT> Renderer::CalculateCSMSplits(float nearPlane, float farPlane) const
+{
+    std::array<float, CSM_CASCADE_COUNT> splits{};
+    float range = farPlane - nearPlane;
+    float ratio = farPlane / nearPlane;
+
+    for (int i = 0; i < csmCascadeCount; ++i)
+    {
+        float p = (i + 1) / static_cast<float>(csmCascadeCount);
+        float logSplit = nearPlane * std::pow(ratio, p);
+        float uniformSplit = nearPlane + range * p;
+        float d = csmLambda * logSplit + (1.0f - csmLambda) * uniformSplit;
+        splits[i] = d;
+    }
+
+    for (int i = csmCascadeCount; i < CSM_CASCADE_COUNT; ++i)
+    {
+        splits[i] = farPlane;
+    }
+
+    return splits;
+}
+
+std::array<glm::vec4, 8> Renderer::GetFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view) const
+{
+    const glm::mat4 inv = glm::inverse(proj * view);
+    std::array<glm::vec4, 8> corners{};
+    int index = 0;
+    for (int x = 0; x < 2; ++x)
+    {
+        for (int y = 0; y < 2; ++y)
+        {
+            for (int z = 0; z < 2; ++z)
+            {
+                glm::vec4 pt = inv * glm::vec4(
+                    2.0f * x - 1.0f,
+                    2.0f * y - 1.0f,
+                    2.0f * z - 1.0f,
+                    1.0f);
+                corners[index++] = pt / pt.w;
+            }
+        }
+    }
+    return corners;
+}
+
+void Renderer::BindCSMUniformsForward(Shader& shader) const
+{
+    bool csmActive = shadowEnabled && csmCascadeCount > 0 && !directionalLights.empty() && !dirLightCSMData.empty();
+    if (csmActive)
+    {
+        csmActive = false;
+        for (const auto& light : directionalLights)
+        {
+            if (light->HasShadows())
+            {
+                csmActive = true;
+                break;
+            }
+        }
+    }
+
+    shader.SetBool("dirCSMEnabled", csmActive);
+    if (!csmActive)
+    {
+        return;
+    }
+
+    shader.SetInt("dirCSMCascadeCount", csmCascadeCount);
+
+    for (int i = 0; i < csmCascadeCount; ++i)
+    {
+        shader.SetFloat("dirCSMSplits[" + std::to_string(i) + "]", dirLightCSMData[0].cascadeSplits[i]);
+    }
+
+    const int baseTextureUnit = 24;
+    const int maxLightsByUnits = (maxTextureUnits > baseTextureUnit && csmCascadeCount > 0)
+        ? (maxTextureUnits - baseTextureUnit) / csmCascadeCount
+        : 0;
+    const int maxDirLights = static_cast<int>(std::min<size_t>(directionalLights.size(), std::min(4, maxLightsByUnits)));
+    if (maxDirLights <= 0)
+    {
+        shader.SetBool("dirCSMEnabled", false);
+        return;
+    }
+    for (int lightIndex = 0; lightIndex < maxDirLights; ++lightIndex)
+    {
+        const auto& csmData = dirLightCSMData[lightIndex];
+        for (int cascadeIndex = 0; cascadeIndex < csmCascadeCount; ++cascadeIndex)
+        {
+            int flatIndex = lightIndex * csmCascadeCount + cascadeIndex;
+            shader.SetMat4("dirCSMMatrix[" + std::to_string(flatIndex) + "]", csmData.lightSpaceMatrices[cascadeIndex]);
+            if (csmData.buffers[cascadeIndex])
+            {
+                glActiveTexture(GL_TEXTURE0 + baseTextureUnit + flatIndex);
+                glBindTexture(GL_TEXTURE_2D, csmData.buffers[cascadeIndex]->GetDepthTexture());
+                shader.SetInt("dirCSMMaps[" + std::to_string(flatIndex) + "]", baseTextureUnit + flatIndex);
+            }
+        }
+    }
+}
+
+void Renderer::BindCSMUniformsForLight(Shader& shader, size_t dirLightIndex) const
+{
+    bool csmActive = shadowEnabled && csmCascadeCount > 0 &&
+                     dirLightIndex < dirLightCSMData.size() &&
+                     directionalLights[dirLightIndex]->HasShadows();
+
+    shader.SetBool("dirCSMEnabled", csmActive);
+    if (!csmActive)
+    {
+        return;
+    }
+
+    shader.SetInt("dirCSMCascadeCount", csmCascadeCount);
+    const auto& csmData = dirLightCSMData[dirLightIndex];
+    const int baseTextureUnit = 24;
+    if (baseTextureUnit + csmCascadeCount > maxTextureUnits)
+    {
+        shader.SetBool("dirCSMEnabled", false);
+        return;
+    }
+    for (int i = 0; i < csmCascadeCount; ++i)
+    {
+        shader.SetMat4("dirCSMMatrix[" + std::to_string(i) + "]", csmData.lightSpaceMatrices[i]);
+        shader.SetFloat("dirCSMSplits[" + std::to_string(i) + "]", csmData.cascadeSplits[i]);
+        if (csmData.buffers[i])
+        {
+            glActiveTexture(GL_TEXTURE0 + baseTextureUnit + i);
+            glBindTexture(GL_TEXTURE_2D, csmData.buffers[i]->GetDepthTexture());
+            shader.SetInt("dirCSMMaps[" + std::to_string(i) + "]", baseTextureUnit + i);
+        }
+    }
 }
 
 void Renderer::RenderSSAO()
@@ -2463,11 +2680,35 @@ void Renderer::SetShadow(bool enabled)
     shadowEnabled = enabled;
 }
 
+void Renderer::SetCSMCascadeCount(int count)
+{
+    int clamped = std::max(1, std::min(count, CSM_CASCADE_COUNT));
+    if (csmCascadeCount == clamped)
+        return;
+    csmCascadeCount = clamped;
+    dirLightCSMData.clear();
+}
+
+void Renderer::SetCSMLambda(float lambda)
+{
+    csmLambda = std::max(0.0f, std::min(lambda, 1.0f));
+}
+
+void Renderer::SetCSMShadowMapSize(int size)
+{
+    int clamped = std::max(256, std::min(size, 8192));
+    if (csmShadowMapSize == clamped)
+        return;
+    csmShadowMapSize = clamped;
+    dirLightCSMData.clear();
+}
+
 // 多光源阴影管理函数实现
 void Renderer::ClearLightShadowBuffers()
 {
     lightShadowBuffers.clear();
     lightToShadowMap.clear();
+    dirLightCSMData.clear();
 }
 
 void Renderer::SetIBL(bool enabled)

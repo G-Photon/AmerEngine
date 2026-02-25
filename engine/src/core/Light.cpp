@@ -445,14 +445,27 @@ void SpotLight::drawLightMesh(const std::unique_ptr<Shader> &shader)
 // 阴影相关方法实现
 glm::mat4 DirectionalLight::GetLightSpaceMatrix() const
 {
+    glm::vec3 safeDir = direction;
+    if (glm::length(safeDir) < 1e-4f)
+    {
+        safeDir = glm::vec3(-0.2f, -1.0f, -0.3f);
+    }
+    safeDir = glm::normalize(safeDir);
+
+    glm::vec3 up = glm::vec3(0.0f, 1.0f, 0.0f);
+    if (std::abs(glm::dot(safeDir, up)) > 0.99f)
+    {
+        up = glm::vec3(0.0f, 0.0f, 1.0f);
+    }
+
     // 计算光源位置（在场景中心上方，朝向光源方向的反方向）
-    glm::vec3 lightPos = glm::vec3(0.0f, 10.0f, 0.0f) - glm::normalize(direction) * 10.0f;
+    glm::vec3 lightPos = glm::vec3(0.0f, 10.0f, 0.0f) - safeDir * 10.0f;
     
     // 计算光源视图矩阵
     glm::mat4 lightView = glm::lookAt(
         lightPos,                    // 光源位置
         glm::vec3(0.0f, 0.0f, 0.0f), // 看向场景中心
-        glm::vec3(0.0f, 1.0f, 0.0f)  // 上方向
+        up                           // 上方向
     );
     
     // 正交投影矩阵

@@ -1,13 +1,14 @@
 #pragma once
 
 #include "core/RenderPass.hpp"
+#include "core/Model.hpp"
 #include <memory>
 #include <vector>
 #include <glm/glm.hpp>
+#include <algorithm>
 
 class Shader;
 class Framebuffer;
-class Model;
 class Mesh;
 
 /**

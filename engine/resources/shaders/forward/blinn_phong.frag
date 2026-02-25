@@ -56,6 +56,7 @@ struct SpotLight {
 };
 
 #define NR_POINT_LIGHTS 4
+#define CSM_CASCADE_COUNT 4
 
 in vec3 FragPos;
 in vec2 TexCoords;
@@ -66,6 +67,7 @@ in vec3 Bitangent;
 out vec4 FragColor;
 
 uniform vec3 viewPos;
+uniform mat4 view;
 uniform Material material;
 uniform int numLights[3]; // [0]: DirLight, [1]: PointLight, [2]: SpotLight
 uniform bool shadowEnabled;
@@ -74,6 +76,12 @@ uniform PointLight pointLights[NR_POINT_LIGHTS];
 uniform SpotLight spotLights[NR_POINT_LIGHTS];
 uniform bool useNormalMapping;
 
+uniform bool dirCSMEnabled;
+uniform int dirCSMCascadeCount;
+uniform sampler2D dirCSMMaps[NR_POINT_LIGHTS * CSM_CASCADE_COUNT];
+uniform mat4 dirCSMMatrix[NR_POINT_LIGHTS * CSM_CASCADE_COUNT];
+uniform float dirCSMSplits[CSM_CASCADE_COUNT];
+
 // 函数声明
 vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 fragPos);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
@@ -81,6 +89,8 @@ vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 fragPos, vec3 viewDir);
 
 // 阴影计算函数
 float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap);
+float ShadowCalculationCSM(vec3 fragPos, int lightIndex);
+vec3 CalcDirLightCSM(DirLight light, vec3 normal, vec3 viewDir, vec3 fragPos, int lightIndex);
 
 void main() {
     // 属性
@@ -111,7 +121,11 @@ void main() {
     vec3 result = vec3(0.0);
     //定向光贡献
     for(int i = 0; i < numLights[0]; i++) {
-        result += CalcDirLight(dirLight[i], norm, viewDir, FragPos);
+        if (dirCSMEnabled) {
+            result += CalcDirLightCSM(dirLight[i], norm, viewDir, FragPos, i);
+        } else {
+            result += CalcDirLight(dirLight[i], norm, viewDir, FragPos);
+        }
     }
     
     // 点光源贡献
@@ -166,6 +180,38 @@ vec3 CalcDirLight(DirLight light, vec3 normal, vec3 viewDir, vec3 fragPos) {
     diffuse *= (1.0 - shadow);
     specular *= (1.0 - shadow);
     
+    return (ambient + diffuse + specular);
+}
+
+vec3 CalcDirLightCSM(DirLight light, vec3 normal, vec3 viewDir, vec3 fragPos, int lightIndex) {
+    vec3 lightDir = normalize(-light.direction);
+    float diff = max(dot(normal, lightDir), 0.0);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float spec = pow(max(dot(normal, halfwayDir), 0.0), material.shininess);
+
+    float shadow = 0.0;
+    if (light.hasShadows) {
+        shadow = ShadowCalculationCSM(fragPos, lightIndex);
+    }
+
+    vec3 ambient, diffuse, specular;
+    if (material.useDiffuseMap) {
+        ambient = light.ambient * vec3(texture(material.diffuseMap, TexCoords));
+        diffuse = light.diffuse * diff * vec3(texture(material.diffuseMap, TexCoords));
+    } else {
+        ambient = light.ambient * material.diffuse;
+        diffuse = light.diffuse * diff * material.diffuse;
+    }
+
+    if (material.useSpecularMap) {
+        specular = light.specular * spec * vec3(texture(material.specularMap, TexCoords));
+    } else {
+        specular = light.specular * spec * material.specular;
+    }
+
+    diffuse *= (1.0 - shadow);
+    specular *= (1.0 - shadow);
+
     return (ambient + diffuse + specular);
 }
 
@@ -295,5 +341,44 @@ float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap)
         // 这里可以添加调试输出
     }
     
+    return shadow;
+}
+
+float ShadowCalculationCSM(vec3 fragPos, int lightIndex)
+{
+    vec4 fragPosView = view * vec4(fragPos, 1.0);
+    float depth = -fragPosView.z;
+
+    int cascadeIndex = 0;
+    for (int i = 0; i < dirCSMCascadeCount; ++i)
+    {
+        if (depth < dirCSMSplits[i])
+        {
+            cascadeIndex = i;
+            break;
+        }
+        cascadeIndex = dirCSMCascadeCount - 1;
+    }
+
+    int baseIndex = lightIndex * dirCSMCascadeCount + cascadeIndex;
+    vec4 fragPosLightSpace = dirCSMMatrix[baseIndex] * vec4(fragPos, 1.0);
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;
+
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(dirCSMMaps[baseIndex], 0);
+    for (int x = -1; x <= 1; ++x)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(dirCSMMaps[baseIndex], projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += projCoords.z - 0.005 > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+
     return shadow;
 }

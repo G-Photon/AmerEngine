@@ -279,6 +279,8 @@ void EditorUI::CreateDefaultLayout()
 
     ImGui::DockBuilderDockWindow(ConvertToUTF8(L"视口").c_str(), dock_main_id);
     ImGui::DockBuilderDockWindow(ConvertToUTF8(L"检视器").c_str(), dock_right_id);
+    ImGui::DockBuilderDockWindow(ConvertToUTF8(L"材质编辑器").c_str(), dock_right_id);
+    ImGui::DockBuilderDockWindow(ConvertToUTF8(L"渲染器设置").c_str(), dock_right_id);
     ImGui::DockBuilderDockWindow(ConvertToUTF8(L"场景层级").c_str(), dock_left_id);
     ImGui::DockBuilderDockWindow(ConvertToUTF8(L"资源管理").c_str(), dock_bottom_id);
     ImGui::DockBuilderDockWindow(ConvertToUTF8(L"控制台").c_str(), dock_bottom_id);
@@ -2490,6 +2492,45 @@ void EditorUI::ShowShadowSettings()
         renderer->SetShadow(shadow);
     }
     DrawTooltip(ConvertToUTF8(L"启用实时阴影渲染").c_str());
+
+    if (shadow)
+    {
+        ImGui::Separator();
+        ImGui::TextUnformatted(ConvertToUTF8(L"CSM 设置").c_str());
+
+        int cascades = renderer->GetCSMCascadeCount();
+        if (ImGui::SliderInt(ConvertToUTF8(L"级联数量").c_str(), &cascades, 1, 4))
+        {
+            renderer->SetCSMCascadeCount(cascades);
+        }
+        DrawTooltip(ConvertToUTF8(L"级联数量越多，远处阴影更清晰，但开销更高").c_str());
+
+        float lambda = renderer->GetCSMLambda();
+        if (ImGui::SliderFloat(ConvertToUTF8(L"分割策略(λ)").c_str(), &lambda, 0.0f, 1.0f, "%.2f"))
+        {
+            renderer->SetCSMLambda(lambda);
+        }
+        DrawTooltip(ConvertToUTF8(L"0=均匀分割，1=对数分割").c_str());
+
+        int shadowSize = renderer->GetCSMShadowMapSize();
+        static const int sizeOptions[] = {1024, 2048, 4096};
+        static const char* sizeLabels[] = {"1024", "2048", "4096"};
+        int currentIndex = 1;
+        for (int i = 0; i < 3; ++i)
+        {
+            if (shadowSize == sizeOptions[i])
+            {
+                currentIndex = i;
+                break;
+            }
+        }
+
+        if (ImGui::Combo(ConvertToUTF8(L"阴影分辨率").c_str(), &currentIndex, sizeLabels, IM_ARRAYSIZE(sizeLabels)))
+        {
+            renderer->SetCSMShadowMapSize(sizeOptions[currentIndex]);
+        }
+        DrawTooltip(ConvertToUTF8(L"更高分辨率提升质量，但显存与性能开销更大").c_str());
+    }
 }
 
 // 实用工具函数
@@ -2563,8 +2604,18 @@ void EditorUI::OnLightInspectorGUI(Light &light)
     {
         auto &directionalLight = static_cast<DirectionalLight &>(light);
         ImGui::Text("%s %d", ConvertToUTF8(L"方向光源").c_str(), directionalLight.number);
-        ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(directionalLight.direction), 0.1f,- 1.0f, 1.0f);
-        //directionalLight.direction = glm::normalize(directionalLight.direction);
+        if (ImGui::DragFloat3(ConvertToUTF8(L"方向").c_str(), glm::value_ptr(directionalLight.direction), 0.1f,- 1.0f, 1.0f))
+        {
+            float len = glm::length(directionalLight.direction);
+            if (len > 1e-4f)
+            {
+                directionalLight.direction = glm::normalize(directionalLight.direction);
+            }
+            else
+            {
+                directionalLight.direction = glm::normalize(glm::vec3(-0.2f, -1.0f, -0.3f));
+            }
+        }
         ImGui::Text("%s: (0.0, 0.0, 0.0)", ConvertToUTF8(L"位置").c_str()); // 定向光没有位置
         ImGui::ColorEdit3(ConvertToUTF8(L"环境光").c_str(), glm::value_ptr(directionalLight.ambient));
         ImGui::ColorEdit3(ConvertToUTF8(L"漫反射").c_str(), glm::value_ptr(directionalLight.diffuse));
@@ -2871,6 +2922,12 @@ void EditorUI::ShowAssetPreviewWindow()
 void EditorUI::ShowDebugViewport()
 {
     ImGui::Begin(ConvertToUTF8(L"调试视口").c_str(), &showDebugViewport, ImGuiWindowFlags_MenuBar);
+
+    static bool showFinalResult = true;
+    static bool showGBuffer = true;
+    static bool showSSAO = true;
+    static bool showPostProcess = true;
+    static bool showShadowMaps = true;
     
     // 只有当调试视口窗口打开时才渲染调试纹理（节省性能）
     if (!showDebugViewport)
@@ -2884,15 +2941,11 @@ void EditorUI::ShowDebugViewport()
     {
         if (ImGui::BeginMenu(ConvertToUTF8(L"显示选项").c_str()))
         {
-            static bool showFinalResult = true;
-            static bool showGBuffer = true;
-            static bool showSSAO = true;
-            static bool showPostProcess = true;
-            
             ImGui::MenuItem(ConvertToUTF8(L"最终结果").c_str(), nullptr, &showFinalResult);
             ImGui::MenuItem(ConvertToUTF8(L"G-Buffer").c_str(), nullptr, &showGBuffer);
             ImGui::MenuItem(ConvertToUTF8(L"SSAO").c_str(), nullptr, &showSSAO);
             ImGui::MenuItem(ConvertToUTF8(L"后处理效果").c_str(), nullptr, &showPostProcess);
+            ImGui::MenuItem(ConvertToUTF8(L"阴影贴图").c_str(), nullptr, &showShadowMaps);
             ImGui::EndMenu();
         }
         ImGui::EndMenuBar();
@@ -2921,12 +2974,6 @@ void EditorUI::ShowDebugViewport()
     }
     
     ImGui::Separator();
-    
-    // 获取显示选项状态（为了在静态函数外访问）
-    static bool showFinalResult = true;
-    static bool showGBuffer = true;
-    static bool showSSAO = true;
-    static bool showPostProcess = true;
     
     // ===== 最终渲染结果 =====
     if (showFinalResult)
@@ -3173,6 +3220,57 @@ void EditorUI::ShowDebugViewport()
             if (!hasPostProcess)
             {
                 ImGui::TextColored(ImVec4(0.7f, 0.7f, 0.7f, 1.0f), "%s", ConvertToUTF8(L"当前未启用后处理效果").c_str());
+            }
+        }
+    }
+
+    // ===== 阴影贴图（CSM） =====
+    if (showShadowMaps)
+    {
+        if (ImGui::CollapsingHeader(ConvertToUTF8(L"阴影贴图调试").c_str(), ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            GLuint fallbackShadow = renderer->GetShadowMapTexture();
+            if (fallbackShadow != 0)
+            {
+                ImGui::Text("%s", ConvertToUTF8(L"兼容阴影贴图(默认)").c_str());
+                ImGui::Image((void *)(intptr_t)fallbackShadow, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                ImGui::Separator();
+            }
+
+            int dirLightCount = renderer->GetDirectionalLightCount();
+            int cascadeCount = renderer->GetCSMCascadeCount();
+
+            if (dirLightCount <= 0)
+            {
+                ImGui::TextColored(ImVec4(0.8f, 0.8f, 0.8f, 1.0f), "%s", ConvertToUTF8(L"当前没有方向光").c_str());
+            }
+            else
+            {
+                for (int lightIndex = 0; lightIndex < dirLightCount; ++lightIndex)
+                {
+                    std::string nodeLabel = ConvertToUTF8(L"方向光") + " " + std::to_string(lightIndex);
+                    if (ImGui::TreeNode(nodeLabel.c_str()))
+                    {
+                        for (int cascade = 0; cascade < cascadeCount; ++cascade)
+                        {
+                            GLuint csmTex = renderer->GetDirectionalCSMTexture(lightIndex, cascade);
+                            std::string texLabel = ConvertToUTF8(L"级联") + " " + std::to_string(cascade);
+                            ImGui::Text("%s", texLabel.c_str());
+                            if (csmTex != 0)
+                            {
+                                ImGui::Image((void *)(intptr_t)csmTex, textureSize, ImVec2(0, 1), ImVec2(1, 0));
+                            }
+                            else
+                            {
+                                ImGui::TextColored(ImVec4(1, 0.4f, 0.4f, 1), "%s", ConvertToUTF8(L"该级联暂无数据").c_str());
+                            }
+
+                            if (cascade < cascadeCount - 1)
+                                ImGui::SameLine();
+                        }
+                        ImGui::TreePop();
+                    }
+                }
             }
         }
     }
@@ -3512,14 +3610,14 @@ void EditorUI::ShowPerformanceStats()
     {
         const auto& perfStats = renderer->GetPerformanceStats();
 
-        ImGui::Text(ConvertToUTF8(L"=== 视锥剔除 ===").c_str());
+        ImGui::Text("%s", ConvertToUTF8(L"=== 视锥剔除 ===").c_str());
         ImGui::Text(ConvertToUTF8(L"可见模型数: %d").c_str(), perfStats.visibleModelCount);
         ImGui::Text(ConvertToUTF8(L"被剔除模型数: %d").c_str(), perfStats.culledModelCount);
         ImGui::Text(ConvertToUTF8(L"可见几何体数: %d").c_str(), perfStats.visiblePrimitiveCount);
         ImGui::Text(ConvertToUTF8(L"被剔除几何体数: %d").c_str(), perfStats.culledPrimitiveCount);
         
         ImGui::Spacing();
-        ImGui::Text(ConvertToUTF8(L"=== Draw Call 优化 ===").c_str());
+        ImGui::Text("%s", ConvertToUTF8(L"=== Draw Call 优化 ===").c_str());
         ImGui::Text(ConvertToUTF8(L"总 Draw Call 数: %d").c_str(), perfStats.totalDrawCalls);
         
         // 计算剔除率（包括模型和几何体）

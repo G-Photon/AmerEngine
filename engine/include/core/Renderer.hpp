@@ -9,6 +9,7 @@
 #include "Model.hpp"
 #include "Shader.hpp"
 #include <glm/glm.hpp>
+#include <array>
 #include <memory>
 #include <unordered_map>
 #include <vector>
@@ -133,6 +134,12 @@ class Renderer
     {
         return shadowEnabled;
     }
+    int GetCSMCascadeCount() const { return csmCascadeCount; }
+    float GetCSMLambda() const { return csmLambda; }
+    int GetCSMShadowMapSize() const { return csmShadowMapSize; }
+    void SetCSMCascadeCount(int count);
+    void SetCSMLambda(float lambda);
+    void SetCSMShadowMapSize(int size);
     bool IsIBLEnabled() const
     {
         return iblEnabled;
@@ -264,7 +271,24 @@ class Renderer
     GLuint GetGBufferAOTexture() const { return gBuffer ? gBuffer->GetColorTexture(6) : 0; }
     GLuint GetGBufferAmbientTexture() const { return gBuffer ? gBuffer->GetColorTexture(7) : 0; }
     GLuint GetGBufferDepthTexture() const { return gBuffer ? gBuffer->GetDepthTexture() : 0; }
-    GLuint GetShadowMapTexture() const { return shadowBuffer ? shadowBuffer->GetDepthTexture() : 0; }
+    GLuint GetShadowMapTexture() const
+    {
+        if (!dirLightCSMData.empty() && dirLightCSMData[0].buffers[0])
+            return dirLightCSMData[0].buffers[0]->GetDepthTexture();
+        return shadowBuffer ? shadowBuffer->GetDepthTexture() : 0;
+    }
+    int GetDirectionalLightCount() const { return static_cast<int>(directionalLights.size()); }
+    GLuint GetDirectionalCSMTexture(int lightIndex, int cascadeIndex) const
+    {
+        if (lightIndex < 0 || cascadeIndex < 0)
+            return 0;
+        if (lightIndex >= static_cast<int>(dirLightCSMData.size()))
+            return 0;
+        if (cascadeIndex >= csmCascadeCount || cascadeIndex >= CSM_CASCADE_COUNT)
+            return 0;
+        const auto &buffer = dirLightCSMData[lightIndex].buffers[cascadeIndex];
+        return buffer ? buffer->GetDepthTexture() : 0;
+    }
     GLuint GetSSAOTexture() const { return ssaoBuffer ? ssaoBuffer->GetColorTexture(0) : 0; }
     GLuint GetSSAOBlurTexture() const { return ssaoBlurBuffer ? ssaoBlurBuffer->GetColorTexture(0) : 0; }
     GLuint GetHDRTexture() const { return hdrBuffer ? hdrBuffer->GetColorTexture(0) : 0; }
@@ -292,6 +316,14 @@ class Renderer
     const PerformanceStats& GetPerformanceStats() const { return perfStats; }
 
   private:
+        static constexpr int CSM_CASCADE_COUNT = 4;
+        struct CSMDirectionalData
+        {
+                std::array<std::unique_ptr<Framebuffer>, CSM_CASCADE_COUNT> buffers;
+                std::array<glm::mat4, CSM_CASCADE_COUNT> lightSpaceMatrices;
+                std::array<float, CSM_CASCADE_COUNT> cascadeSplits;
+        };
+
     void RenderForward();
     void RenderDeferred();
     void RenderPostProcessing();
@@ -325,6 +357,11 @@ class Renderer
     // IBL相关方法
     void SetupIBL();
 
+    std::array<float, CSM_CASCADE_COUNT> CalculateCSMSplits(float nearPlane, float farPlane) const;
+    std::array<glm::vec4, 8> GetFrustumCornersWorldSpace(const glm::mat4& proj, const glm::mat4& view) const;
+    void BindCSMUniformsForward(Shader& shader) const;
+    void BindCSMUniformsForLight(Shader& shader, size_t dirLightIndex) const;
+
     int width, height;
 
     RenderMode currentMode = FORWARD;
@@ -343,6 +380,12 @@ class Renderer
     // 多光源阴影缓冲区管理
     std::vector<std::unique_ptr<Framebuffer>> lightShadowBuffers;
     std::unordered_map<Light*, unsigned int> lightToShadowMap;
+
+    // CSM 阴影数据（定向光）
+    std::vector<CSMDirectionalData> dirLightCSMData;
+    int csmCascadeCount = CSM_CASCADE_COUNT;
+    float csmLambda = 0.5f;
+    int csmShadowMapSize = 2048;
 
     std::unique_ptr<Framebuffer> hdrBufferMS;
 
@@ -412,6 +455,8 @@ class Renderer
     bool iblEnabled = false;
     bool showLights = false;
     bool fxaaEnabled = false;
+
+    int maxTextureUnits = 32;
     
     // 背景类型
     BackgroundType backgroundType = SKYBOX;

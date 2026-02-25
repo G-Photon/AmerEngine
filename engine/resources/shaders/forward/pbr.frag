@@ -67,11 +67,13 @@ struct SpotLight {
 // Uniforms
 uniform Material material;
 uniform vec3 viewPos;
+uniform mat4 view;
 
 // 光源数组
 #define MAX_DIR_LIGHTS 4
 #define MAX_POINT_LIGHTS 32
 #define MAX_SPOT_LIGHTS 32
+#define CSM_CASCADE_COUNT 4
 
 uniform DirectionalLight dirLights[MAX_DIR_LIGHTS];
 uniform PointLight pointLights[MAX_POINT_LIGHTS];
@@ -86,6 +88,11 @@ uniform bool iblEnabled;
 
 // 阴影
 uniform bool shadowEnabled;
+uniform bool dirCSMEnabled;
+uniform int dirCSMCascadeCount;
+uniform sampler2D dirCSMMaps[MAX_DIR_LIGHTS * CSM_CASCADE_COUNT];
+uniform mat4 dirCSMMatrix[MAX_DIR_LIGHTS * CSM_CASCADE_COUNT];
+uniform float dirCSMSplits[CSM_CASCADE_COUNT];
 
 const float PI = 3.14159265359;
 
@@ -97,7 +104,9 @@ float GeometrySmith(vec3 N, vec3 V, vec3 L, float roughness);
 vec3 fresnelSchlick(float cosTheta, vec3 F0);
 vec3 fresnelSchlickRoughness(float cosTheta, vec3 F0, float roughness);
 float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap);
+float ShadowCalculationCSM(vec3 fragPos, int lightIndex);
 vec3 CalcDirLight(DirectionalLight light, vec3 normal, vec3 viewDir, vec3 albedo, float metallic, float roughness, vec3 F0);
+vec3 CalcDirLightCSM(DirectionalLight light, vec3 normal, vec3 viewDir, vec3 albedo, float metallic, float roughness, vec3 F0, int lightIndex);
 vec3 CalcPointLight(PointLight light, vec3 normal, vec3 viewDir, vec3 albedo, float metallic, float roughness, vec3 F0);
 vec3 CalcSpotLight(SpotLight light, vec3 normal, vec3 viewDir, vec3 albedo, float metallic, float roughness, vec3 F0);
 
@@ -164,17 +173,61 @@ float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap)
     // 变换到[0,1]的范围
     projCoords = projCoords * 0.5 + 0.5;
 
-    if(projCoords.z > 1.0)
+    if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
         return 0.0;
 
-    // 获取最近点的深度值
-    float closestDepth = texture(shadowMap, projCoords.xy).r; 
-    // 获取当前片段的深度值
     float currentDepth = projCoords.z;
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(shadowMap, 0);
 
-    // 偏移量以减少阴影失真
-    float bias = 0.005;
-    float shadow = currentDepth - bias > closestDepth ? 1.0 : 0.0;
+    for(int x = -1; x <= 1; ++x)
+    {
+        for(int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(shadowMap, projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
+
+    return shadow;
+}
+
+float ShadowCalculationCSM(vec3 fragPos, int lightIndex)
+{
+    vec4 fragPosView = view * vec4(fragPos, 1.0);
+    float depth = -fragPosView.z;
+
+    int cascadeIndex = 0;
+    for (int i = 0; i < dirCSMCascadeCount; ++i)
+    {
+        if (depth < dirCSMSplits[i])
+        {
+            cascadeIndex = i;
+            break;
+        }
+        cascadeIndex = dirCSMCascadeCount - 1;
+    }
+
+    int baseIndex = lightIndex * dirCSMCascadeCount + cascadeIndex;
+    vec4 fragPosLightSpace = dirCSMMatrix[baseIndex] * vec4(fragPos, 1.0);
+    vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+    projCoords = projCoords * 0.5 + 0.5;
+
+    if (projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+        return 0.0;
+
+    float shadow = 0.0;
+    vec2 texelSize = 1.0 / textureSize(dirCSMMaps[baseIndex], 0);
+    for (int x = -1; x <= 1; ++x)
+    {
+        for (int y = -1; y <= 1; ++y)
+        {
+            float pcfDepth = texture(dirCSMMaps[baseIndex], projCoords.xy + vec2(x, y) * texelSize).r;
+            shadow += projCoords.z - 0.005 > pcfDepth ? 1.0 : 0.0;
+        }
+    }
+    shadow /= 9.0;
 
     return shadow;
 }
@@ -208,6 +261,34 @@ vec3 CalcDirLight(DirectionalLight light, vec3 normal, vec3 viewDir, vec3 albedo
     
     vec3 radiance = light.color * light.intensity;
     
+    return (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
+}
+
+vec3 CalcDirLightCSM(DirectionalLight light, vec3 normal, vec3 viewDir, vec3 albedo, float metallic, float roughness, vec3 F0, int lightIndex)
+{
+    vec3 lightDir = normalize(-light.direction);
+    vec3 halfwayDir = normalize(lightDir + viewDir);
+    float NdotL = max(dot(normal, lightDir), 0.0);
+
+    float shadow = 0.0;
+    if (light.shadowEnabled && shadowEnabled) {
+        shadow = ShadowCalculationCSM(fs_in.FragPos, lightIndex);
+    }
+
+    float NDF = DistributionGGX(normal, halfwayDir, roughness);
+    float G = GeometrySmith(normal, viewDir, lightDir, roughness);
+    vec3 F = fresnelSchlick(max(dot(halfwayDir, viewDir), 0.0), F0);
+
+    vec3 kS = F;
+    vec3 kD = vec3(1.0) - kS;
+    kD *= 1.0 - metallic;
+
+    vec3 numerator = NDF * G * F;
+    float denominator = 4.0 * max(dot(normal, viewDir), 0.0) * max(dot(normal, lightDir), 0.0) + 0.0001;
+    vec3 specular = numerator / denominator;
+
+    vec3 radiance = light.color * light.intensity;
+
     return (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
 }
 
@@ -302,7 +383,11 @@ void main()
     
     // 方向光
     for(int i = 0; i < numLights[0]; ++i) {
-        Lo += CalcDirLight(dirLights[i], normal, viewDir, albedo, metallic, roughness, F0);
+        if (dirCSMEnabled) {
+            Lo += CalcDirLightCSM(dirLights[i], normal, viewDir, albedo, metallic, roughness, F0, i);
+        } else {
+            Lo += CalcDirLight(dirLights[i], normal, viewDir, albedo, metallic, roughness, F0);
+        }
     }
     
     // 点光源

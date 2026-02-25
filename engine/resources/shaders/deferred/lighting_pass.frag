@@ -45,8 +45,17 @@ uniform sampler2D lightShadowMap; // 单独定义阴影贴图
 
 uniform int lightType; // 0:点光源, 1:方向光, 2:聚光灯
 uniform vec3 viewPos;   // 相机位置
+uniform mat4 view;
+uniform mat4 cameraView;
 uniform vec2 screenSize; // 屏幕尺寸，用于计算纹理坐标
 uniform bool shadowEnabled; // 全局阴影开关
+
+#define CSM_CASCADE_COUNT 4
+uniform bool dirCSMEnabled;
+uniform int dirCSMCascadeCount;
+uniform sampler2D dirCSMMaps[CSM_CASCADE_COUNT];
+uniform mat4 dirCSMMatrix[CSM_CASCADE_COUNT];
+uniform float dirCSMSplits[CSM_CASCADE_COUNT];
 
 const float PI = 3.14159265359;
 const float SHININESS_FACTOR = 32.0; // 高光系数
@@ -90,6 +99,115 @@ float ShadowCalculation(vec4 fragPosLightSpace, sampler2D shadowMap)
     shadow /= 9.0;
     
     return shadow;
+}
+
+float ShadowCalculationCSM(vec3 fragPos)
+{
+    vec4 fragPosView = cameraView * vec4(fragPos, 1.0);
+    float depth = -fragPosView.z;
+
+    if (dirCSMCascadeCount <= 0)
+        return 0.0;
+
+    int cascadeIndex = 0;
+    for (int i = 0; i < dirCSMCascadeCount; ++i)
+    {
+        if (depth < dirCSMSplits[i])
+        {
+            cascadeIndex = i;
+            break;
+        }
+        cascadeIndex = dirCSMCascadeCount - 1;
+    }
+
+    if (cascadeIndex == 0)
+    {
+        vec4 fragPosLightSpace = dirCSMMatrix[0] * vec4(fragPos, 1.0);
+        vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+        projCoords = projCoords * 0.5 + 0.5;
+
+        if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+            return 0.0;
+
+        float currentDepth = projCoords.z;
+        float shadow = 0.0;
+        vec2 texelSize = 1.0 / textureSize(dirCSMMaps[0], 0);
+        for(int x = -1; x <= 1; ++x)
+        {
+            for(int y = -1; y <= 1; ++y)
+            {
+                float pcfDepth = texture(dirCSMMaps[0], projCoords.xy + vec2(x, y) * texelSize).r;
+                shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+            }
+        }
+        return shadow / 9.0;
+    }
+    else if (cascadeIndex == 1)
+    {
+        vec4 fragPosLightSpace = dirCSMMatrix[1] * vec4(fragPos, 1.0);
+        vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+        projCoords = projCoords * 0.5 + 0.5;
+
+        if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+            return 0.0;
+
+        float currentDepth = projCoords.z;
+        float shadow = 0.0;
+        vec2 texelSize = 1.0 / textureSize(dirCSMMaps[1], 0);
+        for(int x = -1; x <= 1; ++x)
+        {
+            for(int y = -1; y <= 1; ++y)
+            {
+                float pcfDepth = texture(dirCSMMaps[1], projCoords.xy + vec2(x, y) * texelSize).r;
+                shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+            }
+        }
+        return shadow / 9.0;
+    }
+    else if (cascadeIndex == 2)
+    {
+        vec4 fragPosLightSpace = dirCSMMatrix[2] * vec4(fragPos, 1.0);
+        vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+        projCoords = projCoords * 0.5 + 0.5;
+
+        if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+            return 0.0;
+
+        float currentDepth = projCoords.z;
+        float shadow = 0.0;
+        vec2 texelSize = 1.0 / textureSize(dirCSMMaps[2], 0);
+        for(int x = -1; x <= 1; ++x)
+        {
+            for(int y = -1; y <= 1; ++y)
+            {
+                float pcfDepth = texture(dirCSMMaps[2], projCoords.xy + vec2(x, y) * texelSize).r;
+                shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+            }
+        }
+        return shadow / 9.0;
+    }
+    else
+    {
+        vec4 fragPosLightSpace = dirCSMMatrix[3] * vec4(fragPos, 1.0);
+        vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+        projCoords = projCoords * 0.5 + 0.5;
+
+        if(projCoords.z > 1.0 || projCoords.x < 0.0 || projCoords.x > 1.0 || projCoords.y < 0.0 || projCoords.y > 1.0)
+            return 0.0;
+
+        float currentDepth = projCoords.z;
+        float shadow = 0.0;
+        vec2 texelSize = 1.0 / textureSize(dirCSMMaps[3], 0);
+        for(int x = -1; x <= 1; ++x)
+        {
+            for(int y = -1; y <= 1; ++y)
+            {
+                float pcfDepth = texture(dirCSMMaps[3], projCoords.xy + vec2(x, y) * texelSize).r;
+                shadow += currentDepth - 0.005 > pcfDepth ? 1.0 : 0.0;
+            }
+        }
+        return shadow / 9.0;
+    }
 }
 
 // PBR function implementations
@@ -228,8 +346,12 @@ vec3 calculateDirectionalLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec
     // 阴影计算
     float shadow = 0.0;
     if (shadowEnabled && light.hasShadows) {
-        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
-        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        if (dirCSMEnabled) {
+            shadow = ShadowCalculationCSM(fragPos);
+        } else {
+            vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+            shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        }
     }
     
     // 环境光分量
@@ -263,8 +385,12 @@ vec3 calculatePointLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albe
     // 阴影计算
     float shadow = 0.0;
     if (shadowEnabled && light.hasShadows) {
-        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
-        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        if (dirCSMEnabled) {
+            shadow = ShadowCalculationCSM(fragPos);
+        } else {
+            vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+            shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        }
     }
     
     // 漫反射分量
@@ -304,8 +430,12 @@ vec3 calculateSpotLight(vec3 fragPos, vec3 normal, vec3 ambientColor, vec3 albed
     // 阴影计算
     float shadow = 0.0;
     if (shadowEnabled && light.hasShadows) {
-        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
-        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        if (dirCSMEnabled) {
+            shadow = ShadowCalculationCSM(fragPos);
+        } else {
+            vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+            shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        }
     }
     
     // 漫反射分量
@@ -356,9 +486,14 @@ vec3 calculatePBRDirectionalLight(vec3 fragPos, vec3 normal, vec3 albedo, float 
     
     // 阴影计算
     float shadow = 0.0;
+
     if (shadowEnabled && light.hasShadows) {
-        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
-        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        if (dirCSMEnabled) {
+            shadow = ShadowCalculationCSM(fragPos); // 必须添加这一支！
+        } else {
+            vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+            shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        }
     }
     
     vec3 Lo = (kD * albedo / PI + specular) * light.diffuse * NdotL * (1.0 - shadow);
@@ -421,8 +556,12 @@ vec3 calculatePBRPointLight(vec3 fragPos, vec3 normal, vec3 albedo, float metall
     // 阴影计算
     float shadow = 0.0;
     if (shadowEnabled && light.hasShadows) {
-        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
-        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        if (dirCSMEnabled) {
+            shadow = ShadowCalculationCSM(fragPos); // 必须添加这一支！
+        } else {
+            vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+            shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        }
     }
     
     vec3 Lo = (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
@@ -491,8 +630,12 @@ vec3 calculatePBRSpotLight(vec3 fragPos, vec3 normal, vec3 albedo, float metalli
     // 阴影计算
     float shadow = 0.0;
     if (shadowEnabled && light.hasShadows) {
-        vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
-        shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        if (dirCSMEnabled) {
+            shadow = ShadowCalculationCSM(fragPos); // 必须添加这一支！
+        } else {
+            vec4 fragPosLightSpace = light.lightSpaceMatrix * vec4(fragPos, 1.0);
+            shadow = ShadowCalculation(fragPosLightSpace, lightShadowMap);
+        }
     }
     
     vec3 Lo = (kD * albedo / PI + specular) * radiance * NdotL * (1.0 - shadow);
