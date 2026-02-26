@@ -12,6 +12,8 @@
 
 EditorUI::EditorUI(GLFWwindow *window, Renderer *renderer) : window(window), renderer(renderer)
 {
+    // Initialize FPS history buffer
+    fpsHistory.resize(240, 0.0f); // Store last 240 frames (e.g. 4 seconds at 60 FPS)
 }
 
 EditorUI::~EditorUI()
@@ -2284,6 +2286,12 @@ void EditorUI::ShowLightingSettings()
         renderer->SetLightsEnabled(showLights);
     }
     DrawTooltip(ConvertToUTF8(L"在场景中显示光源图标").c_str());
+
+    bool useSSBO = renderer->IsUseSSBO();
+    if (ImGui::Checkbox(ConvertToUTF8(L"使用 SSBO").c_str(), &useSSBO))
+    {
+        renderer->SetUseSSBO(useSSBO);
+    }
     
     ImGui::Separator();
     
@@ -3626,9 +3634,26 @@ void EditorUI::ShowPerformanceStats()
         int totalObjects = totalVisible + totalCulled;
         float cullRatio = totalObjects > 0 ? (float)totalCulled / totalObjects * 100.0f : 0.0f;
         ImGui::Text(ConvertToUTF8(L"剔除率: %.1f%%").c_str(), cullRatio);
-        
+
         float fps = perfStats.lastFrameTime > 0 ? 1000.0f / perfStats.lastFrameTime : 0.0f;
+        
+        // Update FPS history
+        fpsUpdateTimer += ImGui::GetIO().DeltaTime; 
+        if (fpsUpdateTimer > 0.033f) { // Update graph approx 30 times per second
+            fpsUpdateTimer = 0.0f;
+            // Shift history
+            if (fpsHistory.size() > 0) {
+                fpsHistory.erase(fpsHistory.begin());
+                fpsHistory.push_back(fps);
+            } else {
+                fpsHistory.resize(240, 0.0f);
+            }
+        }
+        
+        // Draw FPS Graph
+        ImGui::Separator();
         ImGui::Text(ConvertToUTF8(L"FPS: %.1f").c_str(), fps);
+        ImGui::PlotLines("##FPS", fpsHistory.data(), (int)fpsHistory.size(), 0, NULL, 0.0f, 240.0f, ImVec2(0, 80)); 
     }
     ImGui::End();
     ImGui::PopStyleVar();

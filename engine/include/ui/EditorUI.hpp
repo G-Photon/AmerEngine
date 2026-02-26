@@ -259,4 +259,8 @@ private:
     static constexpr float BUTTON_HEIGHT = 25.0f;
     static constexpr float ITEM_SPACING = 8.0f;
     static constexpr float PANEL_PADDING = 10.0f;
+
+    // FPS Graph
+    std::vector<float> fpsHistory;
+    float fpsUpdateTimer = 0.0f;
 };

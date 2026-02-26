@@ -2,13 +2,14 @@
 layout (location = 0) in vec3 aPos;
 
 uniform int lightType; // 0:点光源, 1:方向光, 2:聚光灯
+uniform bool useSSBO;
 uniform mat4 model;
 uniform mat4 view;
 uniform mat4 projection;
 
 void main()
 {
-    if (lightType == 1) {
+    if (lightType == 1 || (lightType == 0 && useSSBO)) {
         gl_Position = vec4(aPos, 1.0);
     } else {
         // 点光源和聚光灯：应用模型、视图和投影变换

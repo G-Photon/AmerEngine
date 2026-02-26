@@ -3,7 +3,7 @@ out float FragColor;
 in vec2 TexCoords;
 
 uniform sampler2D gDepth;
-uniform sampler2D gNormalRoughness;
+uniform sampler2D gNormal;
 uniform sampler2D texNoise;
 
 uniform vec3 samples[64];
@@ -39,7 +39,7 @@ void main() {
     vec3 fragPos = ReconstructViewPos(TexCoords, depth);
     
     // 获取视图空间法线
-    vec3 worldNormal = octDecode(texture(gNormalRoughness, TexCoords).rg);
+    vec3 worldNormal = octDecode(texture(gNormal, TexCoords).rg);
     vec3 normal = normalize(vec3(view * vec4(worldNormal, 0.0))); 
     
     // 重建TBN矩阵

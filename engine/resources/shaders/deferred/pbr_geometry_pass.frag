@@ -1,8 +1,8 @@
 #version 330 core
 
 layout (location = 0) out vec4 gAlbedoSpec;      // RGB: Albedo, A: MaterialID
-layout (location = 1) out vec4 gNormalRoughness; // RGB: Normal, A: Roughness
-layout (location = 2) out vec4 gMRA;             // R: Metallic, G: AO, B: Unused
+layout (location = 1) out vec2 gNormal; // RGB: Normal, A: Roughness
+layout (location = 2) out vec3 gMRA;             // R: Metallic, G: AO, B: Unused
 
 in VS_OUT {
     vec3 FragPos;
@@ -48,18 +48,19 @@ vec3 getNormalFromMap()
 
 void main()
 {
-    // 法线 (世界空间) + 粗糙度 -> RT1
+    // 法线 (世界空间) -> RT1
     vec3 N = material.useNormalMap ? getNormalFromMap() : normalize(fs_in.Normal);
     vec2 packedNormal = octEncode(N);
-    float roughness = material.useRoughnessMap ? texture(material.roughnessMap, fs_in.TexCoord).r : material.roughness;
-    gNormalRoughness = vec4(packedNormal, roughness, 0.0);
+    gNormal = vec2(packedNormal.x, packedNormal.y);
 
     // 反照率 + ID -> RT0 (ID=1.0 for PBR)
     vec3 albedo = material.useAlbedoMap ? texture(material.albedoMap, fs_in.TexCoord).rgb : material.albedo;
     gAlbedoSpec = vec4(albedo, 1.0);
     
-    // 金属度 + AO -> RT2 (R=Metallic, G=AO)
+    // 金属度 + 粗糙度 + AO -> RT2 (R=Metallic, G=Roughness, B=AO)
     float metallic = material.useMetallicMap ? texture(material.metallicMap, fs_in.TexCoord).r : material.metallic;
+    float roughness = material.useRoughnessMap ? texture(material.roughnessMap, fs_in.TexCoord).r : material.roughness;
     float ao = material.useAOMap ? texture(material.aoMap, fs_in.TexCoord).r : material.ao;
-    gMRA = vec4(metallic, ao, 0.0, 1.0);
+    
+    gMRA = vec3(metallic, roughness, ao);
 }

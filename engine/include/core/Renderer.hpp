@@ -94,6 +94,16 @@ class Renderer
         showLights = enabled;
     }
 
+    void SetUseSSBO(bool use)
+    {
+        useSSBO = use;
+    }
+
+    bool IsUseSSBO() const
+    {
+        return useSSBO;
+    }
+
     // 渲染模式
     void SetRenderMode(RenderMode mode);
     RenderMode GetRenderMode() const
@@ -260,16 +270,17 @@ class Renderer
     }
 
     // 调试视口：获取各个渲染步骤的纹理
-    GLuint GetGBufferPositionTexture() const { return gBuffer ? gBuffer->GetColorTexture(0) : 0; }
-    GLuint GetGBufferNormalTexture() const { return gBuffer ? gBuffer->GetColorTexture(1) : 0; }
-    GLuint GetGBufferAlbedoTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; }
-    GLuint GetGBufferDiffuseTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; }  // 漫反射（与反照率相同）
-    GLuint GetGBufferAlbedoDepthTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; }  // gAlbedo第四维度的深度
-    GLuint GetGBufferSpecularTexture() const { return gBuffer ? gBuffer->GetColorTexture(3) : 0; }
-    GLuint GetGBufferMetallicTexture() const { return gBuffer ? gBuffer->GetColorTexture(4) : 0; }
-    GLuint GetGBufferRoughnessTexture() const { return gBuffer ? gBuffer->GetColorTexture(5) : 0; }
-    GLuint GetGBufferAOTexture() const { return gBuffer ? gBuffer->GetColorTexture(6) : 0; }
-    GLuint GetGBufferAmbientTexture() const { return gBuffer ? gBuffer->GetColorTexture(7) : 0; }
+    // 注意：G-Buffer 已优化，纹理通道被压缩，此处的Getter返回包含对应数据的压缩纹理
+    GLuint GetGBufferPositionTexture() const { return 0; } // 优化后不再存储位置纹理，使用深度重建
+    GLuint GetGBufferNormalTexture() const { return gBuffer ? gBuffer->GetColorTexture(1) : 0; } // Normal + Roughness
+    GLuint GetGBufferAlbedoTexture() const { return gBuffer ? gBuffer->GetColorTexture(0) : 0; } // Albedo + MatID
+    GLuint GetGBufferDiffuseTexture() const { return gBuffer ? gBuffer->GetColorTexture(0) : 0; } 
+    GLuint GetGBufferAlbedoDepthTexture() const { return 0; }
+    GLuint GetGBufferSpecularTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; } // MRA
+    GLuint GetGBufferMetallicTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; } // MRA
+    GLuint GetGBufferRoughnessTexture() const { return gBuffer ? gBuffer->GetColorTexture(1) : 0; } // Normal + Roughness
+    GLuint GetGBufferAOTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; } // MRA
+    GLuint GetGBufferAmbientTexture() const { return gBuffer ? gBuffer->GetColorTexture(2) : 0; }
     GLuint GetGBufferDepthTexture() const { return gBuffer ? gBuffer->GetDepthTexture() : 0; }
     GLuint GetShadowMapTexture() const
     {
@@ -340,6 +351,8 @@ class Renderer
     void SetupFXAABuffer();
     void SetupViewportBuffer();
     void SetupSkybox();
+    void SetupLightSSBO();
+    void UpdateLightSSBO();
 
     void GenerateSSAOKernel();
     void GenerateSSAONoiseTexture();
@@ -440,6 +453,7 @@ class Renderer
 
     std::vector<glm::vec3> ssaoKernel; // SSAO采样核心
     GLuint ssaoNoiseTexture;           // SSAO旋转噪声纹理
+    GLuint lightSSBO = 0;              // 光源SSBO
     unsigned int ssaoKernelSize = 64;  // SSAO采样核心大小
     unsigned int ssaoNoiseSize = 4;    // SSAO噪声纹理尺寸
 
@@ -454,6 +468,7 @@ class Renderer
     bool shadowEnabled = false;
     bool iblEnabled = false;
     bool showLights = false;
+    bool useSSBO = false;
     bool fxaaEnabled = false;
 
     int maxTextureUnits = 32;

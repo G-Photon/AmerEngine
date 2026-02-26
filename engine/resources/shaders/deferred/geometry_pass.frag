@@ -1,7 +1,7 @@
 #version 460 core
 layout (location = 0) out vec4 gAlbedoSpec;      // RGB: Albedo, A: MaterialID (0.0 for BP)
-layout (location = 1) out vec4 gNormalRoughness; // RGB: Normal, A: Unused
-layout (location = 2) out vec4 gMRA;             // RGB: Specular Color, A: Unused
+layout (location = 1) out vec2 gNormal; // RG: Normal
+layout (location = 2) out vec3 gMRA;             // RGB: Specular Color
 
 in vec2 TexCoords;
 in vec3 FragPos;
@@ -61,13 +61,13 @@ void main() {
          mat3 TBN = mat3(T, B, N);
          N = normalize(TBN * tangentNormal);
     }
-    gNormalRoughness = vec4(octEncode(N), 0.0, 0.0); // Roughness unused (0.0)
+    gNormal = vec2(octEncode(N));
 
     // RT0: 反照率 + ID (ID=0.0 for Blinn-Phong)
     vec3 albedo = material.useDiffuseMap ? texture(material.diffuseMap, TexCoords).rgb : material.diffuse;
     gAlbedoSpec = vec4(albedo, 0.0);
     
-    // RT2: 高光颜色 (RGB) + Unused (A)
+    // RT2: 高光颜色 (RGB)
     vec3 specular = material.useSpecularMap ? texture(material.specularMap, TexCoords).rgb : material.specular;
-    gMRA = vec4(specular, 1.0);
+    gMRA = specular;
 }

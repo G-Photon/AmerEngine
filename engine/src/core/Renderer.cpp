@@ -1035,6 +1035,9 @@ void Renderer::Initialize()
 
     // 设置天空盒
     SetupSkybox();
+    
+    // 设置光照SSBO
+    SetupLightSSBO();
 
     // 设置相机
     mainCamera = std::make_shared<Camera>();
@@ -1047,12 +1050,12 @@ void Renderer::SetupGBuffer()
     // 优化的 G-Buffer 布局:
     // RT0: Albedo.rgb + MaterialType (a)
     gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
-    
-    // RT1: Normal.rgb + Roughness (a)
-    gBuffer->AddColorTexture(GL_RGBA16F, GL_RGBA, GL_FLOAT);
-    
-    // RT2: Metallic (r) + AO (g) + (Reserved)
-    gBuffer->AddColorTexture(GL_RGBA, GL_RGBA, GL_UNSIGNED_BYTE);
+
+    // RT1: Oct Normal.rg  (格式优化为 RG16F, 节省空间)
+    gBuffer->AddColorTexture(GL_RG16F, GL_RG, GL_FLOAT);
+
+    // RT2: Metallic (r) + roughness (g) + AO (b)
+    gBuffer->AddColorTexture(GL_RGB, GL_RGB, GL_UNSIGNED_BYTE);
 
     // 使用纹理作为深度缓冲，以便进行采样（位置重建）
     gBuffer->AddDepthTexture();
@@ -1097,13 +1100,16 @@ void Renderer::SetupBloomBuffer()
 
 void Renderer::SetupSSAOBuffer()
 {
-    // 主SSAO缓冲
-    ssaoBuffer = std::make_unique<Framebuffer>(width, height);
+    // 主SSAO缓冲 - 使用半分辨率
+    int ssaoWidth = width / 2;
+    int ssaoHeight = height / 2;
+    
+    ssaoBuffer = std::make_unique<Framebuffer>(ssaoWidth, ssaoHeight);
     ssaoBuffer->AddColorTexture(GL_RED, GL_RED, GL_FLOAT); // 单通道浮点纹理
     ssaoBuffer->CheckComplete();
 
-    // SSAO模糊缓冲
-    ssaoBlurBuffer = std::make_unique<Framebuffer>(width, height);
+    // SSAO模糊缓冲 - 同样使用半分辨率
+    ssaoBlurBuffer = std::make_unique<Framebuffer>(ssaoWidth, ssaoHeight);
     ssaoBlurBuffer->AddColorTexture(GL_RED, GL_RED, GL_FLOAT);
     ssaoBlurBuffer->CheckComplete();
 }
@@ -1552,6 +1558,15 @@ void Renderer::RenderDeferred()
     glDisable(GL_CULL_FACE);   // 由每个 pass 自己决定
 
     deferredLightingShader->Use();
+    
+    // SSBO 设置
+    deferredLightingShader->SetBool("useSSBO", useSSBO);
+    if (useSSBO)
+    {
+        UpdateLightSSBO();
+        glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO);
+    }
+    
     // 绑定GBuffer纹理并设置uniform
 
     // 设置相机
@@ -1613,7 +1628,7 @@ void Renderer::RenderDeferred()
     // 1: Normal + Roughness
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, gBuffer->GetColorTexture(1));
-    deferredLightingShader->SetInt("gNormalRoughness", 1);
+    deferredLightingShader->SetInt("gNormal", 1);
 
     // 2: Metallic + AO
     glActiveTexture(GL_TEXTURE2);
@@ -1638,17 +1653,55 @@ void Renderer::RenderDeferred()
         deferredLightingShader->SetInt("ssao", 8);
     }
 
+
+    
+    // 标记当前是否为第一个光照Pass（用于控制环境光叠加）
+    bool isFirstPass = true;
+    deferredLightingShader->SetBool("uIsFirstPass", isFirstPass);
+
+    // SSBO 模式：一次性处理所有点光源
+    if (useSSBO)
+    {
+        glDisable(GL_STENCIL_TEST);
+        glDisable(GL_CULL_FACE);
+        glEnable(GL_BLEND);
+        glBlendEquation(GL_FUNC_ADD);
+        glBlendFunc(GL_ONE, GL_ONE);
+
+        // 设置为点光源类型 (shader内会循环处理所有点光源)
+        deferredLightingShader->SetInt("lightType", 0);
+        deferredLightingShader->SetInt("numPointLights", (int)pointLights.size());
+        
+        // 设置默认环境光参数 (避免SSBO模式下因未设置light struct导致环境光全黑)
+        deferredLightingShader->SetVec3("light.ambient", glm::vec3(0.05f)); 
+        deferredLightingShader->SetVec3("light.diffuse", glm::vec3(0.0f)); // SSBO loop handles diffuse
+        deferredLightingShader->SetVec3("light.specular", glm::vec3(0.0f));
+
+        // RenderQuad(); uses current shader state.
+        // We rely on shader logic to bypass ModelViewProjection for full screen quad.
+        RenderQuad();
+        
+        // SSBO Pass 完成后，后续 Pass 不再是第一个
+        isFirstPass = false;
+        deferredLightingShader->SetBool("uIsFirstPass", isFirstPass);
+    }
+
     size_t dirLightIndex = 0;
     for (const auto &light : GetLights())
     {
+        // SSBO 模式下跳过点光源
+        if (useSSBO && light->getType() == 0) continue;
+        
+        // 确保Shader知道当前Pass状态
+        deferredLightingShader->SetBool("uIsFirstPass", isFirstPass);
+
         if (light->getType() == 1)
         {
             BindCSMUniformsForLight(*deferredLightingShader, dirLightIndex);
             ++dirLightIndex;
 
-            // 方向光通过全屏Quad做屏幕空间光照，使用单位矩阵避免被相机VP再次变换
-            deferredLightingShader->SetMat4("view", glm::mat4(1.0f));
-            deferredLightingShader->SetMat4("projection", glm::mat4(1.0f));
+            // 方向光通过全屏Quad做屏幕空间光照
+            // lighting_pass.vert handles lightType==1 by ignoring MVP, so we don't need to clear view/proj
         }
         else
         {
@@ -1706,6 +1759,10 @@ void Renderer::RenderDeferred()
             glBlendFunc(GL_ONE, GL_ONE);
             light->drawLightMesh(deferredLightingShader);
         }
+        
+        // 当前 Pass 完成后，标记不再与后续 Pass 共享 Ambient
+        isFirstPass = false;
+        deferredLightingShader->SetBool("uIsFirstPass", isFirstPass);
     }
 
     // 恢复状态
@@ -2145,8 +2202,9 @@ void Renderer::BindCSMUniformsForLight(Shader& shader, size_t dirLightIndex) con
 
 void Renderer::RenderSSAO()
 {
-    // 第一步：生成SSAO纹理
+    // 第一步：生成SSAO纹理（半分辨率）
     ssaoBuffer->Bind();
+    glViewport(0, 0, width / 2, height / 2); // 调整视口为半分辨率
     glClear(GL_COLOR_BUFFER_BIT);
     ssaoShader->Use();
 
@@ -2159,7 +2217,7 @@ void Renderer::RenderSSAO()
     // Slot 1: 法线
     glActiveTexture(GL_TEXTURE1);
     glBindTexture(GL_TEXTURE_2D, gBuffer->GetColorTexture(1)); 
-    ssaoShader->SetInt("gNormalRoughness", 1);
+    ssaoShader->SetInt("gNormal", 1);
 
     // 传递逆投影矩阵用于位置重建
     glm::mat4 invProj = glm::inverse(mainCamera->GetProjectionMatrix(static_cast<float>(width) / height));
@@ -2181,8 +2239,10 @@ void Renderer::RenderSSAO()
     ssaoShader->SetMat4("projection", projection);
     ssaoShader->SetMat4("view", mainCamera->GetViewMatrix());
 
-    // 设置参数
-    ssaoShader->SetVec2("noiseScale", glm::vec2(width / (float)ssaoNoiseSize, height / (float)ssaoNoiseSize));
+    // 设置参数，注意noiseScale需要根据半分辨率调整，但UV仍然是0-1
+    // 如果纹理坐标是全屏的0-1，那么噪声重复次数应该是 (ScreenSize / NoiseSize)
+    // 这里使用半分辨率的 ScreenSize
+    ssaoShader->SetVec2("noiseScale", glm::vec2((width / 2.0f) / (float)ssaoNoiseSize, (height / 2.0f) / (float)ssaoNoiseSize));
     ssaoShader->SetInt("kernelSize", ssaoKernelSize);
     ssaoShader->SetFloat("radius", 0.5f);
     ssaoShader->SetFloat("bias", 0.025f);
@@ -2191,17 +2251,60 @@ void Renderer::RenderSSAO()
     // 渲染全屏四边形
     RenderQuad();
 
-    // 第二步：模糊SSAO纹理
+    // 第二步：模糊SSAO纹理（半分辨率）
     ssaoBlurBuffer->Bind();
+    glViewport(0, 0, width / 2, height / 2); // 保持半分辨率
     glClear(GL_COLOR_BUFFER_BIT);
     ssaoBlurShader->Use();
     ssaoBlurShader->SetInt("ssaoInput", 0);
-    ssaoBuffer->BindTexture(0, 0);
+    
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, ssaoBuffer->GetColorTexture(0));
+    
     RenderQuad();
-
+    
+    // 恢复全分辨率视口
+    glViewport(0, 0, width, height);
+    
     // 解绑帧缓冲
     glBindFramebuffer(GL_FRAMEBUFFER, 0);
 }
+
+struct SSBOPointLight {
+    glm::vec4 position; // w: intensity
+    glm::vec4 color;    // w: constant
+    glm::vec4 attenuation; // x: linear, y: quadratic, z: hasShadows, w: shadowMapIndex
+};
+
+void Renderer::SetupLightSSBO()
+{
+    glGenBuffers(1, &lightSSBO);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
+    // Initial allocation, dynamic size
+    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(SSBOPointLight) * 100, nullptr, GL_DYNAMIC_DRAW);
+    glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO); // Binding point 0
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+}
+
+void Renderer::UpdateLightSSBO()
+{
+    std::vector<SSBOPointLight> ssboLights;
+    ssboLights.reserve(pointLights.size());
+
+    for (const auto& light : pointLights)
+    {
+        SSBOPointLight sl;
+        sl.position = glm::vec4(light->position, light->intensity);
+        sl.color = glm::vec4(light->diffuse, light->constant);
+        sl.attenuation = glm::vec4(light->linear, light->quadratic, light->HasShadows() ? 1.0f : 0.0f, -1.0f); // Shadow map index TODO
+        ssboLights.push_back(sl);
+    }
+
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
+    glBufferData(GL_SHADER_STORAGE_BUFFER, ssboLights.size() * sizeof(SSBOPointLight), ssboLights.data(), GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+}
+
 
 void Renderer::RenderLights()
 {
@@ -2765,8 +2868,8 @@ void Renderer::Resize(int newWidth, int newHeight)
     bloomBlurBuffers[0]->Resize(newWidth, newHeight);
     bloomBlurBuffers[1]->Resize(newWidth, newHeight);
     bloomPrefilterBuffer->Resize(newWidth, newHeight);
-    ssaoBuffer->Resize(newWidth, newHeight);
-    ssaoBlurBuffer->Resize(newWidth, newHeight);
+    ssaoBuffer->Resize(newWidth / 2, newHeight / 2); // 半分辨率
+    ssaoBlurBuffer->Resize(newWidth / 2, newHeight / 2); // 半分辨率
     shadowBuffer->Resize(2048, 2048); // 阴影缓冲大小固定
     fxaaBuffer->Resize(newWidth, newHeight);
     viewportBuffer->Resize(newWidth, newHeight);
