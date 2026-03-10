@@ -454,6 +454,7 @@ class Renderer
     std::vector<glm::vec3> ssaoKernel; // SSAO采样核心
     GLuint ssaoNoiseTexture;           // SSAO旋转噪声纹理
     GLuint lightSSBO = 0;              // 光源SSBO
+    size_t lightSSBOCapacity = 0;      // SSBO 当前容量（按点光源数量）
     unsigned int ssaoKernelSize = 64;  // SSAO采样核心大小
     unsigned int ssaoNoiseSize = 4;    // SSAO噪声纹理尺寸
 

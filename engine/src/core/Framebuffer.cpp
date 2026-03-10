@@ -207,7 +207,7 @@ void Framebuffer::Resize(int newWidth, int newHeight)
     if (hadDepthBuf)
     {
         if (lastSamples > 1)
-            AddDepthBufferMultisample();
+            AddDepthBufferMultisample(lastSamples);
         else
             AddDepthBuffer();
     }

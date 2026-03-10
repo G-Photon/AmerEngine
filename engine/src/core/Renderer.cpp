@@ -2278,10 +2278,12 @@ struct SSBOPointLight {
 
 void Renderer::SetupLightSSBO()
 {
+    constexpr size_t kInitialSSBOCapacity = 100;
     glGenBuffers(1, &lightSSBO);
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
-    // Initial allocation, dynamic size
-    glBufferData(GL_SHADER_STORAGE_BUFFER, sizeof(SSBOPointLight) * 100, nullptr, GL_DYNAMIC_DRAW);
+    lightSSBOCapacity = kInitialSSBOCapacity;
+    glBufferData(GL_SHADER_STORAGE_BUFFER, static_cast<GLsizeiptr>(sizeof(SSBOPointLight) * lightSSBOCapacity), nullptr,
+                 GL_DYNAMIC_DRAW);
     glBindBufferBase(GL_SHADER_STORAGE_BUFFER, 0, lightSSBO); // Binding point 0
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
@@ -2301,7 +2303,22 @@ void Renderer::UpdateLightSSBO()
     }
 
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, lightSSBO);
-    glBufferData(GL_SHADER_STORAGE_BUFFER, ssboLights.size() * sizeof(SSBOPointLight), ssboLights.data(), GL_DYNAMIC_DRAW);
+
+    const size_t requiredCount = ssboLights.size();
+    if (requiredCount > lightSSBOCapacity)
+    {
+        size_t newCapacity = std::max(requiredCount, lightSSBOCapacity > 0 ? lightSSBOCapacity * 2 : size_t(1));
+        lightSSBOCapacity = newCapacity;
+        glBufferData(GL_SHADER_STORAGE_BUFFER,
+                     static_cast<GLsizeiptr>(sizeof(SSBOPointLight) * lightSSBOCapacity), nullptr, GL_DYNAMIC_DRAW);
+    }
+
+    if (!ssboLights.empty())
+    {
+        glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, static_cast<GLsizeiptr>(ssboLights.size() * sizeof(SSBOPointLight)),
+                        ssboLights.data());
+    }
+
     glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
 }
 

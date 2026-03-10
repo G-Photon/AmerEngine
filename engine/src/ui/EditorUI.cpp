@@ -9,11 +9,14 @@
 #include <functional>
 #include <algorithm>
 #include <filesystem>
+#include <numeric>
+#include <sstream>
 
 EditorUI::EditorUI(GLFWwindow *window, Renderer *renderer) : window(window), renderer(renderer)
 {
     // Initialize FPS history buffer
     fpsHistory.resize(240, 0.0f); // Store last 240 frames (e.g. 4 seconds at 60 FPS)
+    frameTimeHistory.resize(240, 0.0f);
 }
 
 EditorUI::~EditorUI()
@@ -3648,12 +3651,112 @@ void EditorUI::ShowPerformanceStats()
             } else {
                 fpsHistory.resize(240, 0.0f);
             }
+
+            if (frameTimeHistory.size() > 0) {
+                frameTimeHistory.erase(frameTimeHistory.begin());
+                frameTimeHistory.push_back(perfStats.lastFrameTime);
+            } else {
+                frameTimeHistory.resize(240, perfStats.lastFrameTime);
+            }
         }
+
+        auto buildSortedSamples = [](const std::vector<float>& data) {
+            std::vector<float> valid;
+            valid.reserve(data.size());
+            for (float v : data)
+            {
+                if (v > 0.0f) valid.push_back(v);
+            }
+            std::sort(valid.begin(), valid.end());
+            return valid;
+        };
+
+        auto percentile = [](const std::vector<float>& sorted, float p) {
+            if (sorted.empty()) return 0.0f;
+            float clampedP = std::clamp(p, 0.0f, 1.0f);
+            size_t idx = static_cast<size_t>(clampedP * static_cast<float>(sorted.size() - 1));
+            return sorted[idx];
+        };
+
+        std::vector<float> sortedSamples = buildSortedSamples(frameTimeHistory);
+        float avgFrameMs = 0.0f;
+        if (!sortedSamples.empty())
+        {
+            avgFrameMs = std::accumulate(sortedSamples.begin(), sortedSamples.end(), 0.0f) /
+                         static_cast<float>(sortedSamples.size());
+        }
+        float p95FrameMs = percentile(sortedSamples, 0.95f);
+        float p99FrameMs = percentile(sortedSamples, 0.99f);
+        float avgFPS = avgFrameMs > 0.0f ? 1000.0f / avgFrameMs : 0.0f;
+        float onePercentLowFPS = p99FrameMs > 0.0f ? 1000.0f / p99FrameMs : 0.0f;
         
         // Draw FPS Graph
         ImGui::Separator();
-        ImGui::Text(ConvertToUTF8(L"FPS: %.1f").c_str(), fps);
+        ImGui::Text(ConvertToUTF8(L"FPS(瞬时): %.1f").c_str(), fps);
+        ImGui::Text(ConvertToUTF8(L"FPS(平均): %.1f").c_str(), avgFPS);
+        ImGui::Text(ConvertToUTF8(L"帧时间 Avg: %.2f ms | P95: %.2f ms | P99: %.2f ms").c_str(), avgFrameMs, p95FrameMs, p99FrameMs);
+        ImGui::Text(ConvertToUTF8(L"1%% Low FPS: %.1f").c_str(), onePercentLowFPS);
         ImGui::PlotLines("##FPS", fpsHistory.data(), (int)fpsHistory.size(), 0, NULL, 0.0f, 240.0f, ImVec2(0, 80)); 
+
+        ImGui::Separator();
+        ImGui::TextUnformatted(ConvertToUTF8(L"=== 优化对比基线 ===").c_str());
+        if (ImGui::Button(ConvertToUTF8(L"捕获当前为基线").c_str()))
+        {
+            perfBaseline.captured = true;
+            perfBaseline.avgFrameMs = avgFrameMs;
+            perfBaseline.p95FrameMs = p95FrameMs;
+            perfBaseline.onePercentLowFPS = onePercentLowFPS;
+            perfBaseline.drawCalls = perfStats.totalDrawCalls;
+            perfBaseline.cullRatio = cullRatio;
+        }
+        ImGui::SameLine();
+        if (ImGui::Button(ConvertToUTF8(L"清空基线").c_str()))
+        {
+            perfBaseline = {};
+        }
+
+        if (perfBaseline.captured)
+        {
+            auto deltaPercent = [](float baseline, float current) {
+                if (std::abs(baseline) < 1e-6f) return 0.0f;
+                return (current - baseline) / baseline * 100.0f;
+            };
+
+            float avgDeltaPct = deltaPercent(perfBaseline.avgFrameMs, avgFrameMs);
+            float p95DeltaPct = deltaPercent(perfBaseline.p95FrameMs, p95FrameMs);
+            float low1DeltaPct = deltaPercent(perfBaseline.onePercentLowFPS, onePercentLowFPS);
+            float drawDeltaPct = deltaPercent(static_cast<float>(perfBaseline.drawCalls), static_cast<float>(perfStats.totalDrawCalls));
+
+            ImGui::Text(ConvertToUTF8(L"Avg 帧时间: %.2f -> %.2f ms (%+.1f%%)").c_str(),
+                        perfBaseline.avgFrameMs, avgFrameMs, avgDeltaPct);
+            ImGui::Text(ConvertToUTF8(L"P95 帧时间: %.2f -> %.2f ms (%+.1f%%)").c_str(),
+                        perfBaseline.p95FrameMs, p95FrameMs, p95DeltaPct);
+            ImGui::Text(ConvertToUTF8(L"1%% Low FPS: %.1f -> %.1f (%+.1f%%)").c_str(),
+                        perfBaseline.onePercentLowFPS, onePercentLowFPS, low1DeltaPct);
+            ImGui::Text(ConvertToUTF8(L"Draw Calls: %d -> %d (%+.1f%%)").c_str(),
+                        perfBaseline.drawCalls, perfStats.totalDrawCalls, drawDeltaPct);
+            ImGui::Text(ConvertToUTF8(L"剔除率: %.1f%% -> %.1f%%").c_str(), perfBaseline.cullRatio, cullRatio);
+
+            if (ImGui::Button(ConvertToUTF8(L"复制面试指标摘要").c_str()))
+            {
+                std::ostringstream oss;
+                oss << "[性能优化对比]\n"
+                    << "Avg Frame: " << perfBaseline.avgFrameMs << " -> " << avgFrameMs << " ms ("
+                    << (avgDeltaPct >= 0 ? "+" : "") << avgDeltaPct << "%)\n"
+                    << "P95 Frame: " << perfBaseline.p95FrameMs << " -> " << p95FrameMs << " ms ("
+                    << (p95DeltaPct >= 0 ? "+" : "") << p95DeltaPct << "%)\n"
+                    << "1% Low FPS: " << perfBaseline.onePercentLowFPS << " -> " << onePercentLowFPS << " ("
+                    << (low1DeltaPct >= 0 ? "+" : "") << low1DeltaPct << "%)\n"
+                    << "DrawCalls: " << perfBaseline.drawCalls << " -> " << perfStats.totalDrawCalls << " ("
+                    << (drawDeltaPct >= 0 ? "+" : "") << drawDeltaPct << "%)\n"
+                    << "Cull Ratio: " << perfBaseline.cullRatio << "% -> " << cullRatio << "%\n";
+                ImGui::SetClipboardText(oss.str().c_str());
+            }
+        }
+        else
+        {
+            ImGui::TextUnformatted(ConvertToUTF8(L"尚未捕获基线，先在稳定场景点击“捕获当前为基线”").c_str());
+        }
     }
     ImGui::End();
     ImGui::PopStyleVar();

@@ -262,5 +262,17 @@ private:
 
     // FPS Graph
     std::vector<float> fpsHistory;
+    std::vector<float> frameTimeHistory;
     float fpsUpdateTimer = 0.0f;
+
+    // 性能基线（用于优化前后对比）
+    struct PerformanceBaseline
+    {
+        bool captured = false;
+        float avgFrameMs = 0.0f;
+        float p95FrameMs = 0.0f;
+        float onePercentLowFPS = 0.0f;
+        int drawCalls = 0;
+        float cullRatio = 0.0f;
+    } perfBaseline;
 };
